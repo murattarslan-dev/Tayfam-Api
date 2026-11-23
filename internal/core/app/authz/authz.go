@@ -149,17 +149,19 @@ const (
 	EventRSVP
 	EventViewAttendees
 	// Attendance (issue #50). EventCheckIn covers the caller's own location
-	// or online check-in and their hike start and return.
+	// or online check-in and their roll call start and return (roll_call
+	// component, issue #242).
 	EventCheckIn
 	// EventAttendanceOwn is the organizer's correction on their own event
 	// (the caller checks that the event is theirs); EventAttendanceAny is
 	// the same on every event of the tayfa.
 	EventAttendanceOwn
 	EventAttendanceAny
-	// EventCatchAdd adds and removes one's own fishing catches;
-	// EventCatchDeleteAny removes anyone's.
-	EventCatchAdd
-	EventCatchDeleteAny
+	// EventLogAdd adds and removes one's own entries of a log component
+	// (issue #243; the caller also checks verified attendance);
+	// EventLogDeleteAny removes anyone's.
+	EventLogAdd
+	EventLogDeleteAny
 	// Event album (issue #206, ADR-0028). EventPhotoAdd adds a photo (the
 	// caller also checks verified attendance, the window and the limits);
 	// viewing is EventView. EventPhotoDeleteOwn removes one's own photo;
@@ -247,6 +249,104 @@ const (
 	TayfaDiscoverManage
 	EventFeedback
 	EventSafetyContact
+	// Event components (issue #238; ADR-0025 §5). These are the roles every
+	// component shares; the component framework (package component) asks
+	// them, and a component adds an action of its own only for a rule
+	// these do not express. The events module switch, the component being
+	// part of the event's type version and switched on, and the write
+	// window are checked by the framework.
+	//
+	// EventComponentView reads a component's data and the event's
+	// selections and referees.
+	EventComponentView
+	// EventComponentParticipate is a participant's own entry in a
+	// component (taking a list item, a personal measurement, a question, a
+	// vote). The component checks the answer or the verified attendance it
+	// needs.
+	EventComponentParticipate
+	// EventComponentManageOwn is the organizer's part on their own event
+	// (the caller checks that the event is theirs): the selections,
+	// building teams, drawing lots, starting a bracket, total
+	// measurements, correcting scores. EventComponentManageAny is the same
+	// on every event of the tayfa.
+	EventComponentManageOwn
+	EventComponentManageAny
+	// EventRefereeAssignOwn assigns and removes the referees of one's own
+	// event; EventRefereeAssignAny those of every event of the tayfa.
+	EventRefereeAssignOwn
+	EventRefereeAssignAny
+	// EventComponentReferee is entering results as an assigned referee
+	// (the caller checks the assignment, event_referees).
+	EventComponentReferee
+	// TayfaVocabularyMerge merges two values of the tayfa vocabulary and
+	// undoes a merge (issue #244, ADR-0037 §4). Reading the vocabulary is
+	// TayfaView.
+	TayfaVocabularyMerge
+	// EventGuestAdd adds a guest player to an event's scoreboard as its
+	// organizer or an assigned referee (issue #252, ADR-0037 §6; the caller
+	// checks the role, event_referees). Removing a guest is
+	// EventComponentManageOwn / EventComponentManageAny.
+	EventGuestAdd
+	// EventQuestionAsk asks, votes for and removes one's own questions of a
+	// questions component (issue #256, ADR-0025 §5: "Soru gönder / oyla:
+	// Katılımcı"; the caller also checks going or a verified attendance).
+	// Marking a question answered is EventComponentManageOwn /
+	// EventComponentManageAny. EventQuestionDeleteAny removes anyone's
+	// question, an anonymous one without learning its author.
+	EventQuestionAsk
+	EventQuestionDeleteAny
+	// Şimdi başlat (issue #263, ADR-0038 §2). EventCreateNow creates an
+	// event that starts now (starts_now); its minimum role is the tayfa's
+	// setting Settings.NowCreateMinRole (member by default), independent
+	// of EventCreate. EventFinish is the organizer's "Bitir" on their own
+	// open-ended event (the caller checks that the event is theirs).
+	EventCreateNow
+	EventFinish
+	// QR ile katılım (issue #264, ADR-0038 §3). EventJoinQRCreate opens a
+	// join QR for the caller's own event (the caller checks that the event
+	// is theirs); EventJoinQRCreateAny for every event of the tayfa.
+	EventJoinQRCreate
+	EventJoinQRCreateAny
+	// Keşfet vitrini (issue #267, ADR-0026 §3). TayfaStatsShowcaseUpdate
+	// shows or hides the tayfa's statistics and badges in its Keşfet
+	// card (tayfas.stats_showcase).
+	TayfaStatsShowcaseUpdate
+	// Ana sayfa düzeni (issue #268, ADR-0027 §3). TayfaHomeUpdate turns
+	// the home page widgets on or off, orders them and sets their config.
+	TayfaHomeUpdate
+	// Günün içeriği (issue #269, ADR-0027 §5). TayfaDailyManage adds,
+	// edits, deletes, restores, orders and pins the items of the tayfa's
+	// daily content pool. Reading the pool and today's item is TayfaView.
+	TayfaDailyManage
+	// Ortak kütüphane (issue #270, ADR-0040 §1). LibraryItemAdd adds an
+	// item of one's own; LibraryItemEditOwn edits it and
+	// LibraryItemWithdrawOwn withdraws it (the caller checks that it is
+	// theirs). LibraryItemRemoveAny removes anyone's item (moderation).
+	// LibraryBorrow asks for an item (or waits in its queue) and
+	// LibraryBorrowCancel takes the request back. LibraryLendOwn approves,
+	// declines, hands over and takes back the caller's own items (the
+	// caller checks that the item is theirs). Reading is TayfaView.
+	LibraryItemAdd
+	LibraryItemEditOwn
+	LibraryItemWithdrawOwn
+	LibraryItemRemoveAny
+	LibraryBorrow
+	LibraryBorrowCancel
+	LibraryLendOwn
+	// Materyal kütüphanesi (issue #261, ADR-0040 §3). MaterialAdd adds a
+	// material of one's own; MaterialEditOwn edits it and MaterialDeleteOwn
+	// deletes it (the caller checks that it is theirs). MaterialRemoveAny
+	// removes anyone's material (moderation). Reading is TayfaView.
+	MaterialAdd
+	MaterialEditOwn
+	MaterialDeleteOwn
+	MaterialRemoveAny
+	// Üye garajı (issue #272, ADR-0040 §4). GarageShow shows one's own
+	// garage in the tayfa (hiding is TayfaView); GarageRemoveAny removes a
+	// vehicle showing in the tayfa (moderation). The garage itself is the
+	// person's and needs no tayfa permission.
+	GarageShow
+	GarageRemoveAny
 
 	actionEnd // sentinel; keep last
 )
@@ -289,8 +389,8 @@ var actionNames = [...]string{
 	EventCheckIn:             "event.check_in",
 	EventAttendanceOwn:       "event.attendance_own",
 	EventAttendanceAny:       "event.attendance_any",
-	EventCatchAdd:            "event.catch_add",
-	EventCatchDeleteAny:      "event.catch_delete_any",
+	EventLogAdd:              "event.log_add",
+	EventLogDeleteAny:        "event.log_delete_any",
 	EventPhotoAdd:            "event.photo_add",
 	EventPhotoDeleteOwn:      "event.photo_delete_own",
 	EventPhotoDeleteOwnEvent: "event.photo_delete_own_event",
@@ -335,7 +435,39 @@ var actionNames = [...]string{
 	TayfaDiscoverManage:      "tayfa.discover_manage",
 	EventFeedback:            "event.feedback",
 	EventSafetyContact:       "event.safety_contact",
-	actionEnd:                "",
+	// Event components (issue #238).
+	EventComponentView:        "event.component_view",
+	EventComponentParticipate: "event.component_participate",
+	EventComponentManageOwn:   "event.component_manage_own",
+	EventComponentManageAny:   "event.component_manage_any",
+	EventRefereeAssignOwn:     "event.referee_assign_own",
+	EventRefereeAssignAny:     "event.referee_assign_any",
+	EventComponentReferee:     "event.component_referee",
+	TayfaVocabularyMerge:      "tayfa.vocabulary.merge",
+	EventGuestAdd:             "event.guest_add",
+	EventQuestionAsk:          "event.question_ask",
+	EventQuestionDeleteAny:    "event.question_delete_any",
+	EventCreateNow:            "event.create_now",
+	EventFinish:               "event.finish",
+	EventJoinQRCreate:         "event.join_qr_create",
+	EventJoinQRCreateAny:      "event.join_qr_create_any",
+	TayfaStatsShowcaseUpdate:  "tayfa.stats_showcase.update",
+	TayfaHomeUpdate:           "tayfa.home.update",
+	TayfaDailyManage:          "tayfa.daily.manage",
+	LibraryItemAdd:            "library.item_add",
+	LibraryItemEditOwn:        "library.item_edit_own",
+	LibraryItemWithdrawOwn:    "library.item_withdraw_own",
+	LibraryItemRemoveAny:      "library.item_remove_any",
+	LibraryBorrow:             "library.borrow",
+	LibraryBorrowCancel:       "library.borrow_cancel",
+	LibraryLendOwn:            "library.lend_own",
+	MaterialAdd:               "material.add",
+	MaterialEditOwn:           "material.edit_own",
+	MaterialDeleteOwn:         "material.delete_own",
+	MaterialRemoveAny:         "material.remove_any",
+	GarageShow:                "garage.show",
+	GarageRemoveAny:           "garage.remove_any",
+	actionEnd:                 "",
 }
 
 // String returns the stable name of the action, or "" for an invalid one.
@@ -358,6 +490,21 @@ var permissions = map[Action]Role{
 	MemberList:      Member,
 	// Members see their own links; callers allowed InviteRevokeAny see all.
 	InviteList: Member,
+	// Ortak kütüphane (ADR-0040 §1): "kalem ekleme üye"; the owner's and
+	// the borrower's own steps.
+	LibraryItemAdd:         Member,
+	LibraryItemEditOwn:     Member,
+	LibraryItemWithdrawOwn: Member,
+	LibraryBorrow:          Member,
+	LibraryBorrowCancel:    Member,
+	LibraryLendOwn:         Member,
+	// Materyal kütüphanesi (ADR-0040 §3): every member adds; the author's
+	// own steps.
+	MaterialAdd:       Member,
+	MaterialEditOwn:   Member,
+	MaterialDeleteOwn: Member,
+	// Üye garajı (ADR-0040 §4): showing one's garage publishes it.
+	GarageShow: Member,
 	// Events: reading, answering and the organizer's own event. An organizer
 	// keeps managing their event even if the tayfa later stops letting
 	// members create events (2026-11-09).
@@ -367,13 +514,13 @@ var permissions = map[Action]Role{
 	EventEditOwn:       Member,
 	EventCancelOwn:     Member,
 	// Attendance (issue #50): one's own check-in, the organizer's
-	// correction of their own event, one's own fishing catches.
+	// correction of their own event, one's own log entries.
 	EventCheckIn:       Member,
 	EventAttendanceOwn: Member,
 	// Keşfet safety net (ADR-0033): one's own feedback and safety contact.
 	EventFeedback:      Member,
 	EventSafetyContact: Member,
-	EventCatchAdd:      Member,
+	EventLogAdd:        Member,
 	// Event album (issue #206, Notion Faz 2 §2): a verified attendee adds
 	// photos; the uploader removes their own and the organizer any photo
 	// of their own event.
@@ -409,6 +556,25 @@ var permissions = map[Action]Role{
 	ChannelPost:      Member,
 	ChannelDeleteOwn: Member,
 	ChannelMarkRead:  Member,
+	// Event components (issue #238, ADR-0025 §5): every active member
+	// reads them and takes part; the organizer manages the components and
+	// referees of their own event; an assigned referee enters results.
+	EventComponentView:        Member,
+	EventComponentParticipate: Member,
+	EventComponentManageOwn:   Member,
+	EventRefereeAssignOwn:     Member,
+	EventComponentReferee:     Member,
+	// Guest players (issue #252): the organizer or an assigned referee.
+	EventGuestAdd: Member,
+	// Event questions (issue #256): a participant asks and votes.
+	EventQuestionAsk: Member,
+	// Şimdi başlat (ADR-0038 §2): every active member by default; the
+	// tayfa's now_create_min_role raises it (minRole). The organizer
+	// finishes their own open-ended event.
+	EventCreateNow: Member,
+	EventFinish:    Member,
+	// QR ile katılım (ADR-0038 §3): the organizer for their own event.
+	EventJoinQRCreate: Member,
 
 	// Moderation: moderator and above.
 	// Lowering one's own role; members have nothing to step down to.
@@ -433,11 +599,30 @@ var permissions = map[Action]Role{
 	EventEditAny:   Moderator,
 	EventCancelAny: Moderator,
 	// Correcting attendance on every event (v14 "Organizatör düzeltmesi")
-	// and removing anyone's fishing catch.
-	EventAttendanceAny:  Moderator,
-	EventCatchDeleteAny: Moderator,
+	// and removing anyone's log entry.
+	EventAttendanceAny: Moderator,
+	EventLogDeleteAny:  Moderator,
 	// "Yönetim her fotoğrafı" (Notion Faz 2 §2).
 	EventPhotoDeleteAny: Moderator,
+	// Components and referees of every event, like editing every event.
+	EventComponentManageAny: Moderator,
+	EventRefereeAssignAny:   Moderator,
+	// Merging duplicates of the tayfa vocabulary (ADR-0037 §4).
+	TayfaVocabularyMerge: Moderator,
+	// The daily content pool: "yönetici ve moderatör ekler" (ADR-0027 §5).
+	TayfaDailyManage: Moderator,
+	// Ortak kütüphane: removing anyone's item is content moderation
+	// (ADR-0040 §1).
+	LibraryItemRemoveAny: Moderator,
+	// Materyal kütüphanesi: removing anyone's material is content
+	// moderation (ADR-0040 §3).
+	MaterialRemoveAny: Moderator,
+	// Üye garajı: removing a vehicle showing in the tayfa is content
+	// moderation (ADR-0040 §4).
+	GarageRemoveAny: Moderator,
+	// Removing anyone's event question ("Tayfa yönetimi anonim soruyu
+	// yazarını görmeden silebilir", ADR-0025 §5).
+	EventQuestionDeleteAny: Moderator,
 	// Q&A: someone else's question or answer (with CanActOnContent), and
 	// removing a tag from the tayfa.
 	QuestionEditAny:   Moderator,
@@ -469,6 +654,10 @@ var permissions = map[Action]Role{
 	InviteRevokeAny:      Admin,
 	// Keşfet: the admins apply (ADR-0033 §14).
 	TayfaDiscoverManage: Admin,
+	// Keşfet vitrini: only the admins (ADR-0026 §3).
+	TayfaStatsShowcaseUpdate: Admin,
+	// Ana sayfa düzeni: only the admins (ADR-0027 §3).
+	TayfaHomeUpdate: Admin,
 	// "Yönetici her daveti ve davet linkini iptal edebilir" (v14).
 	InviteDirectCancel: Admin,
 	MemberChangeRole:   Admin,
@@ -482,6 +671,9 @@ var permissions = map[Action]Role{
 	// "Bu ekiple tayfa kur" is the organizer's (ADR-0032); minRole refuses
 	// it outside instant tayfas.
 	TayfaConvert: Admin,
+	// A join QR for any event of the tayfa (ADR-0038 §3: "ve tayfa
+	// etkinliğinde yöneticiler").
+	EventJoinQRCreateAny: Admin,
 }
 
 // nobody is the minimum role of an action no role may perform.
@@ -496,7 +688,13 @@ var instantRules = map[Action]Role{
 	TayfaUpdateSettings: nobody,
 	TayfaRotateJoinCode: nobody,
 	TayfaManageModules:  nobody,
-	EventCreate:         nobody,
+	// An instant tayfa has no home page (ADR-0027 §3); it gets one when
+	// converted.
+	TayfaHomeUpdate: nobody,
+	EventCreate:     nobody,
+	// An instant now event is created with the instant tayfa
+	// (POST /v1/instant-events, ADR-0038 §2), never inside it.
+	EventCreateNow: nobody,
 	// No moderators: the organizer alone approves join requests.
 	MemberChangeRole: nobody,
 	InviteCreate:     Admin,
@@ -520,8 +718,8 @@ var allowedWhileMuted = map[Action]bool{
 	// Stepping down only narrows the caller's own access.
 	RoleStepDown: true,
 	// Checking in records that one was there; it publishes nothing. A muted
-	// member who attends keeps their history, and a hike return (a safety
-	// signal) must never be refused.
+	// member who attends keeps their history, and a roll call return (a
+	// safety signal) must never be refused.
 	EventCheckIn: true,
 	// Deleting one's own question or answer publishes nothing and removes
 	// one's own words at once (v14 "Silinen içeriği geri alma"); a mute
@@ -551,6 +749,20 @@ var allowedWhileMuted = map[Action]bool{
 	// publish nothing; "I'm back" must never be refused.
 	EventFeedback:      true,
 	EventSafetyContact: true,
+	// Reading components is a read. Taking part, managing and refereeing
+	// publish into the event and are refused while muted.
+	EventComponentView: true,
+	// Ortak kütüphane (ADR-0040 §1): withdrawing one's own item and taking
+	// back one's own request only narrow; the lending steps of one's own
+	// items (approve, decline, hand over, take back) publish nothing and
+	// a mute must never keep an item from going home. Adding, editing and
+	// asking for an item are refused while muted.
+	LibraryItemWithdrawOwn: true,
+	LibraryBorrowCancel:    true,
+	LibraryLendOwn:         true,
+	// Materyal kütüphanesi (ADR-0040 §3): deleting one's own material only
+	// narrows. Adding and editing publish and are refused while muted.
+	MaterialDeleteOwn: true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero
@@ -562,6 +774,10 @@ type Settings struct {
 	// Instant (tayfas.kind = 'instant') applies instantRules and allows
 	// TayfaConvert (ADR-0032).
 	Instant bool
+	// NowCreateMinRole (tayfas.now_create_min_role) is the lowest role
+	// that may perform EventCreateNow (ADR-0038 §2). The zero value is the
+	// default, Member.
+	NowCreateMinRole Role
 }
 
 // minRole returns the lowest role that may perform a under s; ok is false
@@ -574,6 +790,9 @@ func minRole(a Action, s Settings) (need Role, ok bool) {
 	}
 	if a == EventCreate && s.MembersCanCreateEvents {
 		need = Member
+	}
+	if a == EventCreateNow && s.NowCreateMinRole.Valid() {
+		need = s.NowCreateMinRole
 	}
 	if s.Instant {
 		if r, ok := instantRules[a]; ok {
@@ -599,7 +818,8 @@ func Allowed(m Membership, a Action, now time.Time) bool {
 }
 
 // AllowedIn is Allowed for a tayfa with settings s. Actions whose rule
-// depends on a setting (EventCreate, and every action in instantRules) must
+// depends on a setting (EventCreate, EventCreateNow, and every action in
+// instantRules) must
 // be checked with AllowedIn and the tayfa's current settings; Allowed
 // assumes a standard tayfa with the defaults.
 func AllowedIn(m Membership, a Action, now time.Time, s Settings) bool {

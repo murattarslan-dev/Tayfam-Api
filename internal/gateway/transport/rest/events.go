@@ -21,22 +21,15 @@ type EventClient interface {
 	CreateInstantEvent(ctx context.Context, in *corev1.CreateInstantEventRequest, opts ...grpc.CallOption) (*corev1.CreateInstantEventResponse, error)
 	UpdateEvent(ctx context.Context, in *corev1.UpdateEventRequest, opts ...grpc.CallOption) (*corev1.UpdateEventResponse, error)
 	CancelEvent(ctx context.Context, in *corev1.CancelEventRequest, opts ...grpc.CallOption) (*corev1.CancelEventResponse, error)
+	FinishEvent(ctx context.Context, in *corev1.FinishEventRequest, opts ...grpc.CallOption) (*corev1.FinishEventResponse, error)
+	CreateEventJoinQr(ctx context.Context, in *corev1.CreateEventJoinQrRequest, opts ...grpc.CallOption) (*corev1.CreateEventJoinQrResponse, error)
+	JoinEventByQr(ctx context.Context, in *corev1.JoinEventByQrRequest, opts ...grpc.CallOption) (*corev1.JoinEventByQrResponse, error)
 	GetEvent(ctx context.Context, in *corev1.GetEventRequest, opts ...grpc.CallOption) (*corev1.GetEventResponse, error)
 	ListUpcomingEvents(ctx context.Context, in *corev1.ListUpcomingEventsRequest, opts ...grpc.CallOption) (*corev1.ListUpcomingEventsResponse, error)
 	SetRsvp(ctx context.Context, in *corev1.SetRsvpRequest, opts ...grpc.CallOption) (*corev1.SetRsvpResponse, error)
 	ListAttendees(ctx context.Context, in *corev1.ListAttendeesRequest, opts ...grpc.CallOption) (*corev1.ListAttendeesResponse, error)
-	AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, opts ...grpc.CallOption) (*corev1.AddCampItemResponse, error)
-	RemoveCampItem(ctx context.Context, in *corev1.RemoveCampItemRequest, opts ...grpc.CallOption) (*corev1.RemoveCampItemResponse, error)
-	AssignCampItem(ctx context.Context, in *corev1.AssignCampItemRequest, opts ...grpc.CallOption) (*corev1.AssignCampItemResponse, error)
-	AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, opts ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error)
-	RemoveConvoyVehicle(ctx context.Context, in *corev1.RemoveConvoyVehicleRequest, opts ...grpc.CallOption) (*corev1.RemoveConvoyVehicleResponse, error)
 	CheckIn(ctx context.Context, in *corev1.CheckInRequest, opts ...grpc.CallOption) (*corev1.CheckInResponse, error)
-	StartHike(ctx context.Context, in *corev1.StartHikeRequest, opts ...grpc.CallOption) (*corev1.StartHikeResponse, error)
-	FinishHike(ctx context.Context, in *corev1.FinishHikeRequest, opts ...grpc.CallOption) (*corev1.FinishHikeResponse, error)
 	SetAttendance(ctx context.Context, in *corev1.SetAttendanceRequest, opts ...grpc.CallOption) (*corev1.SetAttendanceResponse, error)
-	AddFishingCatch(ctx context.Context, in *corev1.AddFishingCatchRequest, opts ...grpc.CallOption) (*corev1.AddFishingCatchResponse, error)
-	ListFishingCatches(ctx context.Context, in *corev1.ListFishingCatchesRequest, opts ...grpc.CallOption) (*corev1.ListFishingCatchesResponse, error)
-	RemoveFishingCatch(ctx context.Context, in *corev1.RemoveFishingCatchRequest, opts ...grpc.CallOption) (*corev1.RemoveFishingCatchResponse, error)
 	AddEventPhoto(ctx context.Context, in *corev1.AddEventPhotoRequest, opts ...grpc.CallOption) (*corev1.AddEventPhotoResponse, error)
 	ListEventPhotos(ctx context.Context, in *corev1.ListEventPhotosRequest, opts ...grpc.CallOption) (*corev1.ListEventPhotosResponse, error)
 	RemoveEventPhoto(ctx context.Context, in *corev1.RemoveEventPhotoRequest, opts ...grpc.CallOption) (*corev1.RemoveEventPhotoResponse, error)
@@ -47,22 +40,14 @@ type EventClient interface {
 
 const (
 	// maxEventBody fits 5000 characters of description in the worst JSON
-	// escaping plus a 500-point convoy route.
+	// escaping.
 	maxEventBody     = 160 << 10
 	eventTitleMax    = 120
 	eventDescMax     = 5000
 	eventCapacityMax = 10000
-	convoyRouteMax   = 500
 	rruleMax         = 256
 	timeZoneMax      = 64
 	cancelReasonMax  = 500
-	campItemNameMax  = 60
-	campQuantityMax  = 999
-	vehicleMakeMax   = 40
-	vehicleColorMax  = 30
-	vehiclePlateMax  = 16
-	catchSpeciesMax  = 60
-	catchLengthMaxCm = 1000
 	// photoCaptionMax: album photo caption (core trims and checks again).
 	photoCaptionMax   = 200
 	calendarMediaType = "text/calendar; charset=utf-8"
@@ -78,22 +63,15 @@ func registerEvents(mux *http.ServeMux, h coreHandlers) {
 	mux.HandleFunc("GET "+one, a(h.getEvent))
 	mux.HandleFunc("PATCH "+one, a(h.updateEvent))
 	mux.HandleFunc("POST "+one+"/cancellation", a(h.cancelEvent))
+	mux.HandleFunc("POST "+one+"/finish", a(h.finishEvent))
+	mux.HandleFunc("POST "+one+"/join-qr", a(h.createEventJoinQr))
+	mux.HandleFunc("POST /v1/join-qr", a(h.joinEventByQr))
 	mux.HandleFunc("GET "+one+"/calendar", a(h.exportEvent))
 	mux.HandleFunc("PUT "+one+"/rsvp", a(h.setRsvp))
 	mux.HandleFunc("GET "+one+"/attendees", a(h.listAttendees))
 	mux.HandleFunc("PUT "+one+"/attendees/{user_id}/attendance", a(h.setAttendance(true)))
 	mux.HandleFunc("DELETE "+one+"/attendees/{user_id}/attendance", a(h.setAttendance(false)))
 	mux.HandleFunc("POST "+one+"/check-in", a(h.checkIn))
-	mux.HandleFunc("POST "+one+"/hike-start", a(h.startHike))
-	mux.HandleFunc("POST "+one+"/hike-return", a(h.finishHike))
-	mux.HandleFunc("POST "+one+"/camp-items", a(h.addCampItem))
-	mux.HandleFunc("DELETE "+one+"/camp-items/{item_id}", a(h.removeCampItem))
-	mux.HandleFunc("PATCH "+one+"/camp-items/{item_id}", a(h.assignCampItem))
-	mux.HandleFunc("POST "+one+"/convoy-vehicles", a(h.addConvoyVehicle))
-	mux.HandleFunc("DELETE "+one+"/convoy-vehicles/{vehicle_id}", a(h.removeConvoyVehicle))
-	mux.HandleFunc("GET "+one+"/fishing-catches", a(h.listFishingCatches))
-	mux.HandleFunc("POST "+one+"/fishing-catches", a(h.addFishingCatch))
-	mux.HandleFunc("DELETE "+one+"/fishing-catches/{catch_id}", a(h.removeFishingCatch))
 	mux.HandleFunc("GET "+one+"/photos", a(h.listEventPhotos))
 	mux.HandleFunc("POST "+one+"/photos", a(h.addEventPhoto))
 	mux.HandleFunc("DELETE "+one+"/photos/{photo_id}", a(h.removeEventPhoto))
@@ -125,135 +103,31 @@ func pathTayfaEvent(w http.ResponseWriter, r *http.Request) (tayfaID, eventID st
 // runes counts characters after trimming surrounding spaces, as core does.
 func runes(s string) int { return utf8.RuneCountInString(strings.TrimSpace(s)) }
 
-// --- Input: type details ---
+// Limits of the field values of a body; core checks the values themselves
+// against the event's type version.
+const (
+	maxEventFields     = 20
+	maxFieldValueBytes = 8 << 10
+)
 
-type convoyInput struct {
-	Route []latLngJSON `json:"route"`
-}
-
-type campInput struct {
-	SiteName  string `json:"site_name"`
-	HasWater  *bool  `json:"has_water"`
-	HasToilet *bool  `json:"has_toilet"`
-	Notes     string `json:"notes"`
-}
-
-// eventDetailsInput is the type details of a create or update body: at most
-// one is set. Output-only fields (vehicles, camp items) are unknown fields
-// here and fail decoding.
-type eventDetailsInput struct {
-	Convoy  *convoyInput `json:"convoy"`
-	Camp    *campInput   `json:"camp"`
-	Hike    *hikeJSON    `json:"hike"`
-	Fishing *fishingJSON `json:"fishing"`
-	Gaming  *gamingJSON  `json:"gaming"`
-	Sports  *sportsJSON  `json:"sports"`
-}
-
-// eventDetails is the checked details: the type they belong to and the
-// proto message, or the zero value when none was given.
-type eventDetails struct {
-	typ     corev1.EventType
-	convoy  *corev1.ConvoyDetails
-	camp    *corev1.CampDetails
-	hike    *corev1.HikeDetails
-	fishing *corev1.FishingDetails
-	gaming  *corev1.GamingDetails
-	sports  *corev1.SportsDetails
-}
-
-// details checks the cheap rules (enum names, coordinates, counts) and
-// converts. core checks everything again.
-func (in eventDetailsInput) details() (eventDetails, bool) {
-	var d eventDetails
-	n := 0
-	if in.Convoy != nil {
-		n++
-		if len(in.Convoy.Route) > convoyRouteMax {
-			return d, false
+// eventFields converts a body's field values (JSON by field key) to the
+// JSON text core takes; ok is false for a bad key, a null or an oversized
+// value, or too many values. nil stays nil.
+func eventFields(in map[string]json.RawMessage) (map[string]string, bool) {
+	if in == nil {
+		return nil, true
+	}
+	if len(in) > maxEventFields {
+		return nil, false
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		if !catalogKeyPattern.MatchString(k) || len(v) == 0 || len(v) > maxFieldValueBytes || string(v) == "null" {
+			return nil, false
 		}
-		d.typ, d.convoy = corev1.EventType_EVENT_TYPE_CONVOY, &corev1.ConvoyDetails{}
-		for _, p := range in.Convoy.Route {
-			if !p.valid() {
-				return d, false
-			}
-			d.convoy.Route = append(d.convoy.Route, &corev1.LatLng{Lat: p.Lat, Lng: p.Lng})
-		}
+		out[k] = string(v)
 	}
-	if in.Camp != nil {
-		n++
-		d.typ, d.camp = corev1.EventType_EVENT_TYPE_CAMP, &corev1.CampDetails{
-			SiteName: in.Camp.SiteName, HasWater: in.Camp.HasWater, HasToilet: in.Camp.HasToilet, Notes: in.Camp.Notes,
-		}
-	}
-	if in.Hike != nil {
-		n++
-		d.typ, d.hike = corev1.EventType_EVENT_TYPE_HIKE, &corev1.HikeDetails{
-			Difficulty: in.Hike.Difficulty, DistanceKm: in.Hike.DistanceKm, ElevationM: in.Hike.ElevationM,
-			ExpectedReturnTime: optTimestamp(in.Hike.ExpectedReturnAt), ReturnGraceMinutes: in.Hike.ReturnGraceMinutes,
-		}
-	}
-	if in.Fishing != nil {
-		n++
-		v, ok := spotVisibilities.valueOrUnspecified(in.Fishing.SpotVisibility)
-		if !ok {
-			return d, false
-		}
-		d.typ, d.fishing = corev1.EventType_EVENT_TYPE_FISHING, &corev1.FishingDetails{SpotVisibility: v}
-	}
-	if in.Gaming != nil {
-		n++
-		p, ok := gamingPlatforms.value(in.Gaming.Platform)
-		if !ok {
-			return d, false
-		}
-		d.typ, d.gaming = corev1.EventType_EVENT_TYPE_GAMING, &corev1.GamingDetails{Game: in.Gaming.Game, Platform: p}
-	}
-	if in.Sports != nil {
-		n++
-		s, ok := sports.value(in.Sports.Sport)
-		if !ok {
-			return d, false
-		}
-		d.typ, d.sports = corev1.EventType_EVENT_TYPE_SPORTS, &corev1.SportsDetails{Sport: s, VenueName: in.Sports.VenueName}
-	}
-	return d, n <= 1
-}
-
-// setCreate sets req's type details, if any.
-func (d eventDetails) setCreate(req *corev1.CreateEventRequest) {
-	switch {
-	case d.convoy != nil:
-		req.Details = &corev1.CreateEventRequest_Convoy{Convoy: d.convoy}
-	case d.camp != nil:
-		req.Details = &corev1.CreateEventRequest_Camp{Camp: d.camp}
-	case d.hike != nil:
-		req.Details = &corev1.CreateEventRequest_Hike{Hike: d.hike}
-	case d.fishing != nil:
-		req.Details = &corev1.CreateEventRequest_Fishing{Fishing: d.fishing}
-	case d.gaming != nil:
-		req.Details = &corev1.CreateEventRequest_Gaming{Gaming: d.gaming}
-	case d.sports != nil:
-		req.Details = &corev1.CreateEventRequest_Sports{Sports: d.sports}
-	}
-}
-
-// setUpdate sets req's type details, if any.
-func (d eventDetails) setUpdate(req *corev1.UpdateEventRequest) {
-	switch {
-	case d.convoy != nil:
-		req.Details = &corev1.UpdateEventRequest_Convoy{Convoy: d.convoy}
-	case d.camp != nil:
-		req.Details = &corev1.UpdateEventRequest_Camp{Camp: d.camp}
-	case d.hike != nil:
-		req.Details = &corev1.UpdateEventRequest_Hike{Hike: d.hike}
-	case d.fishing != nil:
-		req.Details = &corev1.UpdateEventRequest_Fishing{Fishing: d.fishing}
-	case d.gaming != nil:
-		req.Details = &corev1.UpdateEventRequest_Gaming{Gaming: d.gaming}
-	case d.sports != nil:
-		req.Details = &corev1.UpdateEventRequest_Sports{Sports: d.sports}
-	}
+	return out, true
 }
 
 func eventTitleOK(s string) bool { n := runes(s); return n >= 1 && n <= eventTitleMax }
@@ -306,33 +180,50 @@ type eventCreateBody struct {
 	OnlineURL        string      `json:"online_url"`
 	Capacity         int32       `json:"capacity"`
 	Discoverable     bool        `json:"discoverable"`
-	eventDetailsInput
-	Recurrence      *recurrenceJSON `json:"recurrence"`
-	ClientRequestID string          `json:"client_request_id"`
-	CoverUploadID   string          `json:"cover_upload_id"`
+	// Fields holds the values of the type's fields by field key.
+	Fields          map[string]json.RawMessage `json:"fields"`
+	Recurrence      *recurrenceJSON            `json:"recurrence"`
+	ClientRequestID string                     `json:"client_request_id"`
+	CoverUploadID   string                     `json:"cover_upload_id"`
+	// Components are the organizer's selections for the type's components
+	// (issue #238, ADR-0037 §2).
+	Components []componentSelectionJSON `json:"components"`
+	// StartsNow: the event starts at core's now and is open-ended; the
+	// times are not sent (ADR-0038 §1).
+	StartsNow bool `json:"starts_now"`
 }
 
 // request checks the body and converts it for core; ok is false for a bad
 // request.
 func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bool) {
-	typ, okT := eventTypes.value(b.Type)
+	// The type is a key of the catalog; core knows which keys exist.
+	okT := catalogKeyPattern.MatchString(b.Type)
 	mode, okM := eventModes.value(b.Mode)
-	det, okD := b.details()
-	if !okT || !okM || !okD || (det.typ != 0 && det.typ != typ) ||
-		!eventTitleOK(b.Title) || !eventDescOK(b.Description) || b.StartsAt.IsZero() || b.EndsAt.IsZero() ||
+	fields, okF := eventFields(b.Fields)
+	components, okC := componentSelections(b.Components)
+	// With starts_now the times are core's; without it both are required.
+	okTime := !b.StartsAt.IsZero() && !b.EndsAt.IsZero()
+	if b.StartsNow {
+		okTime = b.StartsAt.IsZero() && b.EndsAt.IsZero() && b.Recurrence == nil && !b.Discoverable
+	}
+	if !okT || !okM || !okF || !okC || !okTime ||
+		!eventTitleOK(b.Title) || !eventDescOK(b.Description) ||
 		!pointOK(b.MeetingPoint) || !capacityOK(b.Capacity) || !validUUID(b.ClientRequestID) ||
 		(b.CoverUploadID != "" && !validUUID(b.CoverUploadID)) {
 		return nil, false
 	}
 	req := &corev1.CreateEventRequest{
-		TayfaId: tayfaID, Type: typ, Mode: mode, Title: b.Title, Description: b.Description,
-		StartTime: timestamppb.New(b.StartsAt), EndTime: timestamppb.New(b.EndsAt),
+		TayfaId: tayfaID, TypeKey: b.Type, Fields: fields, Mode: mode, Title: b.Title, Description: b.Description,
+		StartsNow:        b.StartsNow,
 		MeetingPointName: b.MeetingPointName, MeetingPoint: b.MeetingPoint.proto(),
 		City: b.City, District: b.District, OnlineUrl: b.OnlineURL,
 		Capacity: b.Capacity, Discoverable: b.Discoverable,
 		ClientRequestId: b.ClientRequestID, CoverUploadId: b.CoverUploadID,
+		Components: components,
 	}
-	det.setCreate(req)
+	if !b.StartsNow {
+		req.StartTime, req.EndTime = timestamppb.New(b.StartsAt), timestamppb.New(b.EndsAt)
+	}
 	if rc := b.Recurrence; rc != nil {
 		if rc.RRule == "" || len(rc.RRule) > rruleMax || len(rc.TimeZone) > timeZoneMax {
 			return nil, false
@@ -346,9 +237,14 @@ func (b eventCreateBody) request(tayfaID string) (*corev1.CreateEventRequest, bo
 // event (ADR-0032).
 const maxInstantInvitees = 10
 
+// maxNowRecipients is core's limit on the friends of a now broadcast
+// (ADR-0038 §4).
+const maxNowRecipients = 30
+
 type instantEventBody struct {
-	Event          *eventCreateBody `json:"event"`
-	InviteeUserIDs []string         `json:"invitee_user_ids"`
+	Event           *eventCreateBody `json:"event"`
+	InviteeUserIDs  []string         `json:"invitee_user_ids"`
+	NowRecipientIDs []string         `json:"now_recipient_ids"`
 }
 
 type instantEventJSON struct {
@@ -364,14 +260,17 @@ func (h coreHandlers) createInstantEvent(ctx context.Context, w http.ResponseWri
 	if !decodeLimit(w, r, &b, maxEventBody) {
 		return
 	}
-	if b.Event == nil || b.Event.Recurrence != nil || b.Event.CoverUploadID != "" || len(b.InviteeUserIDs) > maxInstantInvitees {
+	if b.Event == nil || b.Event.Recurrence != nil || b.Event.CoverUploadID != "" || len(b.InviteeUserIDs) > maxInstantInvitees ||
+		len(b.NowRecipientIDs) > maxNowRecipients || (len(b.NowRecipientIDs) > 0 && !b.Event.StartsNow) {
 		badRequest(w, r)
 		return
 	}
-	for _, u := range b.InviteeUserIDs {
-		if !validUUID(u) {
-			badRequest(w, r)
-			return
+	for _, list := range [][]string{b.InviteeUserIDs, b.NowRecipientIDs} {
+		for _, u := range list {
+			if !validUUID(u) {
+				badRequest(w, r)
+				return
+			}
 		}
 	}
 	er, ok := b.Event.request("")
@@ -379,7 +278,7 @@ func (h coreHandlers) createInstantEvent(ctx context.Context, w http.ResponseWri
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.d.Events.CreateInstantEvent(ctx, &corev1.CreateInstantEventRequest{Event: er, InviteeUserIds: b.InviteeUserIDs})
+	resp, err := h.d.Events.CreateInstantEvent(ctx, &corev1.CreateInstantEventRequest{Event: er, InviteeUserIds: b.InviteeUserIDs, NowRecipientIds: b.NowRecipientIDs})
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -441,8 +340,9 @@ type eventUpdateBody struct {
 	OnlineURL        *string     `json:"online_url"`
 	Capacity         *int32      `json:"capacity"`
 	Discoverable     *bool       `json:"discoverable"`
-	eventDetailsInput
-	ApplyToSeries bool `json:"apply_to_series"`
+	// Fields: the complete new set of field values; {} removes them all.
+	Fields        map[string]json.RawMessage `json:"fields"`
+	ApplyToSeries bool                       `json:"apply_to_series"`
 	// CoverUploadID: "" removes the cover (issue #135).
 	CoverUploadID *string `json:"cover_upload_id"`
 }
@@ -515,14 +415,14 @@ func (h coreHandlers) updateEvent(ctx context.Context, w http.ResponseWriter, r 
 		req.Discoverable = *b.Discoverable
 		add("discoverable")
 	}
-	det, ok := b.details()
-	if !ok {
-		badRequest(w, r)
-		return
-	}
-	if det.typ != 0 {
-		det.setUpdate(req)
-		add("details")
+	if b.Fields != nil {
+		fields, ok := eventFields(b.Fields)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.Fields = fields
+		add("fields")
 	}
 	if b.CoverUploadID != nil {
 		if *b.CoverUploadID != "" && !validUUID(*b.CoverUploadID) {
@@ -567,6 +467,74 @@ func (h coreHandlers) cancelEvent(ctx context.Context, w http.ResponseWriter, r 
 		return
 	}
 	writeJSON(w, http.StatusOK, eventFrom(resp.GetEvent()))
+}
+
+// finishEvent is the organizer's "Bitir" on an open-ended event (ADR-0038
+// §1); the end is core's now, so the request has no body.
+func (h coreHandlers) finishEvent(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, eid, ok := pathTayfaEvent(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Events.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: id, EventId: eid})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, eventFrom(resp.GetEvent()))
+}
+
+// --- QR ile katılım (issue #264, ADR-0038 §3) ---
+
+type joinQRTokenJSON struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// createEventJoinQr returns a new join token for the event's QR. The token
+// is in the response body only; nothing here logs it.
+func (h coreHandlers) createEventJoinQr(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	if !h.d.InviteLimit.Allow(clientIP(r, h.d.TrustCFConnectingIP)) {
+		rateLimited(w, r)
+		return
+	}
+	id, eid, ok := pathTayfaEvent(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Events.CreateEventJoinQr(ctx, &corev1.CreateEventJoinQrRequest{TayfaId: id, EventId: eid})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, joinQRTokenJSON{Token: resp.GetToken(), ExpiresAt: resp.GetExpireTime().AsTime().UTC()})
+}
+
+type joinQRResultJSON struct {
+	TayfaID    string `json:"tayfa_id"`
+	EventID    string `json:"event_id"`
+	Pending    bool   `json:"pending"`
+	RSVP       string `json:"rsvp,omitempty"`
+	Attendance string `json:"attendance,omitempty"`
+}
+
+// joinEventByQr redeems a join token. The token travels in the body (it is
+// in the QR link's fragment and never in a URL), and is limited per IP
+// before the body is read; core also limits attempts per user.
+func (h coreHandlers) joinEventByQr(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	token, ok := h.inviteToken(w, r)
+	if !ok {
+		return
+	}
+	resp, err := h.d.Events.JoinEventByQr(ctx, &corev1.JoinEventByQrRequest{Token: token})
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, joinQRResultJSON{
+		TayfaID: resp.GetTayfaId(), EventID: resp.GetEventId(), Pending: resp.GetPending(),
+		RSVP: optName(rsvpStatuses, resp.GetRsvp()), Attendance: optName(attendanceStatuses, resp.GetAttendance()),
+	})
 }
 
 // exportEvent serves the event as an .ics file. It may carry the online
@@ -702,251 +670,6 @@ func (h coreHandlers) checkIn(ctx context.Context, w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusOK, checkInJSON{attendanceStatuses.name(resp.GetAttendance()), attendanceMethods.name(resp.GetMethod())})
 }
 
-type hikeStartBody struct {
-	StartedAt *time.Time `json:"started_at"`
-}
-
-func (h coreHandlers) startHike(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b hikeStartBody
-	if !decode(w, r, &b) {
-		return
-	}
-	resp, err := h.d.Events.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: id, EventId: eid, StartTime: optTimestamp(b.StartedAt)})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, hikeCheckinFrom(resp.GetCheckin()))
-}
-
-type hikeReturnBody struct {
-	ReturnedAt *time.Time `json:"returned_at"`
-}
-
-func (h coreHandlers) finishHike(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b hikeReturnBody
-	if !decode(w, r, &b) {
-		return
-	}
-	resp, err := h.d.Events.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: id, EventId: eid, ReturnTime: optTimestamp(b.ReturnedAt)})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, hikeCheckinFrom(resp.GetCheckin()))
-}
-
-// --- Camp items and convoy vehicles ---
-
-type campItemBody struct {
-	Name           string `json:"name"`
-	Quantity       int32  `json:"quantity"`
-	AssignedUserID string `json:"assigned_user_id"`
-}
-
-func (h coreHandlers) addCampItem(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b campItemBody
-	if !decode(w, r, &b) {
-		return
-	}
-	if n := runes(b.Name); n < 1 || n > campItemNameMax || b.Quantity < 0 || b.Quantity > campQuantityMax ||
-		(b.AssignedUserID != "" && !validUUID(b.AssignedUserID)) {
-		badRequest(w, r)
-		return
-	}
-	resp, err := h.d.Events.AddCampItem(ctx, &corev1.AddCampItemRequest{
-		TayfaId: id, EventId: eid, Name: b.Name, Quantity: b.Quantity, AssignedUserId: b.AssignedUserID,
-	})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, campItemFrom(resp.GetItem()))
-}
-
-// campItemAssignBody: a uuid sets the assignee; a missing field or null
-// clears it (issue #198).
-type campItemAssignBody struct {
-	AssignedUserID json.RawMessage `json:"assigned_user_id"`
-}
-
-func (h coreHandlers) assignCampItem(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "item_id")
-	if !ok {
-		return
-	}
-	var b campItemAssignBody
-	if !decode(w, r, &b) {
-		return
-	}
-	assigned, ok := nullableUUID(b.AssignedUserID)
-	if !ok {
-		badRequest(w, r)
-		return
-	}
-	resp, err := h.d.Events.AssignCampItem(ctx, &corev1.AssignCampItemRequest{
-		TayfaId: ids[0], EventId: ids[1], ItemId: ids[2], AssignedUserId: assigned,
-	})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, campItemFrom(resp.GetItem()))
-}
-
-// nullableUUID reads an optional uuid: missing or null gives "", a uuid
-// string gives itself; anything else is not ok.
-func nullableUUID(raw json.RawMessage) (string, bool) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return "", true
-	}
-	var v string
-	if err := json.Unmarshal(raw, &v); err != nil || !validUUID(v) {
-		return "", false
-	}
-	return v, true
-}
-
-func (h coreHandlers) removeCampItem(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "item_id")
-	if !ok {
-		return
-	}
-	if _, err := h.d.Events.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: ids[0], EventId: ids[1], ItemId: ids[2]}); err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-type convoyVehicleBody struct {
-	Make      string `json:"make"`
-	Model     string `json:"model"`
-	ModelYear int32  `json:"model_year"`
-	Color     string `json:"color"`
-	Plate     string `json:"plate"`
-}
-
-func (h coreHandlers) addConvoyVehicle(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b convoyVehicleBody
-	if !decode(w, r, &b) {
-		return
-	}
-	if n := runes(b.Make); n < 1 || n > vehicleMakeMax || runes(b.Model) > vehicleMakeMax ||
-		runes(b.Color) > vehicleColorMax || utf8.RuneCountInString(b.Plate) > vehiclePlateMax {
-		badRequest(w, r)
-		return
-	}
-	resp, err := h.d.Events.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{
-		TayfaId: id, EventId: eid, Make: b.Make, Model: b.Model, ModelYear: b.ModelYear, Color: b.Color, Plate: b.Plate,
-	})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, convoyVehicleFrom(resp.GetVehicle()))
-}
-
-func (h coreHandlers) removeConvoyVehicle(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "vehicle_id")
-	if !ok {
-		return
-	}
-	if _, err := h.d.Events.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: ids[0], EventId: ids[1], VehicleId: ids[2]}); err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// --- Fishing log ---
-
-func (h coreHandlers) listFishingCatches(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	size, token, ok := paging(w, r)
-	if !ok {
-		return
-	}
-	resp, err := h.d.Events.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: id, EventId: eid, PageSize: size, PageToken: token})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	out := fishingCatchListJSON{Catches: make([]fishingCatchJSON, 0, len(resp.GetCatches())), NextPageToken: resp.GetNextPageToken()}
-	for _, c := range resp.GetCatches() {
-		out.Catches = append(out.Catches, fishingCatchFrom(c))
-	}
-	writeJSON(w, http.StatusOK, out)
-}
-
-type fishingCatchBody struct {
-	Species         string      `json:"species"`
-	LengthCm        float64     `json:"length_cm"`
-	Location        *latLngJSON `json:"location"`
-	Visibility      string      `json:"visibility"`
-	ClientRequestID string      `json:"client_request_id"`
-	PhotoUploadID   string      `json:"photo_upload_id"`
-}
-
-// addFishingCatch passes the catch's location to core in the body only,
-// like checkIn.
-func (h coreHandlers) addFishingCatch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	id, eid, ok := pathTayfaEvent(w, r)
-	if !ok {
-		return
-	}
-	var b fishingCatchBody
-	if !decode(w, r, &b) {
-		return
-	}
-	vis, okV := catchVisibilities.valueOrUnspecified(b.Visibility)
-	if n := runes(b.Species); !okV || n < 1 || n > catchSpeciesMax || !(b.LengthCm > 0 && b.LengthCm <= catchLengthMaxCm) ||
-		!pointOK(b.Location) || !validUUID(b.ClientRequestID) || (b.PhotoUploadID != "" && !validUUID(b.PhotoUploadID)) {
-		badRequest(w, r)
-		return
-	}
-	resp, err := h.d.Events.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{
-		TayfaId: id, EventId: eid, Species: b.Species, LengthCm: b.LengthCm,
-		Location: b.Location.proto(), Visibility: vis, ClientRequestId: b.ClientRequestID, PhotoUploadId: b.PhotoUploadID,
-	})
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, fishingCatchFrom(resp.GetCatch()))
-}
-
-func (h coreHandlers) removeFishingCatch(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	ids, ok := pathIDs(w, r, "tayfa_id", "event_id", "catch_id")
-	if !ok {
-		return
-	}
-	if _, err := h.d.Events.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: ids[0], EventId: ids[1], CatchId: ids[2]}); err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 // --- Album (issue #206) ---
 
 func (h coreHandlers) listEventPhotos(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -974,6 +697,7 @@ type eventPhotoBody struct {
 	UploadID        string `json:"upload_id"`
 	Caption         string `json:"caption"`
 	ClientRequestID string `json:"client_request_id"`
+	ConsentAck      bool   `json:"consent_ack"`
 }
 
 func (h coreHandlers) addEventPhoto(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -991,6 +715,7 @@ func (h coreHandlers) addEventPhoto(ctx context.Context, w http.ResponseWriter, 
 	}
 	resp, err := h.d.Events.AddEventPhoto(ctx, &corev1.AddEventPhotoRequest{
 		TayfaId: id, EventId: eid, UploadId: b.UploadID, Caption: b.Caption, ClientRequestId: b.ClientRequestID,
+		ConsentAck: b.ConsentAck,
 	})
 	if err != nil {
 		h.fail(w, r, err)

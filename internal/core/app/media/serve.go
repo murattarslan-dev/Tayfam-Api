@@ -159,8 +159,13 @@ func (s *Service) ReportEvidenceURL(ctx context.Context, report, upload id.ID) (
 
 // canView is the visibility rule of ADR-0020 item 4. Tayfa content is
 // decided by core's permission table (authz): TayfaView for a tayfa cover,
-// EventView (with the events module on) for an event cover, a catch photo
-// or an album photo (ADR-0028). The default is no.
+// EventView (with the events module on) for an event cover, a log entry photo
+// or an album photo (ADR-0028), TayfaView with the library module on for a
+// library item's photo (ADR-0040 §1) and with the question_pool module on
+// for a question pool question's or answer's photo (ADR-0040 §2), and with
+// the materials module on for a material's note photo (ADR-0040 §3). A
+// garage vehicle's photo is seen in the tayfas the garage shows in
+// (ADR-0040 §4). The default is no.
 func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, error) {
 	if r.UserID.Valid && id.ID(r.UserID.Bytes) == viewer {
 		return true, nil
@@ -171,7 +176,12 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 	switch r.AttachedType.String {
 	case TargetUser:
 		return !r.Blocked && !r.OwnerDeleted, nil
-	case TargetTayfa, TargetEvent, TargetFishingCatch, TargetEventPhoto:
+	case TargetGarageVehicle:
+		// A garage vehicle's photo (issue #272; ADR-0040 §4): the SQL
+		// garage_vehicle_seen_by decides (a tayfa the vehicle shows in,
+		// both active members, the garage module on).
+		return r.Purpose == PurposeGarageVehicle && r.GarageVisible, nil
+	case TargetTayfa, TargetEvent, TargetLogEntry, TargetEventPhoto, TargetLibraryItem, TargetQuestion, TargetAnswer, TargetMaterial:
 		if !r.ContentTayfaID.Valid || !r.MemberStatus.Valid {
 			return false, nil
 		}
@@ -184,6 +194,18 @@ func canView(viewer id.ID, r store.ListMediaForViewerRow, now time.Time) (bool, 
 		}
 		if r.AttachedType.String == TargetTayfa {
 			return authz.Allowed(m, authz.TayfaView, now), nil
+		}
+		if r.AttachedType.String == TargetLibraryItem {
+			// A library item's photo (issue #270): the library module on.
+			return r.LibraryModuleOn && authz.Allowed(m, authz.TayfaView, now), nil
+		}
+		if r.AttachedType.String == TargetQuestion || r.AttachedType.String == TargetAnswer {
+			// A question pool photo (issue #271): the module on.
+			return r.QuestionPoolModuleOn && authz.Allowed(m, authz.TayfaView, now), nil
+		}
+		if r.AttachedType.String == TargetMaterial {
+			// A material's note photo (issue #261): the materials module on.
+			return r.MaterialsModuleOn && authz.Allowed(m, authz.TayfaView, now), nil
 		}
 		return r.EventsModuleOn && authz.Allowed(m, authz.EventView, now), nil
 	}

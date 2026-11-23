@@ -63,22 +63,3 @@ func TestEventNotifications(t *testing.T) {
 		}
 	}
 }
-
-func TestListsOnlyUpdatesNotifyNobody(t *testing.T) {
-	for _, tc := range []struct {
-		fields []string
-		want   bool
-	}{
-		{[]string{fieldCampItems}, true},
-		{[]string{fieldVehicles, fieldCampItems}, true},
-		{[]string{fieldCampItems, FieldTitle}, false},
-		{[]string{}, false},
-	} {
-		if got := listsOnly(tc.fields); got != tc.want {
-			t.Errorf("%v: %v", tc.fields, got)
-		}
-	}
-	if listsOnly(nil) {
-		t.Error("alansız güncelleme liste sayıldı")
-	}
-}

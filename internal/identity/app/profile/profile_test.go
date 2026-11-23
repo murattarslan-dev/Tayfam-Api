@@ -177,7 +177,7 @@ func TestAboutVisibility(t *testing.T) {
 	e := setup(t)
 	ctx := context.Background()
 	owner := e.user(t)
-	if _, err := e.pool.Exec(ctx, `INSERT INTO profile_details (user_id, team, interests, declined_fields) VALUES ($1, 'Bursaspor', '{hike}', '{about}')`, owner.PG()); err != nil {
+	if _, err := e.pool.Exec(ctx, `INSERT INTO profile_details (user_id, team, interests, declined_fields) VALUES ($1, 'Bursaspor', '{nature}', '{about}')`, owner.PG()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.pool.Exec(ctx, `INSERT INTO user_social_accounts (user_id, platform, username) VALUES ($1, 'instagram', 'ece.su')`, owner.PG()); err != nil {

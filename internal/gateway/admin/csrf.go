@@ -25,8 +25,11 @@ const (
 )
 
 const (
-	csrfLen     = 43 // base64url of 32 random bytes
-	maxFormSize = 16 << 10
+	csrfLen = 43 // base64url of 32 random bytes
+	// maxFormSize bounds a posted form. The catalog's event type form
+	// carries a definition of up to 16 KiB, which grows when URL-encoded
+	// (issue #262).
+	maxFormSize = 64 << 10
 )
 
 type csrfKey struct{}

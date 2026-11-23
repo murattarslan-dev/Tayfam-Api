@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/library/lending"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -342,10 +344,43 @@ func reportedItem(ctx context.Context, q *store.Queries, r Report) (*Item, error
 			it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(p.CreatedBy), p.Question, timeOf(p.CreatedAt), timeOf(p.DeletedAt)
 			it.Options, err = q.AdminGetPollOptions(ctx, r.Target.PG())
 		}
-	case "fishing_catch":
-		var x store.AdminGetCatchRow
-		x, err = q.AdminGetCatch(ctx, store.AdminGetCatchParams{ID: r.Target.PG(), TayfaID: tf})
-		it.Author, it.Title, it.CreatedAt, it.DeletedAt = idOf(x.UserID), x.Species, timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "log_entry":
+		// The entry's values (JSON by field key), never its location.
+		var x store.AdminGetLogEntryRow
+		x, err = q.AdminGetLogEntry(ctx, store.AdminGetLogEntryParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.UserID), x.ComponentKey, string(x.FieldValues)
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "event_question":
+		// The author of an anonymous question too: the platform sees it
+		// (ADR-0025 §5).
+		var x store.AdminGetEventQuestionRow
+		x, err = q.AdminGetEventQuestion(ctx, store.AdminGetEventQuestionParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.AuthorID), x.ComponentKey, x.Body
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "daily_item":
+		var x store.AdminGetDailyItemRow
+		x, err = q.AdminGetDailyItem(ctx, store.AdminGetDailyItemParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.CreatedBy), x.Attribution.String, x.Body
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "library_item":
+		var x store.AdminGetLibraryItemRow
+		x, err = q.AdminGetLibraryItem(ctx, store.AdminGetLibraryItemParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.OwnerID), x.Name, x.Note.String
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.WithdrawnAt)
+	case "material":
+		// The link is shown as text; the panel never opens it (ADR-0040
+		// §3). Note photos are not shown here.
+		var x store.AdminGetMaterialRow
+		x, err = q.AdminGetMaterial(ctx, store.AdminGetMaterialParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.AuthorID), x.Title, x.Link
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
+	case "garage_vehicle":
+		// A member's garage vehicle (issue #272): no plate exists to show.
+		// Photos are not shown here.
+		var x store.AdminGetGarageVehicleRow
+		x, err = q.AdminGetGarageVehicle(ctx, store.AdminGetGarageVehicleParams{ID: r.Target.PG(), TayfaID: tf})
+		it.Author, it.Title, it.Body = idOf(x.OwnerID), strings.TrimSpace(x.Make+" "+x.Model), x.Note
+		it.CreatedAt, it.DeletedAt = timeOf(x.CreatedAt), timeOf(x.DeletedAt)
 	case "event_photo":
 		var x store.AdminGetEventPhotoRow
 		x, err = q.AdminGetEventPhoto(ctx, store.AdminGetEventPhotoParams{ID: r.Target.PG(), TayfaID: tf})
@@ -379,8 +414,20 @@ func removeContent(ctx context.Context, q *store.Queries, r Report, by id.ID, no
 		_, err = q.AdminDeleteAnswer(ctx, store.AdminDeleteAnswerParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "poll":
 		_, err = q.AdminDeletePoll(ctx, store.AdminDeletePollParams{ID: tid, TayfaID: tf, At: at, By: b})
-	case "fishing_catch":
-		_, err = q.AdminDeleteCatch(ctx, store.AdminDeleteCatchParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "log_entry":
+		_, err = q.AdminDeleteLogEntry(ctx, store.AdminDeleteLogEntryParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "event_question":
+		_, err = q.AdminDeleteEventQuestion(ctx, store.AdminDeleteEventQuestionParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "daily_item":
+		_, err = q.AdminDeleteDailyItem(ctx, store.AdminDeleteDailyItemParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "material":
+		_, err = q.AdminDeleteMaterial(ctx, store.AdminDeleteMaterialParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "garage_vehicle":
+		_, err = q.AdminDeleteGarageVehicle(ctx, store.AdminDeleteGarageVehicleParams{ID: tid, TayfaID: tf, At: at, By: b})
+	case "library_item":
+		// Withdrawn like a moderator's removal: waiting requests end, a
+		// handed-over loan stays open for its owner (ADR-0040 §1).
+		_, err = lending.Withdraw(ctx, q, r.Tayfa, r.Target, by, now)
 	case "event_photo":
 		_, err = q.AdminDeleteEventPhoto(ctx, store.AdminDeleteEventPhotoParams{ID: tid, TayfaID: tf, At: at, By: b})
 	case "channel_message":

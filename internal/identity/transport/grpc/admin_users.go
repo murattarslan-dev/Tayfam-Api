@@ -289,6 +289,12 @@ func (s *PlatformAuditServer) RecordPlatformAudit(ctx context.Context, req *iden
 		}
 		e.Metadata[k] = v
 	}
+	if k := req.GetCatalogKey(); k != "" {
+		if !platformadmin.ValidCatalogKey(k) {
+			return nil, invalid
+		}
+		e.Metadata["catalog_key"] = k
+	}
 	if err := s.audits.RecordFromCore(ctx, e); err != nil {
 		if errors.Is(err, platformadmin.ErrInvalidAudit) {
 			return nil, invalid

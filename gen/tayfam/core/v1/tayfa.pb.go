@@ -74,7 +74,11 @@ func (JoinPolicy) EnumDescriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_tayfa_proto_rawDescGZIP(), []int{0}
 }
 
-// Event types; a tayfa's interests use the same values as events.type.
+// The seven Faz 1 event types. Event types are catalog keys now (ADR-0025):
+// new code uses the string key fields (Event.type_key,
+// DiscoverEvent.type_key, ActivityRecord.event_type_key). A tayfa's
+// interests are catalog interest keys (Tayfa.interest_keys), not event
+// types. The enum stays because fields that used it cannot be removed.
 type EventType int32
 
 const (
@@ -148,6 +152,23 @@ const (
 	Module_MODULE_EVENTS        Module = 2
 	Module_MODULE_QA            Module = 3
 	Module_MODULE_POLLS         Module = 4
+	// Günün içeriği (issue #269; ADR-0027 §5): the tayfa's daily content
+	// pool (TayfaDailyService) and its home widget.
+	Module_MODULE_DAILY Module = 5
+	// Ortak kütüphane (issue #270; ADR-0040 §1): the tayfa's shared items
+	// and their loans (TayfaLibraryService) and its home widget.
+	Module_MODULE_LIBRARY Module = 6
+	// Soru havuzu (issue #271; ADR-0040 §2): the Eğitim question pool
+	// (QAService with QUESTION_POOL_QUESTION_POOL), its home widget and the
+	// pool_link event component.
+	Module_MODULE_QUESTION_POOL Module = 7
+	// Materyal kütüphanesi (issue #261; ADR-0040 §3): the Eğitim study
+	// material — links and note photos (TayfaMaterialService) — and its home
+	// widget.
+	Module_MODULE_MATERIALS Module = 8
+	// Üye garajı (issue #272; ADR-0040 §4): the members' garages that show
+	// in the tayfa (MemberGarageService) and its home widget.
+	Module_MODULE_GARAGE Module = 9
 )
 
 // Enum value maps for Module.
@@ -158,6 +179,11 @@ var (
 		2: "MODULE_EVENTS",
 		3: "MODULE_QA",
 		4: "MODULE_POLLS",
+		5: "MODULE_DAILY",
+		6: "MODULE_LIBRARY",
+		7: "MODULE_QUESTION_POOL",
+		8: "MODULE_MATERIALS",
+		9: "MODULE_GARAGE",
 	}
 	Module_value = map[string]int32{
 		"MODULE_UNSPECIFIED":   0,
@@ -165,6 +191,11 @@ var (
 		"MODULE_EVENTS":        2,
 		"MODULE_QA":            3,
 		"MODULE_POLLS":         4,
+		"MODULE_DAILY":         5,
+		"MODULE_LIBRARY":       6,
+		"MODULE_QUESTION_POOL": 7,
+		"MODULE_MATERIALS":     8,
+		"MODULE_GARAGE":        9,
 	}
 )
 
@@ -365,7 +396,7 @@ type Tayfa struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Up to 500 characters; may be empty.
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	// Distinct values, in EventType order.
+	// Faz 1; never filled. See interest_keys.
 	Interests  []EventType `protobuf:"varint,4,rep,packed,name=interests,proto3,enum=tayfam.core.v1.EventType" json:"interests,omitempty"`
 	JoinPolicy JoinPolicy  `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
 	// One entry per Module value, in Module order.
@@ -399,9 +430,18 @@ type Tayfa struct {
 	// Set only for a tayfa converted from TAYFA_KIND_INSTANT to
 	// TAYFA_KIND_STANDARD ("Bu ekiple tayfa kur"): when it was converted
 	// (ADR-0032 §7). Unset for every other tayfa.
-	ConvertTime   *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=convert_time,json=convertTime,proto3" json:"convert_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ConvertTime *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=convert_time,json=convertTime,proto3" json:"convert_time,omitempty"`
+	// The tayfa's interests: keys of the catalog's interests
+	// (CatalogInterest.key; ADR-0025 §2), distinct, in catalog order. A
+	// retired interest stays on the tayfas that chose it.
+	InterestKeys []string `protobuf:"bytes,20,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
+	// The lowest role that may start an event now (CreateEventRequest
+	// .starts_now; ADR-0038 §2): ROLE_MEMBER (the default), ROLE_MODERATOR
+	// or ROLE_ADMIN. Independent of members_can_create_events. Instant
+	// tayfas never start a now event inside (POST /v1/instant-events does).
+	NowCreateMinRole Role `protobuf:"varint,21,opt,name=now_create_min_role,json=nowCreateMinRole,proto3,enum=tayfam.core.v1.Role" json:"now_create_min_role,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Tayfa) Reset() {
@@ -567,22 +607,38 @@ func (x *Tayfa) GetConvertTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Tayfa) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
+}
+
+func (x *Tayfa) GetNowCreateMinRole() Role {
+	if x != nil {
+		return x.NowCreateMinRole
+	}
+	return Role_ROLE_UNSPECIFIED
+}
+
 type CreateTayfaRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 3–50 characters after trimming surrounding spaces.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Up to 500 characters; may be empty.
 	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// 0–7 distinct values; UNSPECIFIED or a repeated value is
-	// ERROR_REASON_VALIDATION.
+	// Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
 	Interests []EventType `protobuf:"varint,3,rep,packed,name=interests,proto3,enum=tayfam.core.v1.EventType" json:"interests,omitempty"`
 	// UNSPECIFIED means JOIN_POLICY_APPROVAL.
 	JoinPolicy JoinPolicy `protobuf:"varint,4,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
 	// Required. A UUID the client generates once per create attempt and
 	// reuses on retry (offline write protection).
 	ClientRequestId string `protobuf:"bytes,5,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// 0–20 distinct keys of ACTIVE catalog interests (CatalogInterest.key).
+	// An unknown, retired or repeated key is ERROR_REASON_VALIDATION.
+	InterestKeys  []string `protobuf:"bytes,6,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateTayfaRequest) Reset() {
@@ -648,6 +704,13 @@ func (x *CreateTayfaRequest) GetClientRequestId() string {
 		return x.ClientRequestId
 	}
 	return ""
+}
+
+func (x *CreateTayfaRequest) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
 }
 
 type CreateTayfaResponse struct {
@@ -743,7 +806,14 @@ type GetTayfaResponse struct {
 	Tayfa *Tayfa                 `protobuf:"bytes,1,opt,name=tayfa,proto3" json:"tayfa,omitempty"`
 	// The caller's role in this tayfa, so the client can show the right
 	// actions. The server checks permissions again on every call.
-	CallerRole    Role `protobuf:"varint,2,opt,name=caller_role,json=callerRole,proto3,enum=tayfam.core.v1.Role" json:"caller_role,omitempty"`
+	CallerRole Role `protobuf:"varint,2,opt,name=caller_role,json=callerRole,proto3,enum=tayfam.core.v1.Role" json:"caller_role,omitempty"`
+	// The tayfa's badges in the order earned, for its members (issue #258;
+	// ADR-0039 §3).
+	Badges []*EarnedBadge `protobuf:"bytes,3,rep,name=badges,proto3" json:"badges,omitempty"`
+	// The widgets the home page shows after "Sıradaki", in order (issue
+	// #268; ADR-0027 §3): only those on, their module on, a countdown not
+	// past its moment. A client skips a key it does not know.
+	HomeWidgets   []*HomeWidget `protobuf:"bytes,4,rep,name=home_widgets,json=homeWidgets,proto3" json:"home_widgets,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -790,6 +860,20 @@ func (x *GetTayfaResponse) GetCallerRole() Role {
 		return x.CallerRole
 	}
 	return Role_ROLE_UNSPECIFIED
+}
+
+func (x *GetTayfaResponse) GetBadges() []*EarnedBadge {
+	if x != nil {
+		return x.Badges
+	}
+	return nil
+}
+
+func (x *GetTayfaResponse) GetHomeWidgets() []*HomeWidget {
+	if x != nil {
+		return x.HomeWidgets
+	}
+	return nil
 }
 
 type ListMyTayfasRequest struct {
@@ -992,13 +1076,13 @@ type UpdateTayfaRequest struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Same rules as CreateTayfaRequest.description.
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	// Replaces all interests. Same rules as CreateTayfaRequest.interests.
+	// Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
 	Interests []EventType `protobuf:"varint,4,rep,packed,name=interests,proto3,enum=tayfam.core.v1.EventType" json:"interests,omitempty"`
 	// Must not be UNSPECIFIED when named in update_mask.
 	JoinPolicy JoinPolicy `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
 	// Required, non-empty. Allowed paths: "name", "description", "interests",
-	// "join_policy", "members_can_create_events", "cover_upload_id". Any
-	// other path is ERROR_REASON_VALIDATION.
+	// "join_policy", "members_can_create_events", "now_create_min_role",
+	// "cover_upload_id". Any other path is ERROR_REASON_VALIDATION.
 	UpdateMask *fieldmaskpb.FieldMask `protobuf:"bytes,6,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	// See Tayfa.members_can_create_events.
 	MembersCanCreateEvents bool `protobuf:"varint,7,opt,name=members_can_create_events,json=membersCanCreateEvents,proto3" json:"members_can_create_events,omitempty"`
@@ -1007,8 +1091,15 @@ type UpdateTayfaRequest struct {
 	// ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE); empty
 	// removes the cover. The previous cover is deleted.
 	CoverUploadId string `protobuf:"bytes,8,opt,name=cover_upload_id,json=coverUploadId,proto3" json:"cover_upload_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// With "interests" in update_mask: replaces all interests. Same rules as
+	// CreateTayfaRequest.interest_keys, except that a retired interest the
+	// tayfa already has may be kept.
+	InterestKeys []string `protobuf:"bytes,9,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
+	// With "now_create_min_role" in update_mask: see
+	// Tayfa.now_create_min_role; UNSPECIFIED is ERROR_REASON_VALIDATION.
+	NowCreateMinRole Role `protobuf:"varint,10,opt,name=now_create_min_role,json=nowCreateMinRole,proto3,enum=tayfam.core.v1.Role" json:"now_create_min_role,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *UpdateTayfaRequest) Reset() {
@@ -1095,6 +1186,20 @@ func (x *UpdateTayfaRequest) GetCoverUploadId() string {
 		return x.CoverUploadId
 	}
 	return ""
+}
+
+func (x *UpdateTayfaRequest) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
+}
+
+func (x *UpdateTayfaRequest) GetNowCreateMinRole() Role {
+	if x != nil {
+		return x.NowCreateMinRole
+	}
+	return Role_ROLE_UNSPECIFIED
 }
 
 type UpdateTayfaResponse struct {
@@ -1503,10 +1608,12 @@ type ConvertInstantTayfaRequest struct {
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// Same rules as CreateTayfaRequest.description.
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	// Same rules as CreateTayfaRequest.interests.
+	// Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
 	Interests []EventType `protobuf:"varint,4,rep,packed,name=interests,proto3,enum=tayfam.core.v1.EventType" json:"interests,omitempty"`
 	// UNSPECIFIED means JOIN_POLICY_APPROVAL.
-	JoinPolicy    JoinPolicy `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
+	JoinPolicy JoinPolicy `protobuf:"varint,5,opt,name=join_policy,json=joinPolicy,proto3,enum=tayfam.core.v1.JoinPolicy" json:"join_policy,omitempty"`
+	// Same rules as CreateTayfaRequest.interest_keys.
+	InterestKeys  []string `protobuf:"bytes,6,rep,name=interest_keys,json=interestKeys,proto3" json:"interest_keys,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1576,6 +1683,13 @@ func (x *ConvertInstantTayfaRequest) GetJoinPolicy() JoinPolicy {
 	return JoinPolicy_JOIN_POLICY_UNSPECIFIED
 }
 
+func (x *ConvertInstantTayfaRequest) GetInterestKeys() []string {
+	if x != nil {
+		return x.InterestKeys
+	}
+	return nil
+}
+
 type ConvertInstantTayfaResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tayfa         *Tayfa                 `protobuf:"bytes,1,opt,name=tayfa,proto3" json:"tayfa,omitempty"`
@@ -1624,10 +1738,10 @@ var File_tayfam_core_v1_tayfa_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\n" +
-	"\x1atayfam/core/v1/tayfa.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1ftayfam/core/v1/membership.proto\"W\n" +
+	"\x1atayfam/core/v1/tayfa.proto\x12\x0etayfam.core.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1atayfam/core/v1/badge.proto\x1a\x19tayfam/core/v1/home.proto\x1a\x1ftayfam/core/v1/membership.proto\"W\n" +
 	"\vModuleState\x12.\n" +
 	"\x06module\x18\x01 \x01(\x0e2\x16.tayfam.core.v1.ModuleR\x06module\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xc5\a\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xaf\b\n" +
 	"\x05Tayfa\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1651,23 +1765,28 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x1apending_join_request_count\x18\x10 \x01(\x05H\x00R\x17pendingJoinRequestCount\x88\x01\x01\x12-\n" +
 	"\x04kind\x18\x11 \x01(\x0e2\x19.tayfam.core.v1.TayfaKindR\x04kind\x12(\n" +
 	"\x10instant_event_id\x18\x12 \x01(\tR\x0einstantEventId\x12=\n" +
-	"\fconvert_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\vconvertTimeB\x1d\n" +
-	"\x1b_pending_join_request_count\"\xec\x01\n" +
+	"\fconvert_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\vconvertTime\x12#\n" +
+	"\rinterest_keys\x18\x14 \x03(\tR\finterestKeys\x12C\n" +
+	"\x13now_create_min_role\x18\x15 \x01(\x0e2\x14.tayfam.core.v1.RoleR\x10nowCreateMinRoleB\x1d\n" +
+	"\x1b_pending_join_request_count\"\x91\x02\n" +
 	"\x12CreateTayfaRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x127\n" +
 	"\tinterests\x18\x03 \x03(\x0e2\x19.tayfam.core.v1.EventTypeR\tinterests\x12;\n" +
 	"\vjoin_policy\x18\x04 \x01(\x0e2\x1a.tayfam.core.v1.JoinPolicyR\n" +
 	"joinPolicy\x12*\n" +
-	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\"B\n" +
+	"\x11client_request_id\x18\x05 \x01(\tR\x0fclientRequestId\x12#\n" +
+	"\rinterest_keys\x18\x06 \x03(\tR\finterestKeys\"B\n" +
 	"\x13CreateTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\",\n" +
 	"\x0fGetTayfaRequest\x12\x19\n" +
-	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\"v\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\"\xea\x01\n" +
 	"\x10GetTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\x125\n" +
 	"\vcaller_role\x18\x02 \x01(\x0e2\x14.tayfam.core.v1.RoleR\n" +
-	"callerRole\"Q\n" +
+	"callerRole\x123\n" +
+	"\x06badges\x18\x03 \x03(\v2\x1b.tayfam.core.v1.EarnedBadgeR\x06badges\x12=\n" +
+	"\fhome_widgets\x18\x04 \x03(\v2\x1a.tayfam.core.v1.HomeWidgetR\vhomeWidgets\"Q\n" +
 	"\x13ListMyTayfasRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -1681,7 +1800,7 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x04role\x18\x03 \x01(\x0e2\x14.tayfam.core.v1.RoleR\x04role\x128\n" +
 	"\x06status\x18\x04 \x01(\x0e2 .tayfam.core.v1.MembershipStatusR\x06status\x12+\n" +
 	"\x05tayfa\x18\x05 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\x12-\n" +
-	"\x04kind\x18\x06 \x01(\x0e2\x19.tayfam.core.v1.TayfaKindR\x04kind\"\xfb\x02\n" +
+	"\x04kind\x18\x06 \x01(\x0e2\x19.tayfam.core.v1.TayfaKindR\x04kind\"\xe5\x03\n" +
 	"\x12UpdateTayfaRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1692,7 +1811,10 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\vupdate_mask\x18\x06 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\x129\n" +
 	"\x19members_can_create_events\x18\a \x01(\bR\x16membersCanCreateEvents\x12&\n" +
-	"\x0fcover_upload_id\x18\b \x01(\tR\rcoverUploadId\"B\n" +
+	"\x0fcover_upload_id\x18\b \x01(\tR\rcoverUploadId\x12#\n" +
+	"\rinterest_keys\x18\t \x03(\tR\finterestKeys\x12C\n" +
+	"\x13now_create_min_role\x18\n" +
+	" \x01(\x0e2\x14.tayfam.core.v1.RoleR\x10nowCreateMinRole\"B\n" +
 	"\x13UpdateTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa\"w\n" +
 	"\x10SetModuleRequest\x12\x19\n" +
@@ -1710,14 +1832,15 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\rdeletion_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\fdeletionTime\"2\n" +
 	"\x15CancelDeletionRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\"\x18\n" +
-	"\x16CancelDeletionResponse\"\xe3\x01\n" +
+	"\x16CancelDeletionResponse\"\x88\x02\n" +
 	"\x1aConvertInstantTayfaRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x127\n" +
 	"\tinterests\x18\x04 \x03(\x0e2\x19.tayfam.core.v1.EventTypeR\tinterests\x12;\n" +
 	"\vjoin_policy\x18\x05 \x01(\x0e2\x1a.tayfam.core.v1.JoinPolicyR\n" +
-	"joinPolicy\"J\n" +
+	"joinPolicy\x12#\n" +
+	"\rinterest_keys\x18\x06 \x03(\tR\finterestKeys\"J\n" +
 	"\x1bConvertInstantTayfaResponse\x12+\n" +
 	"\x05tayfa\x18\x01 \x01(\v2\x15.tayfam.core.v1.TayfaR\x05tayfa*Y\n" +
 	"\n" +
@@ -1733,13 +1856,18 @@ const file_tayfam_core_v1_tayfa_proto_rawDesc = "" +
 	"\x12EVENT_TYPE_FISHING\x10\x04\x12\x15\n" +
 	"\x11EVENT_TYPE_GAMING\x10\x05\x12\x15\n" +
 	"\x11EVENT_TYPE_SPORTS\x10\x06\x12\x16\n" +
-	"\x12EVENT_TYPE_GENERAL\x10\a*n\n" +
+	"\x12EVENT_TYPE_GENERAL\x10\a*\xd7\x01\n" +
 	"\x06Module\x12\x16\n" +
 	"\x12MODULE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14MODULE_ANNOUNCEMENTS\x10\x01\x12\x11\n" +
 	"\rMODULE_EVENTS\x10\x02\x12\r\n" +
 	"\tMODULE_QA\x10\x03\x12\x10\n" +
-	"\fMODULE_POLLS\x10\x04*x\n" +
+	"\fMODULE_POLLS\x10\x04\x12\x10\n" +
+	"\fMODULE_DAILY\x10\x05\x12\x12\n" +
+	"\x0eMODULE_LIBRARY\x10\x06\x12\x18\n" +
+	"\x14MODULE_QUESTION_POOL\x10\a\x12\x14\n" +
+	"\x10MODULE_MATERIALS\x10\b\x12\x11\n" +
+	"\rMODULE_GARAGE\x10\t*x\n" +
 	"\vTayfaStatus\x12\x1c\n" +
 	"\x18TAYFA_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13TAYFA_STATUS_ACTIVE\x10\x01\x12\x17\n" +
@@ -1805,8 +1933,10 @@ var file_tayfam_core_v1_tayfa_proto_goTypes = []any{
 	(*ConvertInstantTayfaResponse)(nil), // 25: tayfam.core.v1.ConvertInstantTayfaResponse
 	(*timestamppb.Timestamp)(nil),       // 26: google.protobuf.Timestamp
 	(Role)(0),                           // 27: tayfam.core.v1.Role
-	(MembershipStatus)(0),               // 28: tayfam.core.v1.MembershipStatus
-	(*fieldmaskpb.FieldMask)(nil),       // 29: google.protobuf.FieldMask
+	(*EarnedBadge)(nil),                 // 28: tayfam.core.v1.EarnedBadge
+	(*HomeWidget)(nil),                  // 29: tayfam.core.v1.HomeWidget
+	(MembershipStatus)(0),               // 30: tayfam.core.v1.MembershipStatus
+	(*fieldmaskpb.FieldMask)(nil),       // 31: google.protobuf.FieldMask
 }
 var file_tayfam_core_v1_tayfa_proto_depIdxs = []int32{
 	2,  // 0: tayfam.core.v1.ModuleState.module:type_name -> tayfam.core.v1.Module
@@ -1820,48 +1950,52 @@ var file_tayfam_core_v1_tayfa_proto_depIdxs = []int32{
 	26, // 8: tayfam.core.v1.Tayfa.update_time:type_name -> google.protobuf.Timestamp
 	4,  // 9: tayfam.core.v1.Tayfa.kind:type_name -> tayfam.core.v1.TayfaKind
 	26, // 10: tayfam.core.v1.Tayfa.convert_time:type_name -> google.protobuf.Timestamp
-	1,  // 11: tayfam.core.v1.CreateTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
-	0,  // 12: tayfam.core.v1.CreateTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
-	6,  // 13: tayfam.core.v1.CreateTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
-	6,  // 14: tayfam.core.v1.GetTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
-	27, // 15: tayfam.core.v1.GetTayfaResponse.caller_role:type_name -> tayfam.core.v1.Role
-	13, // 16: tayfam.core.v1.ListMyTayfasResponse.tayfas:type_name -> tayfam.core.v1.MyTayfa
-	27, // 17: tayfam.core.v1.MyTayfa.role:type_name -> tayfam.core.v1.Role
-	28, // 18: tayfam.core.v1.MyTayfa.status:type_name -> tayfam.core.v1.MembershipStatus
-	6,  // 19: tayfam.core.v1.MyTayfa.tayfa:type_name -> tayfam.core.v1.Tayfa
-	4,  // 20: tayfam.core.v1.MyTayfa.kind:type_name -> tayfam.core.v1.TayfaKind
-	1,  // 21: tayfam.core.v1.UpdateTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
-	0,  // 22: tayfam.core.v1.UpdateTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
-	29, // 23: tayfam.core.v1.UpdateTayfaRequest.update_mask:type_name -> google.protobuf.FieldMask
-	6,  // 24: tayfam.core.v1.UpdateTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
-	2,  // 25: tayfam.core.v1.SetModuleRequest.module:type_name -> tayfam.core.v1.Module
-	26, // 26: tayfam.core.v1.RequestDeletionResponse.deletion_time:type_name -> google.protobuf.Timestamp
-	1,  // 27: tayfam.core.v1.ConvertInstantTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
-	0,  // 28: tayfam.core.v1.ConvertInstantTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
-	6,  // 29: tayfam.core.v1.ConvertInstantTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
-	7,  // 30: tayfam.core.v1.TayfaService.CreateTayfa:input_type -> tayfam.core.v1.CreateTayfaRequest
-	9,  // 31: tayfam.core.v1.TayfaService.GetTayfa:input_type -> tayfam.core.v1.GetTayfaRequest
-	11, // 32: tayfam.core.v1.TayfaService.ListMyTayfas:input_type -> tayfam.core.v1.ListMyTayfasRequest
-	14, // 33: tayfam.core.v1.TayfaService.UpdateTayfa:input_type -> tayfam.core.v1.UpdateTayfaRequest
-	16, // 34: tayfam.core.v1.TayfaService.SetModule:input_type -> tayfam.core.v1.SetModuleRequest
-	18, // 35: tayfam.core.v1.TayfaService.RotateJoinCode:input_type -> tayfam.core.v1.RotateJoinCodeRequest
-	20, // 36: tayfam.core.v1.TayfaService.RequestDeletion:input_type -> tayfam.core.v1.RequestDeletionRequest
-	22, // 37: tayfam.core.v1.TayfaService.CancelDeletion:input_type -> tayfam.core.v1.CancelDeletionRequest
-	24, // 38: tayfam.core.v1.TayfaService.ConvertInstantTayfa:input_type -> tayfam.core.v1.ConvertInstantTayfaRequest
-	8,  // 39: tayfam.core.v1.TayfaService.CreateTayfa:output_type -> tayfam.core.v1.CreateTayfaResponse
-	10, // 40: tayfam.core.v1.TayfaService.GetTayfa:output_type -> tayfam.core.v1.GetTayfaResponse
-	12, // 41: tayfam.core.v1.TayfaService.ListMyTayfas:output_type -> tayfam.core.v1.ListMyTayfasResponse
-	15, // 42: tayfam.core.v1.TayfaService.UpdateTayfa:output_type -> tayfam.core.v1.UpdateTayfaResponse
-	17, // 43: tayfam.core.v1.TayfaService.SetModule:output_type -> tayfam.core.v1.SetModuleResponse
-	19, // 44: tayfam.core.v1.TayfaService.RotateJoinCode:output_type -> tayfam.core.v1.RotateJoinCodeResponse
-	21, // 45: tayfam.core.v1.TayfaService.RequestDeletion:output_type -> tayfam.core.v1.RequestDeletionResponse
-	23, // 46: tayfam.core.v1.TayfaService.CancelDeletion:output_type -> tayfam.core.v1.CancelDeletionResponse
-	25, // 47: tayfam.core.v1.TayfaService.ConvertInstantTayfa:output_type -> tayfam.core.v1.ConvertInstantTayfaResponse
-	39, // [39:48] is the sub-list for method output_type
-	30, // [30:39] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	27, // 11: tayfam.core.v1.Tayfa.now_create_min_role:type_name -> tayfam.core.v1.Role
+	1,  // 12: tayfam.core.v1.CreateTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
+	0,  // 13: tayfam.core.v1.CreateTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
+	6,  // 14: tayfam.core.v1.CreateTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
+	6,  // 15: tayfam.core.v1.GetTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
+	27, // 16: tayfam.core.v1.GetTayfaResponse.caller_role:type_name -> tayfam.core.v1.Role
+	28, // 17: tayfam.core.v1.GetTayfaResponse.badges:type_name -> tayfam.core.v1.EarnedBadge
+	29, // 18: tayfam.core.v1.GetTayfaResponse.home_widgets:type_name -> tayfam.core.v1.HomeWidget
+	13, // 19: tayfam.core.v1.ListMyTayfasResponse.tayfas:type_name -> tayfam.core.v1.MyTayfa
+	27, // 20: tayfam.core.v1.MyTayfa.role:type_name -> tayfam.core.v1.Role
+	30, // 21: tayfam.core.v1.MyTayfa.status:type_name -> tayfam.core.v1.MembershipStatus
+	6,  // 22: tayfam.core.v1.MyTayfa.tayfa:type_name -> tayfam.core.v1.Tayfa
+	4,  // 23: tayfam.core.v1.MyTayfa.kind:type_name -> tayfam.core.v1.TayfaKind
+	1,  // 24: tayfam.core.v1.UpdateTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
+	0,  // 25: tayfam.core.v1.UpdateTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
+	31, // 26: tayfam.core.v1.UpdateTayfaRequest.update_mask:type_name -> google.protobuf.FieldMask
+	27, // 27: tayfam.core.v1.UpdateTayfaRequest.now_create_min_role:type_name -> tayfam.core.v1.Role
+	6,  // 28: tayfam.core.v1.UpdateTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
+	2,  // 29: tayfam.core.v1.SetModuleRequest.module:type_name -> tayfam.core.v1.Module
+	26, // 30: tayfam.core.v1.RequestDeletionResponse.deletion_time:type_name -> google.protobuf.Timestamp
+	1,  // 31: tayfam.core.v1.ConvertInstantTayfaRequest.interests:type_name -> tayfam.core.v1.EventType
+	0,  // 32: tayfam.core.v1.ConvertInstantTayfaRequest.join_policy:type_name -> tayfam.core.v1.JoinPolicy
+	6,  // 33: tayfam.core.v1.ConvertInstantTayfaResponse.tayfa:type_name -> tayfam.core.v1.Tayfa
+	7,  // 34: tayfam.core.v1.TayfaService.CreateTayfa:input_type -> tayfam.core.v1.CreateTayfaRequest
+	9,  // 35: tayfam.core.v1.TayfaService.GetTayfa:input_type -> tayfam.core.v1.GetTayfaRequest
+	11, // 36: tayfam.core.v1.TayfaService.ListMyTayfas:input_type -> tayfam.core.v1.ListMyTayfasRequest
+	14, // 37: tayfam.core.v1.TayfaService.UpdateTayfa:input_type -> tayfam.core.v1.UpdateTayfaRequest
+	16, // 38: tayfam.core.v1.TayfaService.SetModule:input_type -> tayfam.core.v1.SetModuleRequest
+	18, // 39: tayfam.core.v1.TayfaService.RotateJoinCode:input_type -> tayfam.core.v1.RotateJoinCodeRequest
+	20, // 40: tayfam.core.v1.TayfaService.RequestDeletion:input_type -> tayfam.core.v1.RequestDeletionRequest
+	22, // 41: tayfam.core.v1.TayfaService.CancelDeletion:input_type -> tayfam.core.v1.CancelDeletionRequest
+	24, // 42: tayfam.core.v1.TayfaService.ConvertInstantTayfa:input_type -> tayfam.core.v1.ConvertInstantTayfaRequest
+	8,  // 43: tayfam.core.v1.TayfaService.CreateTayfa:output_type -> tayfam.core.v1.CreateTayfaResponse
+	10, // 44: tayfam.core.v1.TayfaService.GetTayfa:output_type -> tayfam.core.v1.GetTayfaResponse
+	12, // 45: tayfam.core.v1.TayfaService.ListMyTayfas:output_type -> tayfam.core.v1.ListMyTayfasResponse
+	15, // 46: tayfam.core.v1.TayfaService.UpdateTayfa:output_type -> tayfam.core.v1.UpdateTayfaResponse
+	17, // 47: tayfam.core.v1.TayfaService.SetModule:output_type -> tayfam.core.v1.SetModuleResponse
+	19, // 48: tayfam.core.v1.TayfaService.RotateJoinCode:output_type -> tayfam.core.v1.RotateJoinCodeResponse
+	21, // 49: tayfam.core.v1.TayfaService.RequestDeletion:output_type -> tayfam.core.v1.RequestDeletionResponse
+	23, // 50: tayfam.core.v1.TayfaService.CancelDeletion:output_type -> tayfam.core.v1.CancelDeletionResponse
+	25, // 51: tayfam.core.v1.TayfaService.ConvertInstantTayfa:output_type -> tayfam.core.v1.ConvertInstantTayfaResponse
+	43, // [43:52] is the sub-list for method output_type
+	34, // [34:43] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_tayfa_proto_init() }
@@ -1869,6 +2003,8 @@ func file_tayfam_core_v1_tayfa_proto_init() {
 	if File_tayfam_core_v1_tayfa_proto != nil {
 		return
 	}
+	file_tayfam_core_v1_badge_proto_init()
+	file_tayfam_core_v1_home_proto_init()
 	file_tayfam_core_v1_membership_proto_init()
 	file_tayfam_core_v1_tayfa_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}

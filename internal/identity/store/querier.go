@@ -18,6 +18,9 @@ type Querier interface {
 	// 30 gün sonra saklama işiyle kalıcı silinir; @overdue_before'dan eski
 	// satır saklama işinin geride kaldığını gösterir.
 	AdminUserStats(ctx context.Context, arg AdminUserStatsParams) (AdminUserStatsRow, error)
+	// Kopyanın sürümünü yalnızca daha yeni bir sürüme taşır; eşit ya da eski
+	// sürümde satır dönmez (olay zaten uygulanmış ya da geç gelmiş).
+	AdvanceCatalogCopyVersion(ctx context.Context, catalogVersion int64) (int64, error)
 	BlockRegistrationForAge(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Veri modeli v14: domain_events.actor_id hesap silinince NULL olur.
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
@@ -89,6 +92,8 @@ type Querier interface {
 	// created_at, hesap silmede yeniden kimlik doğrulama için girişin
 	// (sağlayıcı token'ının doğrulandığı an) zamanıdır; yenileme onu değiştirmez.
 	GetCallerSession(ctx context.Context, arg GetCallerSessionParams) (GetCallerSessionRow, error)
+	// Kopyanın yansıttığı katalog sürümü (core'daki catalog_version).
+	GetCatalogCopyVersion(ctx context.Context) (int64, error)
 	GetDataExportByClientRequest(ctx context.Context, arg GetDataExportByClientRequestParams) (DataExportRequest, error)
 	// Kullanıcının kaldırılmamış yaptırımı (süresi dolmuş askı dahil).
 	GetOpenSanction(ctx context.Context, userID pgtype.UUID) (GetOpenSanctionRow, error)
@@ -127,11 +132,19 @@ type Querier interface {
 	// silinmemiş hesapların şifreli doğum tarihi okunur; cevap yalnızca
 	// evet/hayır olarak servisten çıkar.
 	ListBirthDatesForMinorCheck(ctx context.Context, ids []pgtype.UUID) ([]ListBirthDatesForMinorCheckRow, error)
+	// core'daki etkinlik türü kataloğunun identity'deki kopyası (issue #237;
+	// ADR-0025 §10, ADR-0009 kopya modeli). Kopya yalnızca core'un
+	// catalog.changed olayıyla değişir (issue #280, ADR-0042; catalogcopy
+	// paketi): sürüm yalnızca ileri gider, ilgi alanı silinmez.
+	// Profil ilgi alanlarının doğrulaması için: anahtar ve durum (emekliler
+	// dahil).
+	ListCatalogInterests(ctx context.Context) ([]CatalogInterest, error)
 	// Son 30 günün talepleri, yeni önce.
 	ListOwnDataExports(ctx context.Context, arg ListOwnDataExportsParams) ([]DataExportRequest, error)
 	// Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id
 	// kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
-	// kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
+	// kimliğidir. Metadata'dan yalnızca bu üç kimlik ve katalog işlemlerinin
+	// anahtarı (catalog_key, issue #262) okunur.
 	ListPlatformAuditLogs(ctx context.Context, arg ListPlatformAuditLogsParams) ([]ListPlatformAuditLogsRow, error)
 	ListSocialAccounts(ctx context.Context, userID pgtype.UUID) ([]ListSocialAccountsRow, error)
 	// Hesap yönetimi (issue #75).
@@ -185,6 +198,8 @@ type Querier interface {
 	RecordConsent(ctx context.Context, arg RecordConsentParams) error
 	RecordDisplayNameChange(ctx context.Context, arg RecordDisplayNameChangeParams) error
 	RecordRefCodeLookup(ctx context.Context, arg RecordRefCodeLookupParams) error
+	// Kataloğun listesinde olmayan ilgi alanlarını emekliye alır (silmez).
+	RetireMissingCatalogInterests(ctx context.Context, keys []string) (int64, error)
 	// Kapatılan oturumların kimliklerini döner: her biri için session.revoked
 	// yazılır (issue #92).
 	RevokeOtherSessions(ctx context.Context, arg RevokeOtherSessionsParams) ([]pgtype.UUID, error)
@@ -215,6 +230,9 @@ type Querier interface {
 	SetReferrer(ctx context.Context, arg SetReferrerParams) (int64, error)
 	// Oturumun bütünlük özeti (ADR-0022, issue #163).
 	SetSessionIntegrity(ctx context.Context, arg SetSessionIntegrityParams) error
+	// Kişisel istatistik görünürlüğü (issue #267; ADR-0026 §4): none /
+	// friends / friends_and_mutual.
+	SetStatsVisibility(ctx context.Context, arg SetStatsVisibilityParams) (int64, error)
 	// Katılım geçmişinin kime görüneceği (v14 "Profil görünürlüğü").
 	// Avatar (issue #135): core'un, çağıranın kendi token'ıyla doğruladığı
 	// yükleme kimliği; NULL avatarı kaldırır.
@@ -230,6 +248,8 @@ type Querier interface {
 	// Görünen ad değiştirme (issue #184): 24 saatte en fazla 3 kez. Eski ad
 	// saklanmaz; yalnızca değişikliğin zamanı sayılır.
 	UpdateDisplayName(ctx context.Context, arg UpdateDisplayNameParams) (int64, error)
+	// Bir ilgi alanını ekler ya da durumunu günceller.
+	UpsertCatalogInterest(ctx context.Context, arg UpsertCatalogInterestParams) error
 	UpsertProfileDetails(ctx context.Context, arg UpsertProfileDetailsParams) error
 }
 

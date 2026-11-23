@@ -110,6 +110,7 @@ type Querier interface {
 	DeletePushTokenElsewhere(ctx context.Context, arg DeletePushTokenElsewhereParams) error
 	// Tayfa kalıcı silindi (tayfa.purged): mesajlar ve okunma kayıtları CASCADE.
 	DeleteTayfaChannels(ctx context.Context, tayfaID pgtype.UUID) error
+	// Tayfanın genel ve "Şimdi bildirimleri" (tayfa_now, issue #265) tercihleri.
 	DeleteTayfaNotificationPreferences(ctx context.Context, tayfaID pgtype.UUID) error
 	// Tayfa kalıcı silindi (tayfa.purged).
 	DeleteTayfaNotifications(ctx context.Context, tayfaID pgtype.UUID) error
@@ -147,6 +148,9 @@ type Querier interface {
 	// kendi kayıtları, @after'dan büyük anahtarla, anahtar sırasıyla. Mesaj
 	// metni uygulamada çözülür ve hiçbir yere loglanmaz.
 	ExportChannelMessages(ctx context.Context, arg ExportChannelMessagesParams) ([]ExportChannelMessagesRow, error)
+	// Bir tayfanın iki tercihi (tayfa ve tayfa_now, issue #265) aynı scope_id'yi
+	// taşır: sayfa scope_id'ye göre ilerler ve bir scope_id'nin bütün satırları
+	// aynı sayfada gelir (sayfada en fazla @n farklı scope_id).
 	ExportNotificationPreferences(ctx context.Context, arg ExportNotificationPreferencesParams) ([]ExportNotificationPreferencesRow, error)
 	// Dosyayı tutan kanal mesajları (issue #205, ADR-0031): gönderimden önce
 	// dosyanın başka bir mesajda olup olmadığı ve core'un uzlaştırma işi.

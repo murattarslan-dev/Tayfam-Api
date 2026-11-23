@@ -130,6 +130,8 @@ enum ReportTargetType {
   REPORT_TARGET_TYPE_QUESTION = 5;
   REPORT_TARGET_TYPE_ANSWER = 6;
   REPORT_TARGET_TYPE_POLL = 7;
+  // target_id is a log component entry (issue #243; stored as log_entry).
+  // The name is from Faz 1, when the only log was the fishing catch log.
   REPORT_TARGET_TYPE_FISHING_CATCH = 8;
   // target_id is a direct message ID (issue #95). Not about a tayfa:
   // tayfa_id is empty. core asks chat with the reporter's own token
@@ -153,6 +155,29 @@ enum ReportTargetType {
   // like other content; content_removed means the message is no longer
   // visible (deleted or hidden by moderation).
   REPORT_TARGET_TYPE_CHANNEL_MESSAGE = 11;
+  // target_id is a question of an event's questions component (issue #256;
+  // QuestionsComponentService). The author of an anonymous question is
+  // kept on the report for the platform only: in the tayfa's queue such a
+  // report has no subject_user_id, and member_sanctioned cannot close it
+  // (ADR-0025 §5). The reporter's own question is ERROR_REASON_VALIDATION
+  // (field target_id).
+  REPORT_TARGET_TYPE_EVENT_QUESTION = 12;
+  // target_id is an item of the tayfa's daily content pool (issue #269;
+  // TayfaDailyService). Its subject is the member who added it. Reporting
+  // needs the daily module on.
+  REPORT_TARGET_TYPE_DAILY_ITEM = 13;
+  // target_id is an item of the tayfa's library (issue #270;
+  // TayfaLibraryService). Its subject is the item's owner. Reporting needs
+  // the library module on and the item not withdrawn.
+  REPORT_TARGET_TYPE_LIBRARY_ITEM = 14;
+  // target_id is a material of the tayfa's material library (issue #261;
+  // TayfaMaterialService). Its subject is the author. Reporting needs the
+  // materials module on and the material visible.
+  REPORT_TARGET_TYPE_MATERIAL = 15;
+  // target_id is a vehicle of a member's garage that shows in the tayfa
+  // (issue #272; MemberGarageService). Its subject is the owner. Reporting
+  // needs the garage module on and the vehicle showing in the tayfa.
+  REPORT_TARGET_TYPE_GARAGE_VEHICLE = 16;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").
@@ -181,6 +206,9 @@ enum ReportReason {
   // only.
   REPORT_REASON_STAFF_CONDUCT = 15;
   REPORT_REASON_OTHER = 16;
+  // A paid private lesson offer or advertisement (issue #271; ADR-0040 §2,
+  // Topluluk Kuralları).
+  REPORT_REASON_PAID_TUTORING = 17;
 }
 
 enum ReportStatus {

@@ -25,6 +25,7 @@ import (
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/account"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/catalogcopy"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/coremedia"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/corerelation"
@@ -207,13 +208,21 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.MinorServiceName, grpcapi.PlatformAuditServiceName}}
+	policy := auth.ServicePolicy{Verifier: si.Verifier, Services: []string{grpcapi.MinorServiceName, grpcapi.PlatformAuditServiceName, grpcapi.CatalogCopyServiceName}}
 	if si.Verifier != nil {
 		policy.Callers = map[string][]auth.ServiceAccount{
 			identityv1.MinorService_IsMinor_FullMethodName: {si.Account("tayfam-core")},
 			// core'un panel işlemlerinin denetim kaydı (issue #104).
 			identityv1.PlatformAuditService_RecordPlatformAudit_FullMethodName: {si.Account("tayfam-core")},
+			// core'un catalog.changed olayı: katalog kopyası (issue #280, ADR-0042).
+			identityv1.CatalogCopyService_ApplyCatalogChange_FullMethodName: {si.Account("tayfam-core")},
 		}
+	}
+	// Katalog kopyası (issue #280, ADR-0042): core'un catalog.changed
+	// olaylarıyla yalnızca ileri gider.
+	copies, err := catalogcopy.New(catalogcopy.Config{Pool: pool})
+	if err != nil {
+		return err
 	}
 	guard, err := auth.NewGuard(v, grpcapi.PublicMethods...).WithServices(policy)
 	if err != nil {
@@ -245,6 +254,7 @@ func setup(rt *service.Runtime) error {
 	identityv1.RegisterAdminAuthServiceServer(srv, grpcapi.NewAdminAuthServer(admins, rt.Log))
 	identityv1.RegisterAdminUserServiceServer(srv, grpcapi.NewAdminUserServer(admins, rt.Log))
 	identityv1.RegisterPlatformAuditServiceServer(srv, grpcapi.NewPlatformAuditServer(admins, rt.Log))
+	identityv1.RegisterCatalogCopyServiceServer(srv, grpcapi.NewCatalogCopyServer(copies, rt.Log))
 	identityv1.RegisterAdminAuditServiceServer(srv, grpcapi.NewAdminAuditServer(admins, rt.Log))
 	identityv1.RegisterAuthServiceServer(srv, grpcapi.NewAuthServer(sessions, rt.Log))
 	identityv1.RegisterRegistrationServiceServer(srv, grpcapi.NewRegistrationServer(reg, rt.Log))

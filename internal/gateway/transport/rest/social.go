@@ -178,7 +178,7 @@ type invitationJSON struct {
 	// Absent when the inviter's account was deleted.
 	InviterUserID string    `json:"inviter_user_id,omitempty"`
 	InvitedAt     time.Time `json:"invited_at"`
-	// Issue #194: the tayfa's interests (EventType names).
+	// Issue #194: the tayfa's interests (catalog interest keys).
 	Interests []string `json:"interests"`
 }
 
@@ -229,6 +229,12 @@ type profileJSON struct {
 	ActivityVisible bool              `json:"activity_visible"`
 	// Only on one's own profile.
 	ActivityVisibility string `json:"activity_visibility,omitempty"`
+	// Issue #258: absent unless the caller may see the user's badges;
+	// [] when there are none.
+	Badges *[]earnedBadgeJSON `json:"badges,omitempty"`
+	// Issue #267: absent unless the caller may see the user's personal
+	// statistics (the same rule as badges); [] when there are none.
+	Stats *[]tayfaStatJSON `json:"stats,omitempty"`
 	// From identity (issue #185, #186); absent unless the caller may see
 	// them.
 	Birthday *birthdayJSON `json:"birthday,omitempty"`
@@ -403,22 +409,32 @@ type friendSuggestionListJSON struct {
 }
 
 type socialSettingsJSON struct {
-	ProfilingEnabled         bool `json:"profiling_enabled"`
-	HideFromSuggestions      bool `json:"hide_from_suggestions"`
-	DiscoverVisibleToFriends bool `json:"discover_visible_to_friends"`
+	ProfilingEnabled         bool   `json:"profiling_enabled"`
+	HideFromSuggestions      bool   `json:"hide_from_suggestions"`
+	DiscoverVisibleToFriends bool   `json:"discover_visible_to_friends"`
+	NowFromFriends           string `json:"now_from_friends"`
 }
 
 // socialSettingsPatch is SocialSettingsUpdate: absent fields stay.
 type socialSettingsPatch struct {
-	ProfilingEnabled         *bool `json:"profiling_enabled"`
-	HideFromSuggestions      *bool `json:"hide_from_suggestions"`
-	DiscoverVisibleToFriends *bool `json:"discover_visible_to_friends"`
+	ProfilingEnabled         *bool   `json:"profiling_enabled"`
+	HideFromSuggestions      *bool   `json:"hide_from_suggestions"`
+	DiscoverVisibleToFriends *bool   `json:"discover_visible_to_friends"`
+	NowFromFriends           *string `json:"now_from_friends"`
+}
+
+// nowFromFriendsNames: SocialSettings.now_from_friends (ADR-0038 §4).
+var nowFromFriendsNames = map[corev1.NowFromFriends]string{
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_ALL:   "all",
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_CLOSE: "close",
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_OFF:   "off",
 }
 
 func socialSettingsFrom(s *corev1.SocialSettings) socialSettingsJSON {
 	return socialSettingsJSON{
 		ProfilingEnabled: s.GetProfilingEnabled(), HideFromSuggestions: s.GetHideFromSuggestions(),
 		DiscoverVisibleToFriends: s.GetDiscoverVisibleToFriends(),
+		NowFromFriends:           nameOr(nowFromFriendsNames, s.GetNowFromFriends()),
 	}
 }
 
@@ -464,13 +480,25 @@ func (h coreHandlers) updateSocialSettings(ctx context.Context, w http.ResponseW
 	if !decode(w, r, &b) {
 		return
 	}
-	if b.ProfilingEnabled == nil && b.HideFromSuggestions == nil && b.DiscoverVisibleToFriends == nil {
+	if b.ProfilingEnabled == nil && b.HideFromSuggestions == nil && b.DiscoverVisibleToFriends == nil && b.NowFromFriends == nil {
 		badRequest(w, r)
 		return
 	}
+	var nowFrom corev1.NowFromFriends
+	if b.NowFromFriends != nil {
+		for k, v := range nowFromFriendsNames {
+			if v == *b.NowFromFriends {
+				nowFrom = k
+			}
+		}
+		if nowFrom == corev1.NowFromFriends_NOW_FROM_FRIENDS_UNSPECIFIED {
+			badRequest(w, r)
+			return
+		}
+	}
 	resp, err := h.d.Social.UpdateSocialSettings(ctx, &corev1.UpdateSocialSettingsRequest{
 		ProfilingEnabled: b.ProfilingEnabled, HideFromSuggestions: b.HideFromSuggestions,
-		DiscoverVisibleToFriends: b.DiscoverVisibleToFriends,
+		DiscoverVisibleToFriends: b.DiscoverVisibleToFriends, NowFromFriends: nowFrom,
 	})
 	if err != nil {
 		h.fail(w, r, err)
@@ -596,6 +624,17 @@ func (h coreHandlers) getProfile(ctx context.Context, w http.ResponseWriter, r *
 	for _, t := range p.GetMutualTayfas() {
 		out.MutualTayfas = append(out.MutualTayfas, mutualTayfaJSON{ID: t.GetTayfaId(), Name: t.GetName()})
 	}
+	if p.GetBadgesVisible() {
+		b := earnedBadgesFrom(p.GetBadges())
+		out.Badges = &b
+	}
+	if p.GetStatsVisible() {
+		st := make([]tayfaStatJSON, 0, len(p.GetStats()))
+		for _, s := range p.GetStats() {
+			st = append(st, tayfaStatJSON{MetricKey: s.GetMetricKey(), Source: s.GetSource(), Value: s.GetValue(), EventCount: s.GetEventCount()})
+		}
+		out.Stats = &st
+	}
 	h.addProfileDetails(ctx, r, u, &out)
 	writeJSON(w, http.StatusOK, out)
 }
@@ -638,7 +677,7 @@ func (h coreHandlers) listActivity(ctx context.Context, w http.ResponseWriter, r
 	out := activityListJSON{Records: make([]activityJSON, 0, len(resp.GetRecords())), NextPageToken: resp.GetNextPageToken()}
 	for _, a := range resp.GetRecords() {
 		out.Records = append(out.Records, activityJSON{
-			EventType: eventTypes.name(a.GetEventType()), Mode: eventModes.name(a.GetMode()),
+			EventType: a.GetEventTypeKey(), Mode: eventModes.name(a.GetMode()),
 			City: a.GetCity(), District: a.GetDistrict(), StartedAt: a.GetStartTime().AsTime(),
 			TayfaMember: a.GetTayfaMember(), TayfaID: a.GetTayfaId(), TayfaName: a.GetTayfaName(),
 			EventID: a.GetEventId(), EventTitle: a.GetEventTitle(), DurationMinutes: a.GetDurationMinutes(),
@@ -656,6 +695,9 @@ type accountJSON struct {
 	ActivityVisibility string `json:"activity_visibility"`
 	BirthdayVisibility string `json:"birthday_visibility"`
 	AvatarUploadID     string `json:"avatar_upload_id,omitempty"`
+	// StatsVisibility: who sees the personal statistics and badges
+	// (issue #267); the about_visibility values.
+	StatsVisibility string `json:"stats_visibility"`
 	accountProfileJSON
 }
 
@@ -671,6 +713,7 @@ type accountPatchBody struct {
 	DisplayName        *string `json:"display_name"`
 	ActivityVisibility *string `json:"activity_visibility"`
 	BirthdayVisibility *string `json:"birthday_visibility"`
+	StatsVisibility    *string `json:"stats_visibility"`
 	profilePatch
 }
 
@@ -711,6 +754,7 @@ func accountFrom(a *identityv1.GetAccountResponse) accountJSON {
 		ReferralCode: a.GetReferralCode(), ActivityVisibility: identityVisibilities.name(a.GetActivityVisibility()),
 		BirthdayVisibility: birthdayVisibilities.name(a.GetBirthdayVisibility()),
 		AvatarUploadID:     a.GetAvatarUploadId(),
+		StatsVisibility:    aboutVisibilities.name(a.GetStatsVisibility()),
 		accountProfileJSON: accountProfileFrom(a),
 	}
 }
@@ -722,7 +766,7 @@ func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, 
 	if !decode(w, r, &b) {
 		return
 	}
-	if b.DisplayName == nil && b.ActivityVisibility == nil && b.BirthdayVisibility == nil && b.empty() {
+	if b.DisplayName == nil && b.ActivityVisibility == nil && b.BirthdayVisibility == nil && b.StatsVisibility == nil && b.empty() {
 		badRequest(w, r)
 		return
 	}
@@ -749,6 +793,14 @@ func (h coreHandlers) updateAccount(ctx context.Context, w http.ResponseWriter, 
 			return
 		}
 		req.BirthdayVisibility = v
+	}
+	if b.StatsVisibility != nil {
+		v, ok := aboutVisibilities.value(*b.StatsVisibility)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.StatsVisibility = v
 	}
 	if !b.apply(req) {
 		badRequest(w, r)

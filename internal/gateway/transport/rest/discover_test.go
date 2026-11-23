@@ -20,7 +20,7 @@ const contactID = "0193b2a4-7c3e-7a10-8b2c-3d4e5f607182"
 func testDiscoverItem() *corev1.DiscoverItem {
 	return &corev1.DiscoverItem{
 		Event: &corev1.DiscoverEvent{
-			EventId: eventID, Type: corev1.EventType_EVENT_TYPE_HIKE, Title: "Belgrad yürüyüşü",
+			EventId: eventID, TypeKey: "hike", Title: "Belgrad yürüyüşü",
 			StartTime: timestamppb.New(t0.Add(48 * time.Hour)), EndTime: timestamppb.New(t0.Add(52 * time.Hour)),
 			City: "İstanbul", District: "Sarıyer",
 		},
@@ -52,6 +52,9 @@ func (f *fakeCore) GetTayfaDiscover(ctx context.Context, in *corev1.GetTayfaDisc
 }
 func (f *fakeCore) SetTayfaDiscover(ctx context.Context, in *corev1.SetTayfaDiscoverRequest, _ ...grpc.CallOption) (*corev1.SetTayfaDiscoverResponse, error) {
 	return &corev1.SetTayfaDiscoverResponse{State: corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_PENDING, Enabled: in.GetEnabled()}, f.record(ctx, in)
+}
+func (f *fakeCore) SetTayfaStatsShowcase(ctx context.Context, in *corev1.SetTayfaStatsShowcaseRequest, _ ...grpc.CallOption) (*corev1.SetTayfaStatsShowcaseResponse, error) {
+	return &corev1.SetTayfaStatsShowcaseResponse{State: corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_LISTED, Enabled: true, StatsShowcase: in.GetStatsShowcase()}, f.record(ctx, in)
 }
 func (f *fakeCore) GetEventFeedback(ctx context.Context, in *corev1.GetEventFeedbackRequest, _ ...grpc.CallOption) (*corev1.GetEventFeedbackResponse, error) {
 	return &corev1.GetEventFeedbackResponse{}, f.record(ctx, in)
@@ -127,6 +130,31 @@ func TestDiscoverFeedNoFriends(t *testing.T) {
 	}
 }
 
+// TestDiscoverFeedShowcase (issue #267): a tayfa's statistics card comes
+// as it is; a tayfa without one has no showcase field at all.
+func TestDiscoverFeedShowcase(t *testing.T) {
+	it := testDiscoverItem()
+	it.Tayfa.Showcase = &corev1.TayfaShowcase{
+		Stats:  []*corev1.TayfaStat{{MetricKey: "events", Source: "common", Value: 12, EventCount: 12}},
+		Badges: []*corev1.EarnedBadge{{BadgeKey: "tayfa_events_10", EarnedAt: timestamppb.New(t0)}},
+	}
+	plain := testDiscoverItem()
+	h := coreRouter(&fakeCore{feed: []*corev1.DiscoverItem{it, plain}})
+	w := as(h, "GET", "/v1/discover/events", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("akış: %d %s", w.Code, w.Body)
+	}
+	v := decodeBody[discoverFeedJSON](t, w)
+	sh := v.Items[0].Tayfa.Showcase
+	if len(v.Items) != 2 || sh == nil || len(sh.Stats) != 1 || sh.Stats[0] != (tayfaStatJSON{MetricKey: "events", Source: "common", Value: 12, EventCount: 12}) ||
+		len(sh.Badges) != 1 || sh.Badges[0].BadgeKey != "tayfa_events_10" {
+		t.Fatalf("vitrin: %s", w.Body)
+	}
+	if v.Items[1].Tayfa.Showcase != nil || strings.Count(w.Body.String(), `"showcase"`) != 1 {
+		t.Fatalf("vitrinsiz tayfa: %s", w.Body)
+	}
+}
+
 // TestDiscoverFeatureDisabled: with Keşfet off core answers
 // FEATURE_DISABLED, which is 404 feature-disabled with no body data.
 func TestDiscoverFeatureDisabled(t *testing.T) {
@@ -164,6 +192,17 @@ func TestDiscoverRoutes(t *testing.T) {
 	w = as(h, "GET", "/v1/tayfas/"+tayfaID+"/discover", "")
 	if w.Code != http.StatusOK || decodeBody[tayfaDiscoverJSON](t, w).State != "under_review" {
 		t.Fatalf("durum: %d %s", w.Code, w.Body)
+	}
+	w = as(h, "PUT", "/v1/tayfas/"+tayfaID+"/discover/stats-showcase", `{"stats_showcase":false}`)
+	got, _, _ = f.last()
+	if w.Code != http.StatusOK || got.(*corev1.SetTayfaStatsShowcaseRequest).GetTayfaId() != tayfaID ||
+		decodeBody[tayfaDiscoverJSON](t, w) != (tayfaDiscoverJSON{State: "listed", Enabled: true}) {
+		t.Fatalf("vitrin ayarı: %d %s", w.Code, w.Body)
+	}
+	for _, b := range []string{`{}`, `{"stats_showcase":"evet"}`, `{"stats_showcase":null}`} {
+		if w := as(h, "PUT", "/v1/tayfas/"+tayfaID+"/discover/stats-showcase", b); w.Code != http.StatusBadRequest {
+			t.Errorf("vitrin ayarı %s: %d", b, w.Code)
+		}
 	}
 
 	ev := "/v1/tayfas/" + tayfaID + "/events/" + eventID

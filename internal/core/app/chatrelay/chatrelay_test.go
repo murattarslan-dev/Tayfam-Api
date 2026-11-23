@@ -36,6 +36,8 @@ func TestTypesAreExplicit(t *testing.T) {
 		"rsvp.changed", "rsvp.promoted", "event.updated", "event.cancelled",
 		// The platform removes a reported channel message (issue #205).
 		"report.channel_message_removed",
+		// A component of an event changed (issue #238).
+		"event.component_changed",
 	}
 	if got := Types(); !slices.Equal(got, want) {
 		t.Fatalf("Types = %v", got)
@@ -247,5 +249,43 @@ func TestEventChannelEvents(t *testing.T) {
 	r, _ = Request(ev(t, "rsvp.changed", user, map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "user_id": user.String(), "status": "not_going"}))
 	if strings.Contains(r.String(), "not_going") {
 		t.Fatal("katılım cevabı chat'e gitti")
+	}
+}
+
+// A component change reaches chat with the event and the component key
+// only (issue #238, ADR-0025 §6).
+func TestComponentChangedEvent(t *testing.T) {
+	tf, actor, event := id.New(), id.New(), id.New()
+	r, err := Request(ev(t, TypeEventComponentChanged, actor, map[string]any{
+		"tayfa_id": tf.String(), "event_id": event.String(), "component_key": "scoreboard",
+		// Anything else a writer might add never leaves core.
+		"score": 21, "user_id": id.New().String(),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := r.GetEventComponentChanged()
+	if r.GetTayfaId() != tf.String() || r.GetActorId() != actor.String() || c.GetEventId() != event.String() || c.GetComponentKey() != "scoreboard" {
+		t.Fatalf("istek = %v", r)
+	}
+	if b, err := json.Marshal(c); err != nil || strings.Contains(string(b), "21") {
+		t.Fatalf("içerik taşındı: %s %v", b, err)
+	}
+
+	// The selections or referees changed: no component key.
+	r, err = Request(ev(t, TypeEventComponentChanged, actor, map[string]any{"tayfa_id": tf.String(), "event_id": event.String(), "component_key": ""}))
+	if err != nil || r.GetEventComponentChanged().GetEventId() != event.String() || r.GetEventComponentChanged().GetComponentKey() != "" {
+		t.Fatalf("anahtarsız = %v %v", r, err)
+	}
+
+	for name, p := range map[string]map[string]any{
+		"etkinlik yok":   {"tayfa_id": tf.String(), "component_key": "draw"},
+		"bozuk anahtar":  {"tayfa_id": tf.String(), "event_id": event.String(), "component_key": "Draw; DROP"},
+		"tayfa yok":      {"event_id": event.String(), "component_key": "draw"},
+		"bozuk etkinlik": {"tayfa_id": tf.String(), "event_id": "x", "component_key": "draw"},
+	} {
+		if r, err := Request(ev(t, TypeEventComponentChanged, actor, p)); err == nil {
+			t.Errorf("%s: kabul edildi: %v", name, r)
+		}
 	}
 }

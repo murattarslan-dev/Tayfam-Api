@@ -1,6 +1,7 @@
 package event
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -69,7 +70,7 @@ func TestSeriesCreateAndGenerate(t *testing.T) {
 	tf, admin := e.newTayfa(t)
 	in := weekly(input(), "FREQ=WEEKLY")
 	in.Type = TypeHike
-	in.Details = Details{Hike: &Hike{Difficulty: 3, ExpectedReturnAt: in.StartsAt.Add(5 * time.Hour)}}
+	in.Fields = values("difficulty", `3`)
 	in.Capacity = 12
 	first := e.create(t, tf, admin, in)
 	if first.SeriesID == (id.ID{}) || first.SeriesOverride {
@@ -94,13 +95,10 @@ func TestSeriesCreateAndGenerate(t *testing.T) {
 			r.MeetingLat.Float64 != izmir.Lat || id.ID(r.CreatedBy.Bytes) != admin || r.SeriesOverride || r.Status != StatusScheduled {
 			t.Errorf("örnek %d kopyası = %+v", i+1, r)
 		}
-		// Type details are copied; the expected return keeps its distance
-		// from the start.
+		// Field values are copied.
 		v, err := e.svc.Get(ctx, admin, tf, id.ID(r.ID.Bytes))
 		must(t, err)
-		if v.Details.Hike == nil || v.Details.Hike.Difficulty != 3 || !v.Details.Hike.ExpectedReturnAt.Equal(want.Add(5*time.Hour)) {
-			t.Errorf("örnek %d detayı = %+v", i+1, v.Details.Hike)
-		}
+		wantValues(t, fmt.Sprintf("örnek %d alanları", i+1), v.Fields, "difficulty", `3`)
 	}
 	// Outbox: one event.created per generated occurrence, without an actor,
 	// naming the series and nothing else.
@@ -481,22 +479,6 @@ func TestExport(t *testing.T) {
 	// Non-members get nothing, the link included.
 	_, err = e.svc.Export(ctx, id.New(), tf, ov.ID)
 	wantErr(t, "yabancı", err, apperr.ErrTayfaNotFound)
-
-	// A participants-only fishing spot stays out for others.
-	fi := input()
-	fi.Type = TypeFishing
-	fi.Details = Details{Fishing: &Fishing{SpotVisibility: SpotParticipants}}
-	fv := e.create(t, tf, admin, fi)
-	ics, err = e.svc.Export(ctx, member, tf, fv.ID)
-	must(t, err)
-	if strings.Contains(string(ics), "Kordon") || !strings.Contains(string(ics), `LOCATION:Konak\, İzmir`) {
-		t.Errorf("gizli mera: %s", ics)
-	}
-	ics, err = e.svc.Export(ctx, admin, tf, fv.ID)
-	must(t, err)
-	if !strings.Contains(string(ics), "Kordon") {
-		t.Errorf("organizatör merayı görmüyor: %s", ics)
-	}
 
 	// Cancelled.
 	_, err = e.svc.Cancel(ctx, admin, tf, v.ID, "yağmur")

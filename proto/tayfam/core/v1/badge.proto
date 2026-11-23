@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// EarnedBadge is a badge a person or a tayfa earned (issue #258;
+// ADR-0039). Its name and icon are the catalog's (CatalogBadge with the
+// same key; retired badges are served too). A badge is never taken back.
+message EarnedBadge {
+  // CatalogBadge.key.
+  string badge_key = 1;
+  // The calendar year of a yearly threshold; 0 for the others.
+  int32 year = 2;
+  // A champion badge's event and the event's tayfa; empty for the others.
+  // The event or the tayfa may have been deleted since.
+  string tayfa_id = 3;
+  string event_id = 4;
+  google.protobuf.Timestamp earned_at = 5;
+}

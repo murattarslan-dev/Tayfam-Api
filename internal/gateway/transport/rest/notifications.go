@@ -63,6 +63,8 @@ func registerNotifications(mux *http.ServeMux, d ChatDeps) {
 	mux.HandleFunc("GET /v1/notification-preferences", a(h.preferences))
 	mux.HandleFunc("PUT /v1/notification-preferences/tayfas/{tayfa_id}", a(h.setTayfaPreference))
 	mux.HandleFunc("DELETE /v1/notification-preferences/tayfas/{tayfa_id}", a(h.resetTayfaPreference))
+	mux.HandleFunc("PUT /v1/notification-preferences/tayfas/{tayfa_id}/now", a(h.setTayfaNowPreference))
+	mux.HandleFunc("DELETE /v1/notification-preferences/tayfas/{tayfa_id}/now", a(h.resetTayfaNowPreference))
 	mux.HandleFunc("PUT /v1/notification-preferences/conversations/{conversation_id}", a(h.setConversationPreference))
 	mux.HandleFunc("DELETE /v1/notification-preferences/conversations/{conversation_id}", a(h.resetConversationPreference))
 }
@@ -90,6 +92,17 @@ var notificationTypeNames = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          "friend_accepted",
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_SUGGESTION:        "friend_suggestion",
 	chatv1.NotificationType_NOTIFICATION_TYPE_SAFETY_ALERT:             "safety_alert",
+	chatv1.NotificationType_NOTIFICATION_TYPE_CELEBRATION:              "celebration",
+	chatv1.NotificationType_NOTIFICATION_TYPE_BADGE_EARNED:             "badge_earned",
+	chatv1.NotificationType_NOTIFICATION_TYPE_NOW_STARTED:              "now_started",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_DUE:              "library_due",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED:    "library_loan_orphaned",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED:   "library_loan_requested",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED:     "library_queue_joined",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED:    "library_loan_approved",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED:    "library_loan_declined",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER: "library_loan_handed_over",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN:       "library_queue_turn",
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         "tayfa_invitation",
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          "report_resolved",
 	chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST:               "dm_request",
@@ -112,6 +125,7 @@ var notificationTargetNames = map[chatv1.NotificationTargetType]string{
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:          "report",
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION: "dm_conversation",
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT:     "data_export",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM:    "library_item",
 }
 
 var notificationLevelNames = map[chatv1.NotificationLevel]string{
@@ -124,6 +138,7 @@ var notificationScopeNames = map[chatv1.NotificationScopeType]string{
 	chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_TAYFA:           "tayfa",
 	chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_CHANNEL:         "channel",
 	chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_DM_CONVERSATION: "dm_conversation",
+	chatv1.NotificationScopeType_NOTIFICATION_SCOPE_TYPE_TAYFA_NOW:       "tayfa_now",
 }
 
 // nameOr returns m[k], or "unknown" for a value this gateway does not know
@@ -311,6 +326,32 @@ func (h chatHandlers) resetTayfaPreference(ctx context.Context, w http.ResponseW
 		return
 	}
 	h.setPreference(ctx, w, r, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: id, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL}, http.StatusNoContent)
+}
+
+// setTayfaNowPreference sets the tayfa's "Şimdi bildirimleri" (issue
+// #265; ADR-0038 §4): all or none.
+func (h chatHandlers) setTayfaNowPreference(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
+		return
+	}
+	level, until, ok := preferenceInput(w, r)
+	if !ok {
+		return
+	}
+	if level == chatv1.NotificationLevel_NOTIFICATION_LEVEL_MENTIONS {
+		badRequest(w, r)
+		return
+	}
+	h.setPreference(ctx, w, r, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: id, Level: level, MuteUntil: until, Now: true}, http.StatusOK)
+}
+
+func (h chatHandlers) resetTayfaNowPreference(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r, "tayfa_id")
+	if !ok {
+		return
+	}
+	h.setPreference(ctx, w, r, &chatv1.SetTayfaNotificationPreferenceRequest{TayfaId: id, Level: chatv1.NotificationLevel_NOTIFICATION_LEVEL_ALL, Now: true}, http.StatusNoContent)
 }
 
 func (h chatHandlers) setPreference(ctx context.Context, w http.ResponseWriter, r *http.Request, req *chatv1.SetTayfaNotificationPreferenceRequest, code int) {

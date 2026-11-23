@@ -12,18 +12,19 @@ import (
 )
 
 const addTayfaInterest = `-- name: AddTayfaInterest :exec
-INSERT INTO tayfa_interests (tayfa_id, event_type)
+INSERT INTO tayfa_interests (tayfa_id, interest_key)
 VALUES ($1, $2)
 ON CONFLICT DO NOTHING
 `
 
 type AddTayfaInterestParams struct {
-	TayfaID   pgtype.UUID
-	EventType string
+	TayfaID     pgtype.UUID
+	InterestKey string
 }
 
+// İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 func (q *Queries) AddTayfaInterest(ctx context.Context, arg AddTayfaInterestParams) error {
-	_, err := q.db.Exec(ctx, addTayfaInterest, arg.TayfaID, arg.EventType)
+	_, err := q.db.Exec(ctx, addTayfaInterest, arg.TayfaID, arg.InterestKey)
 	return err
 }
 
@@ -282,7 +283,7 @@ const getTayfa = `-- name: GetTayfa :one
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at, cover_upload_id, kind, converted_at
+       created_at, updated_at, cover_upload_id, kind, converted_at, now_create_min_role
 FROM tayfas
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -309,6 +310,7 @@ type GetTayfaRow struct {
 	CoverUploadID          pgtype.UUID
 	Kind                   string
 	ConvertedAt            pgtype.Timestamptz
+	NowCreateMinRole       string
 }
 
 func (q *Queries) GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, error) {
@@ -336,6 +338,7 @@ func (q *Queries) GetTayfa(ctx context.Context, id pgtype.UUID) (GetTayfaRow, er
 		&i.CoverUploadID,
 		&i.Kind,
 		&i.ConvertedAt,
+		&i.NowCreateMinRole,
 	)
 	return i, err
 }
@@ -411,7 +414,7 @@ const getTayfaForUpdate = `-- name: GetTayfaForUpdate :one
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at, cover_upload_id, kind, converted_at
+       created_at, updated_at, cover_upload_id, kind, converted_at, now_create_min_role
 FROM tayfas
 WHERE id = $1 AND deleted_at IS NULL
 FOR NO KEY UPDATE
@@ -439,6 +442,7 @@ type GetTayfaForUpdateRow struct {
 	CoverUploadID          pgtype.UUID
 	Kind                   string
 	ConvertedAt            pgtype.Timestamptz
+	NowCreateMinRole       string
 }
 
 // Yazan işlemler tayfa satırını kilitleyerek okur; memberships trigger'ı da
@@ -468,6 +472,7 @@ func (q *Queries) GetTayfaForUpdate(ctx context.Context, id pgtype.UUID) (GetTay
 		&i.CoverUploadID,
 		&i.Kind,
 		&i.ConvertedAt,
+		&i.NowCreateMinRole,
 	)
 	return i, err
 }
@@ -490,6 +495,36 @@ func (q *Queries) IsTayfaModuleEnabled(ctx context.Context, arg IsTayfaModuleEna
 	var enabled bool
 	err := row.Scan(&enabled)
 	return enabled, err
+}
+
+const listCatalogInterestStatuses = `-- name: ListCatalogInterestStatuses :many
+SELECT key, status FROM catalog_interests
+`
+
+type ListCatalogInterestStatusesRow struct {
+	Key    string
+	Status string
+}
+
+// İlgi alanı doğrulaması için: anahtar ve durum (emekliler dahil).
+func (q *Queries) ListCatalogInterestStatuses(ctx context.Context) ([]ListCatalogInterestStatusesRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogInterestStatuses)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCatalogInterestStatusesRow{}
+	for rows.Next() {
+		var i ListCatalogInterestStatusesRow
+		if err := rows.Scan(&i.Key, &i.Status); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listInstantEventIDs = `-- name: ListInstantEventIDs :many
@@ -525,15 +560,19 @@ func (q *Queries) ListInstantEventIDs(ctx context.Context, tayfaIds []pgtype.UUI
 }
 
 const listInterestsForTayfas = `-- name: ListInterestsForTayfas :many
-SELECT tayfa_id, event_type FROM tayfa_interests
-WHERE tayfa_id = ANY($1::uuid[])
+SELECT ti.tayfa_id, ti.interest_key
+FROM tayfa_interests ti
+JOIN catalog_interests ci ON ci.key = ti.interest_key
+WHERE ti.tayfa_id = ANY($1::uuid[])
+ORDER BY ti.tayfa_id, ci.position, ci.key
 `
 
 type ListInterestsForTayfasRow struct {
-	TayfaID   pgtype.UUID
-	EventType string
+	TayfaID     pgtype.UUID
+	InterestKey string
 }
 
+// Her tayfanın ilgi alanları katalog sırasıyla.
 func (q *Queries) ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.UUID) ([]ListInterestsForTayfasRow, error) {
 	rows, err := q.db.Query(ctx, listInterestsForTayfas, tayfaIds)
 	if err != nil {
@@ -543,7 +582,7 @@ func (q *Queries) ListInterestsForTayfas(ctx context.Context, tayfaIds []pgtype.
 	items := []ListInterestsForTayfasRow{}
 	for rows.Next() {
 		var i ListInterestsForTayfasRow
-		if err := rows.Scan(&i.TayfaID, &i.EventType); err != nil {
+		if err := rows.Scan(&i.TayfaID, &i.InterestKey); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -589,7 +628,7 @@ const listMyTayfas = `-- name: ListMyTayfas :many
 SELECT t.id, t.name, t.name_normalized, t.description, t.join_code, t.status,
        t.join_policy, t.suspended_at, t.deletion_scheduled_for,
        t.members_can_create_events, t.created_at, t.updated_at, t.cover_upload_id, t.kind,
-       t.converted_at, m.role, m.status AS membership_status, m.muted_until,
+       t.converted_at, t.now_create_min_role, m.role, m.status AS membership_status, m.muted_until,
        m.created_at AS membership_created_at
 FROM memberships m
 JOIN tayfas t ON t.id = m.tayfa_id
@@ -624,6 +663,7 @@ type ListMyTayfasRow struct {
 	CoverUploadID          pgtype.UUID
 	Kind                   string
 	ConvertedAt            pgtype.Timestamptz
+	NowCreateMinRole       string
 	Role                   string
 	MembershipStatus       string
 	MutedUntil             pgtype.Timestamptz
@@ -662,6 +702,7 @@ func (q *Queries) ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]L
 			&i.CoverUploadID,
 			&i.Kind,
 			&i.ConvertedAt,
+			&i.NowCreateMinRole,
 			&i.Role,
 			&i.MembershipStatus,
 			&i.MutedUntil,
@@ -678,9 +719,14 @@ func (q *Queries) ListMyTayfas(ctx context.Context, arg ListMyTayfasParams) ([]L
 }
 
 const listTayfaInterests = `-- name: ListTayfaInterests :many
-SELECT event_type FROM tayfa_interests WHERE tayfa_id = $1 ORDER BY event_type
+SELECT ti.interest_key
+FROM tayfa_interests ti
+JOIN catalog_interests ci ON ci.key = ti.interest_key
+WHERE ti.tayfa_id = $1
+ORDER BY ci.position, ci.key
 `
 
+// Katalog sırasıyla.
 func (q *Queries) ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) ([]string, error) {
 	rows, err := q.db.Query(ctx, listTayfaInterests, tayfaID)
 	if err != nil {
@@ -689,11 +735,11 @@ func (q *Queries) ListTayfaInterests(ctx context.Context, tayfaID pgtype.UUID) (
 	defer rows.Close()
 	items := []string{}
 	for rows.Next() {
-		var event_type string
-		if err := rows.Scan(&event_type); err != nil {
+		var interest_key string
+		if err := rows.Scan(&interest_key); err != nil {
 			return nil, err
 		}
-		items = append(items, event_type)
+		items = append(items, interest_key)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -912,8 +958,9 @@ const updateTayfaSettings = `-- name: UpdateTayfaSettings :execrows
 UPDATE tayfas
 SET name = $1, name_normalized = $2,
     description = $3, join_policy = $4,
-    members_can_create_events = $5
-WHERE id = $6 AND deleted_at IS NULL
+    members_can_create_events = $5,
+    now_create_min_role = $6
+WHERE id = $7 AND deleted_at IS NULL
 `
 
 type UpdateTayfaSettingsParams struct {
@@ -922,6 +969,7 @@ type UpdateTayfaSettingsParams struct {
 	Description            pgtype.Text
 	JoinPolicy             string
 	MembersCanCreateEvents bool
+	NowCreateMinRole       string
 	ID                     pgtype.UUID
 }
 
@@ -932,6 +980,7 @@ func (q *Queries) UpdateTayfaSettings(ctx context.Context, arg UpdateTayfaSettin
 		arg.Description,
 		arg.JoinPolicy,
 		arg.MembersCanCreateEvents,
+		arg.NowCreateMinRole,
 		arg.ID,
 	)
 	if err != nil {

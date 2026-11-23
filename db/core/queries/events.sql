@@ -4,13 +4,13 @@
 
 -- name: CreateEvent :exec
 INSERT INTO events (
-  id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+  id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
   meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-  capacity, discoverable, created_by, client_request_id
+  capacity, discoverable, created_by, client_request_id, open_ended
 ) VALUES (
-  @id, @tayfa_id, @type, @mode, @title, @description, @starts_at, @ends_at,
+  @id, @tayfa_id, @type, @type_version, @mode, @title, @description, @starts_at, @ends_at,
   @meeting_point_name, @meeting_lat, @meeting_lng, @city, @district, @online_url,
-  @capacity, @discoverable, @created_by, @client_request_id
+  @capacity, @discoverable, @created_by, @client_request_id, @open_ended
 );
 
 -- Tekrar gönderilen oluşturma isteği aynı etkinliği döndürür.
@@ -19,20 +19,20 @@ SELECT id, tayfa_id, deleted_at FROM events
 WHERE created_by = @created_by AND client_request_id = @client_request_id;
 
 -- name: GetEvent :one
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL;
 
 -- Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
 -- ve bekleme sırası iki eşzamanlı istekte birden aşılamaz.
 -- name: GetEventForUpdate :one
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL
 FOR UPDATE;
@@ -53,13 +53,34 @@ SET status = 'cancelled', cancelled_at = @cancelled_at, cancelled_by = @cancelle
     cancel_reason = @cancel_reason
 WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL AND status = 'scheduled';
 
+-- Şimdi başlat (issue #263, ADR-0038 §1): organizatör "Bitir" der; bitiş
+-- o an olur, açık uçluluk kalkar. Yalnızca planlı, açık uçlu etkinlikte.
+-- name: FinishEvent :execrows
+UPDATE events SET ends_at = @ends_at, open_ended = false
+WHERE tayfa_id = @tayfa_id AND id = @id AND deleted_at IS NULL
+  AND status = 'scheduled' AND open_ended;
+
+-- Aynı kullanıcının şimdi etkinliği açan istekleri (tayfa içi ve anlık)
+-- sırayla işlenir; kişi başı 1 açık şimdi etkinliği sınırı iki istekte
+-- birden aşılamaz. Kilit transaction bitince bırakılır.
+-- name: LockNowEventCreation :exec
+SELECT pg_advisory_xact_lock(hashtextextended('tayfam.core.now_event:' || sqlc.arg(user_id)::uuid::text, 0));
+
+-- Kullanıcının açık şimdi etkinlikleri: bitmemiş (Bitir denmemiş ve 12
+-- saat dolmamış), iptal edilmemiş, silinmemiş; tayfası da silinmemiş.
+-- name: CountOpenNowEvents :one
+SELECT count(*) FROM events e
+JOIN tayfas t ON t.id = e.tayfa_id
+WHERE e.created_by = @created_by AND e.open_ended AND e.deleted_at IS NULL
+  AND e.status = 'scheduled' AND e.ends_at > @now AND t.deleted_at IS NULL;
+
 -- Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
 -- sayfalanır.
 -- name: ListUpcomingEvents :many
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = @tayfa_id
   AND deleted_at IS NULL
@@ -117,116 +138,24 @@ ORDER BY updated_at, user_id
 LIMIT @page_size;
 
 -- ---------------------------------------------------------------------------
--- Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
--- key yanlış türü reddeder.
+-- Türe özel alan değerleri (issue #237, ADR-0025 §3). Değerler app
+-- katmanında etkinliğin tür sürümüne göre doğrulanmış halleriyle yazılır;
+-- trigger alanın o tür sürümünde olduğunu ayrıca denetler.
 
--- name: SetEventConvoy :exec
-INSERT INTO event_convoy (event_id, route) VALUES (@event_id, @route)
-ON CONFLICT (event_id) DO UPDATE SET route = EXCLUDED.route;
-
--- name: GetEventConvoy :one
-SELECT route FROM event_convoy WHERE event_id = @event_id;
-
--- name: SetEventCamp :exec
-INSERT INTO event_camp (event_id, site_name, has_water, has_toilet, notes)
-VALUES (@event_id, @site_name, @has_water, @has_toilet, @notes)
-ON CONFLICT (event_id) DO UPDATE
-SET site_name = EXCLUDED.site_name, has_water = EXCLUDED.has_water,
-    has_toilet = EXCLUDED.has_toilet, notes = EXCLUDED.notes;
-
--- name: GetEventCamp :one
-SELECT site_name, has_water, has_toilet, notes FROM event_camp WHERE event_id = @event_id;
-
--- name: SetEventHike :exec
-INSERT INTO event_hike (event_id, difficulty, distance_km, elevation_m, expected_return_at, return_grace_minutes)
-VALUES (@event_id, @difficulty, sqlc.narg(distance_km)::float8, @elevation_m, @expected_return_at, @return_grace_minutes)
-ON CONFLICT (event_id) DO UPDATE
-SET difficulty = EXCLUDED.difficulty, distance_km = EXCLUDED.distance_km,
-    elevation_m = EXCLUDED.elevation_m, expected_return_at = EXCLUDED.expected_return_at,
-    return_grace_minutes = EXCLUDED.return_grace_minutes;
-
--- name: GetEventHike :one
-SELECT difficulty, COALESCE(distance_km, 0)::float8 AS distance_km, elevation_m, expected_return_at, return_grace_minutes
-FROM event_hike WHERE event_id = @event_id;
-
--- name: SetEventFishing :exec
-INSERT INTO event_fishing (event_id, spot_visibility) VALUES (@event_id, @spot_visibility)
-ON CONFLICT (event_id) DO UPDATE SET spot_visibility = EXCLUDED.spot_visibility;
-
--- name: GetEventFishing :one
-SELECT spot_visibility FROM event_fishing WHERE event_id = @event_id;
-
--- Liste görünümünde mera gizliliği için.
--- name: ListFishingVisibility :many
-SELECT event_id, spot_visibility FROM event_fishing
-WHERE event_id = ANY(@event_ids::uuid[]);
-
--- name: SetEventGaming :exec
-INSERT INTO event_gaming (event_id, game, platform) VALUES (@event_id, @game, @platform)
-ON CONFLICT (event_id) DO UPDATE SET game = EXCLUDED.game, platform = EXCLUDED.platform;
-
--- name: GetEventGaming :one
-SELECT game, platform FROM event_gaming WHERE event_id = @event_id;
-
--- name: SetEventSports :exec
-INSERT INTO event_sports (event_id, sport, venue_name) VALUES (@event_id, @sport, @venue_name)
-ON CONFLICT (event_id) DO UPDATE SET sport = EXCLUDED.sport, venue_name = EXCLUDED.venue_name;
-
--- name: GetEventSports :one
-SELECT sport, venue_name FROM event_sports WHERE event_id = @event_id;
-
--- ---------------------------------------------------------------------------
--- Kamp malzemeleri
-
--- name: CountCampItems :one
-SELECT count(*) FROM event_camp_items WHERE event_id = @event_id;
-
--- name: CreateCampItem :exec
-INSERT INTO event_camp_items (id, event_id, name, quantity, assigned_user_id, created_by)
-VALUES (@id, @event_id, @name, @quantity, @assigned_user_id, @created_by);
-
--- name: ListCampItems :many
-SELECT id, name, quantity, assigned_user_id FROM event_camp_items
+-- name: ListEventFieldValues :many
+SELECT field_key, value FROM event_field_values
 WHERE event_id = @event_id
-ORDER BY created_at, id;
+ORDER BY field_key;
 
--- name: GetCampItemForUpdate :one
--- Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
--- güncel atamayı görmesini sağlar (issue #198).
-SELECT id, name, quantity, assigned_user_id FROM event_camp_items
-WHERE event_id = @event_id AND id = @id
-FOR UPDATE;
+-- name: SetEventFieldValue :exec
+INSERT INTO event_field_values (event_id, field_key, value) VALUES (@event_id, @field_key, @value)
+ON CONFLICT (event_id, field_key) DO UPDATE SET value = EXCLUDED.value;
 
--- name: SetCampItemAssignee :exec
-UPDATE event_camp_items SET assigned_user_id = @assigned_user_id
-WHERE event_id = @event_id AND id = @id;
+-- name: DeleteEventFieldValues :exec
+DELETE FROM event_field_values WHERE event_id = @event_id;
 
--- name: DeleteCampItem :execrows
-DELETE FROM event_camp_items WHERE event_id = @event_id AND id = @id;
-
--- ---------------------------------------------------------------------------
--- Konvoy araçları. Kişi başına bir araç; yeniden eklemek öncekinin yerine
--- geçer.
-
--- name: SetConvoyVehicle :one
-INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, model, model_year, color, plate)
-VALUES (@id, @event_id, @user_id, @make, @model, @model_year, @color, @plate)
-ON CONFLICT (event_id, user_id) DO UPDATE
-SET make = EXCLUDED.make, model = EXCLUDED.model, model_year = EXCLUDED.model_year,
-    color = EXCLUDED.color, plate = EXCLUDED.plate
-RETURNING id;
-
--- name: ListConvoyVehicles :many
-SELECT id, user_id, make, model, model_year, color, plate FROM event_convoy_vehicles
-WHERE event_id = @event_id
-ORDER BY created_at, id;
-
--- name: GetConvoyVehicleOwner :one
-SELECT user_id FROM event_convoy_vehicles WHERE event_id = @event_id AND id = @id;
-
--- name: DeleteConvoyVehicle :execrows
-DELETE FROM event_convoy_vehicles WHERE event_id = @event_id AND id = @id;
-
--- "Geliyorum"dan vazgeçen kişinin aracı (ve plakası) kalmaz.
--- name: DeleteUserConvoyVehicle :execrows
-DELETE FROM event_convoy_vehicles WHERE event_id = @event_id AND user_id = @user_id;
+-- Seri örneği şablonun alan değerlerini alır.
+-- name: CopyEventFieldValues :exec
+INSERT INTO event_field_values (event_id, field_key, value)
+SELECT @to_event_id::uuid, src.field_key, src.value FROM event_field_values AS src
+WHERE src.event_id = @from_event_id;

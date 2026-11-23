@@ -83,6 +83,9 @@ var (
 	modules = newEnum(map[string]corev1.Module{
 		"announcements": corev1.Module_MODULE_ANNOUNCEMENTS, "events": corev1.Module_MODULE_EVENTS,
 		"qa": corev1.Module_MODULE_QA, "polls": corev1.Module_MODULE_POLLS,
+		"daily": corev1.Module_MODULE_DAILY, "library": corev1.Module_MODULE_LIBRARY,
+		"question_pool": corev1.Module_MODULE_QUESTION_POOL, "materials": corev1.Module_MODULE_MATERIALS,
+		"garage": corev1.Module_MODULE_GARAGE,
 	})
 	tayfaStatuses = newEnum(map[string]corev1.TayfaStatus{
 		"active": corev1.TayfaStatus_TAYFA_STATUS_ACTIVE, "warned": corev1.TayfaStatus_TAYFA_STATUS_WARNED,
@@ -101,7 +104,7 @@ var (
 	joinSources = newEnum(map[string]corev1.JoinSource{
 		"creator": corev1.JoinSource_JOIN_SOURCE_CREATOR, "invite_link": corev1.JoinSource_JOIN_SOURCE_INVITE_LINK,
 		"direct_invite": corev1.JoinSource_JOIN_SOURCE_DIRECT_INVITE, "code": corev1.JoinSource_JOIN_SOURCE_CODE,
-		"discover": corev1.JoinSource_JOIN_SOURCE_DISCOVER,
+		"discover": corev1.JoinSource_JOIN_SOURCE_DISCOVER, "qr": corev1.JoinSource_JOIN_SOURCE_QR,
 	})
 )
 
@@ -127,6 +130,9 @@ type tayfaJSON struct {
 	MemberCount int32           `json:"member_count"`
 	// MembersCanCreateEvents: every active member may create events.
 	MembersCanCreateEvents bool `json:"members_can_create_events"`
+	// NowCreateMinRole: the lowest role that may start an event now
+	// (ADR-0038 §2).
+	NowCreateMinRole string `json:"now_create_min_role"`
 	// Only core decides who gets it (admins); gateway passes it on as is.
 	JoinCode string `json:"join_code,omitempty"`
 	// Only core decides who gets it (moderators, admins); absent otherwise.
@@ -152,11 +158,12 @@ func tayfaFrom(t *corev1.Tayfa) tayfaJSON {
 	}
 	return tayfaJSON{
 		ID: t.GetId(), Name: t.GetName(), Description: t.GetDescription(),
-		Interests: eventTypes.names(t.GetInterests()), JoinPolicy: joinPolicies.name(t.GetJoinPolicy()),
+		Interests: interestNames(t.GetInterestKeys()), JoinPolicy: joinPolicies.name(t.GetJoinPolicy()),
 		Modules: mods, Status: tayfaStatuses.name(t.GetStatus()),
 		SuspendedAt: optTime(t.GetSuspendTime()), DeletionAt: optTime(t.GetDeletionTime()),
 		MemberCount: t.GetMemberCount(), MembersCanCreateEvents: t.GetMembersCanCreateEvents(), JoinCode: t.GetJoinCode(),
-		CreatedAt: t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
+		NowCreateMinRole: roles.name(t.GetNowCreateMinRole()),
+		CreatedAt:        t.GetCreateTime().AsTime(), UpdatedAt: t.GetUpdateTime().AsTime(),
 		CoverUploadID: t.GetCoverUploadId(), PendingJoinRequestCount: t.PendingJoinRequestCount,
 		Kind: tayfaKinds.name(t.GetKind()), InstantEventID: t.GetInstantEventId(),
 		ConvertedAt: optTime(t.GetConvertTime()),

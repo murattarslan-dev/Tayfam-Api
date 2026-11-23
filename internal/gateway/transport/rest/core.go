@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -79,6 +80,14 @@ type CoreDeps struct {
 	Social SocialClient
 	// Availability enables the "Boşum" routes when set (issue #207).
 	Availability AvailabilityClient
+	// Catalog enables the event type catalog routes when set (issue #237).
+	Catalog CatalogClient
+	// Components is the connection to core for the event component routes
+	// (issue #238): the framework's own (selections, referees) and every
+	// registered component's (componentRoutes). Each builds its gRPC
+	// client from it. The routes are on when it is set together with
+	// Events.
+	Components grpc.ClientConnInterface
 	// Discover enables the Keşfet routes when set (issue #210). core
 	// decides whether Keşfet is on (DISCOVER_ENABLED); the gateway does not.
 	Discover DiscoverClient
@@ -175,6 +184,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Events != nil {
 		registerEvents(mux, h)
+		if d.Components != nil {
+			registerComponents(mux, h)
+		}
 	}
 	if d.QA != nil {
 		registerQA(mux, h)
@@ -187,6 +199,9 @@ func registerCore(mux *http.ServeMux, d CoreDeps) {
 	}
 	if d.Availability != nil {
 		registerAvailability(mux, h)
+	}
+	if d.Catalog != nil {
+		registerCatalog(mux, h)
 	}
 	if d.Discover != nil {
 		registerDiscover(mux, h)
@@ -278,7 +293,7 @@ func (h coreHandlers) createTayfa(ctx context.Context, w http.ResponseWriter, r 
 	if !decode(w, r, &b) {
 		return
 	}
-	interests, ok := eventTypes.values(b.Interests)
+	interests, ok := interestKeys(b.Interests)
 	policy, okP := joinPolicies.valueOrUnspecified(b.JoinPolicy)
 	if !ok || !okP || !validUUID(b.ClientRequestID) || !nameLengthOK(b.Name) ||
 		utf8.RuneCountInString(strings.TrimSpace(b.Description)) > 500 {
@@ -294,7 +309,7 @@ func (h coreHandlers) createTayfa(ctx context.Context, w http.ResponseWriter, r 
 	}
 	h.retries.remember(ip, b.ClientRequestID)
 	resp, err := h.d.Tayfas.CreateTayfa(ctx, &corev1.CreateTayfaRequest{
-		Name: b.Name, Description: b.Description, Interests: interests,
+		Name: b.Name, Description: b.Description, InterestKeys: interests,
 		JoinPolicy: policy, ClientRequestId: b.ClientRequestID,
 	})
 	if err != nil {
@@ -324,7 +339,7 @@ func (h coreHandlers) convertInstantTayfa(ctx context.Context, w http.ResponseWr
 	if !decode(w, r, &b) {
 		return
 	}
-	interests, ok := eventTypes.values(b.Interests)
+	interests, ok := interestKeys(b.Interests)
 	policy, okP := joinPolicies.valueOrUnspecified(b.JoinPolicy)
 	if !ok || !okP || !nameLengthOK(b.Name) || utf8.RuneCountInString(strings.TrimSpace(b.Description)) > 500 {
 		badRequest(w, r)
@@ -335,7 +350,7 @@ func (h coreHandlers) convertInstantTayfa(ctx context.Context, w http.ResponseWr
 		return
 	}
 	resp, err := h.d.Tayfas.ConvertInstantTayfa(ctx, &corev1.ConvertInstantTayfaRequest{
-		TayfaId: id, Name: b.Name, Description: b.Description, Interests: interests, JoinPolicy: policy,
+		TayfaId: id, Name: b.Name, Description: b.Description, InterestKeys: interests, JoinPolicy: policy,
 	})
 	if err != nil {
 		h.fail(w, r, err)
@@ -347,6 +362,10 @@ func (h coreHandlers) convertInstantTayfa(ctx context.Context, w http.ResponseWr
 type tayfaViewJSON struct {
 	Tayfa      tayfaJSON `json:"tayfa"`
 	CallerRole string    `json:"caller_role"`
+	// Issue #258: the tayfa's badges, for its members.
+	Badges []earnedBadgeJSON `json:"badges"`
+	// Issue #268: the widgets the home page shows after "Sıradaki".
+	HomeWidgets []homeWidgetJSON `json:"home_widgets"`
 }
 
 func (h coreHandlers) getTayfa(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -359,7 +378,10 @@ func (h coreHandlers) getTayfa(ctx context.Context, w http.ResponseWriter, r *ht
 		h.fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, tayfaViewJSON{tayfaFrom(resp.GetTayfa()), roles.name(resp.GetCallerRole())})
+	writeJSON(w, http.StatusOK, tayfaViewJSON{
+		tayfaFrom(resp.GetTayfa()), roles.name(resp.GetCallerRole()), earnedBadgesFrom(resp.GetBadges()),
+		homeWidgetsFrom(resp.GetHomeWidgets()),
+	})
 }
 
 type myTayfaJSON struct {
@@ -407,6 +429,9 @@ type tayfaUpdateBody struct {
 	JoinPolicy  *string   `json:"join_policy"`
 	// MembersCanCreateEvents lets every active member create events.
 	MembersCanCreateEvents *bool `json:"members_can_create_events"`
+	// NowCreateMinRole: the lowest role that may start an event now
+	// (ADR-0038 §2).
+	NowCreateMinRole *string `json:"now_create_min_role"`
 	// CoverUploadID: a READY cover upload of the caller; "" removes the
 	// cover (issue #135).
 	CoverUploadID *string `json:"cover_upload_id"`
@@ -435,12 +460,12 @@ func (h coreHandlers) updateTayfa(ctx context.Context, w http.ResponseWriter, r 
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "description")
 	}
 	if b.Interests != nil {
-		v, ok := eventTypes.values(*b.Interests)
+		v, ok := interestKeys(*b.Interests)
 		if !ok {
 			badRequest(w, r)
 			return
 		}
-		req.Interests = v
+		req.InterestKeys = v
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "interests")
 	}
 	if b.JoinPolicy != nil {
@@ -455,6 +480,15 @@ func (h coreHandlers) updateTayfa(ctx context.Context, w http.ResponseWriter, r 
 	if b.MembersCanCreateEvents != nil {
 		req.MembersCanCreateEvents = *b.MembersCanCreateEvents
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "members_can_create_events")
+	}
+	if b.NowCreateMinRole != nil {
+		v, ok := roles.value(*b.NowCreateMinRole)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.NowCreateMinRole = v
+		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "now_create_min_role")
 	}
 	if b.CoverUploadID != nil {
 		if *b.CoverUploadID != "" && !validUUID(*b.CoverUploadID) {
@@ -905,16 +939,38 @@ type invitePreviewJSON struct {
 	Name          string `json:"name"`
 	MemberCount   int32  `json:"member_count"`
 	AlreadyMember bool   `json:"already_member"`
-	// Issue #194: the tayfa's interests (EventType names).
+	// Issue #194: the tayfa's interests (catalog interest keys).
 	Interests []string `json:"interests"`
 }
 
-// interestNames passes core's interest names through, keeping only the
-// EventType values the contract knows.
+// maxInterests bounds a request's interests before core or identity
+// (tayfa.MaxInterests, profilefields.MaxInterests).
+const maxInterests = 20
+
+// interestKeys checks the shape of a request's interests: at most
+// maxInterests distinct catalog keys (InterestKey in the contract). Whether
+// a key is an interest of the catalog is core's answer (identity's for the
+// profile).
+func interestKeys(in []string) ([]string, bool) {
+	if len(in) > maxInterests {
+		return nil, false
+	}
+	out := make([]string, 0, len(in))
+	for _, s := range in {
+		if !catalogKeyPattern.MatchString(s) || slices.Contains(out, s) {
+			return nil, false
+		}
+		out = append(out, s)
+	}
+	return out, true
+}
+
+// interestNames passes interest keys through, keeping only values of the
+// contract's form; never nil.
 func interestNames(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, s := range in {
-		if _, ok := eventTypes.value(s); ok {
+		if catalogKeyPattern.MatchString(s) {
 			out = append(out, s)
 		}
 	}

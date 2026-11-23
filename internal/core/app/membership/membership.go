@@ -36,6 +36,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/library/lending"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -144,8 +145,8 @@ type Preview struct {
 	Name          string
 	MemberCount   int32
 	AlreadyMember bool
-	// Interests are the tayfa's (issue #194); only a valid invite gets this
-	// far.
+	// Interests are the tayfa's catalog interest keys (issue #194,
+	// ADR-0025 §2); only a valid invite gets this far.
 	Interests []string
 }
 
@@ -369,6 +370,56 @@ func (s *Service) JoinByInvite(ctx context.Context, caller id.ID, token string) 
 		return nil
 	})
 	return out, err
+}
+
+// JoinedViaQR is memberships.joined_via for a join by an event's QR
+// (ADR-0038 §3).
+const JoinedViaQR = "qr"
+
+// JoinByQRTx joins user to tayfa by an event's join QR (package joinqr,
+// ADR-0038 §3) inside the caller's transaction q, which names user as
+// actor and has given the token to the memberships trigger
+// (SetJoinQRToken). An instant tayfa takes the user as an active member at
+// once; a standard tayfa follows its join policy (open: active, approval: a
+// join request). existing is true when user already was an active member,
+// and for a join request that was already waiting (returned as it is). A
+// banned user and a read-only or deleted tayfa get apperr.ErrInvalidJoinQR;
+// a direct invitation waiting for an answer apperr.ErrAlreadyPending.
+func (s *Service) JoinByQRTx(ctx context.Context, q *store.Queries, tayfa, user id.ID) (m Member, existing bool, err error) {
+	t, err := lockTayfa(ctx, q, tayfa)
+	if err != nil {
+		if errors.Is(err, apperr.ErrTayfaNotFound) {
+			return Member{}, false, apperr.ErrInvalidJoinQR
+		}
+		return Member{}, false, err
+	}
+	if t.readOnly {
+		return Member{}, false, apperr.ErrInvalidJoinQR
+	}
+	r, err := q.GetMembership(ctx, store.GetMembershipParams{TayfaID: tayfa.PG(), UserID: user.PG()})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return Member{}, false, fmt.Errorf("üyelik: %w", err)
+	default:
+		switch authz.Status(r.Status) {
+		case authz.StatusActive, authz.StatusPending:
+			cur, cerr := toMember(tayfa, user, r.Role, r.Status, r.JoinedAt, r.MutedUntil, s.now(), true)
+			return cur, true, cerr
+		case authz.StatusBanned:
+			return Member{}, false, apperr.ErrInvalidJoinQR
+		default:
+			// A direct invitation: the invited user answers it with
+			// AcceptInvitation.
+			return Member{}, false, apperr.ErrAlreadyPending
+		}
+	}
+	st := authz.StatusPending
+	if t.instant || t.joinPolicy == "open" {
+		st = authz.StatusActive
+	}
+	m, err = s.join(ctx, q, tayfa, user, st, JoinedViaQR, id.ID{})
+	return m, false, err
 }
 
 // checkNotMember refuses users who already have a membership. banned is the
@@ -1168,7 +1219,18 @@ func (s *Service) membershipChanged(ctx context.Context, q *store.Queries, tayfa
 		return err
 	}
 	payload := map[string]any{"tayfa_id": tayfa.String(), "user_id": user.String(), "change": change}
-	return txn.Event(ctx, q, EventMembershipChanged, tayfa, actor, target, payload)
+	if err := txn.Event(ctx, q, EventMembershipChanged, tayfa, actor, target, payload); err != nil {
+		return err
+	}
+	// Ortak kütüphane (ADR-0040 §1 "Üye ayrılınca"): the leaver's items are
+	// withdrawn, their requests end and a handed-over loan stays open with
+	// a warning to both sides. It writes notifications, so it comes last.
+	if change == changeLeft || change == changeRemoved || change == changeBanned {
+		if err := lending.Departed(ctx, q, tayfa, user, s.now(), true); err != nil {
+			return fmt.Errorf("kütüphane: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) inviteChanged(ctx context.Context, q *store.Queries, tayfa, actor, invite id.ID, action string, meta map[string]any) error {

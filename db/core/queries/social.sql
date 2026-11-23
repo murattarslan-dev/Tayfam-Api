@@ -141,7 +141,7 @@ LIMIT @page_size;
 -- Profil kopyası olan, silinmemiş ve platform banı olmayan kullanıcı
 -- (banlı kullanıcının profili gizlenir, silinmez; issue #104).
 -- name: GetLiveUserProfile :one
-SELECT up.user_id, up.display_name, up.avatar_upload_id, up.activity_visibility
+SELECT up.user_id, up.display_name, up.avatar_upload_id, up.activity_visibility, up.stats_visibility
 FROM user_profiles up
 WHERE up.user_id = @user_id AND up.deleted_at IS NULL
   AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = up.user_id AND b.banned_at IS NOT NULL);

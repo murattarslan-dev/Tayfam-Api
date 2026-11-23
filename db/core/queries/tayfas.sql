@@ -8,7 +8,7 @@ VALUES (@id, @name, @name_normalized, @description, @join_code, @join_policy, @c
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at, cover_upload_id, kind, converted_at
+       created_at, updated_at, cover_upload_id, kind, converted_at, now_create_min_role
 FROM tayfas
 WHERE id = @id AND deleted_at IS NULL;
 
@@ -43,16 +43,26 @@ SELECT count(*) FROM tayfas
 WHERE created_by = @created_by AND kind = 'standard'
   AND COALESCE(converted_at, created_at) > @since;
 
+-- İlgi alanı katalog anahtarıdır (catalog_interests, ADR-0025 §2).
 -- name: AddTayfaInterest :exec
-INSERT INTO tayfa_interests (tayfa_id, event_type)
-VALUES (@tayfa_id, @event_type)
+INSERT INTO tayfa_interests (tayfa_id, interest_key)
+VALUES (@tayfa_id, @interest_key)
 ON CONFLICT DO NOTHING;
 
 -- name: DeleteTayfaInterests :exec
 DELETE FROM tayfa_interests WHERE tayfa_id = @tayfa_id;
 
+-- Katalog sırasıyla.
 -- name: ListTayfaInterests :many
-SELECT event_type FROM tayfa_interests WHERE tayfa_id = @tayfa_id ORDER BY event_type;
+SELECT ti.interest_key
+FROM tayfa_interests ti
+JOIN catalog_interests ci ON ci.key = ti.interest_key
+WHERE ti.tayfa_id = @tayfa_id
+ORDER BY ci.position, ci.key;
+
+-- İlgi alanı doğrulaması için: anahtar ve durum (emekliler dahil).
+-- name: ListCatalogInterestStatuses :many
+SELECT key, status FROM catalog_interests;
 
 -- name: SetTayfaModule :exec
 INSERT INTO tayfa_modules (tayfa_id, module, enabled)
@@ -68,7 +78,7 @@ SELECT module, enabled FROM tayfa_modules WHERE tayfa_id = @tayfa_id ORDER BY mo
 SELECT id, name, name_normalized, description, join_code, status, visibility,
        join_policy, city, district, created_by, last_activity_at, suspended_at,
        deletion_requested_at, deletion_scheduled_for, members_can_create_events,
-       created_at, updated_at, cover_upload_id, kind, converted_at
+       created_at, updated_at, cover_upload_id, kind, converted_at, now_create_min_role
 FROM tayfas
 WHERE id = @id AND deleted_at IS NULL
 FOR NO KEY UPDATE;
@@ -86,7 +96,8 @@ WHERE created_by = @created_by AND client_request_id = @client_request_id;
 UPDATE tayfas
 SET name = @name, name_normalized = @name_normalized,
     description = @description, join_policy = @join_policy,
-    members_can_create_events = @members_can_create_events
+    members_can_create_events = @members_can_create_events,
+    now_create_min_role = @now_create_min_role
 WHERE id = @id AND deleted_at IS NULL;
 
 -- name: SetTayfaJoinCode :execrows
@@ -111,7 +122,7 @@ WHERE id = @id AND deleted_at IS NULL AND deletion_requested_at IS NOT NULL;
 SELECT t.id, t.name, t.name_normalized, t.description, t.join_code, t.status,
        t.join_policy, t.suspended_at, t.deletion_scheduled_for,
        t.members_can_create_events, t.created_at, t.updated_at, t.cover_upload_id, t.kind,
-       t.converted_at, m.role, m.status AS membership_status, m.muted_until,
+       t.converted_at, t.now_create_min_role, m.role, m.status AS membership_status, m.muted_until,
        m.created_at AS membership_created_at
 FROM memberships m
 JOIN tayfas t ON t.id = m.tayfa_id
@@ -122,9 +133,13 @@ WHERE m.user_id = @user_id
 ORDER BY m.created_at DESC, m.tayfa_id DESC
 LIMIT @page_size;
 
+-- Her tayfanın ilgi alanları katalog sırasıyla.
 -- name: ListInterestsForTayfas :many
-SELECT tayfa_id, event_type FROM tayfa_interests
-WHERE tayfa_id = ANY(@tayfa_ids::uuid[]);
+SELECT ti.tayfa_id, ti.interest_key
+FROM tayfa_interests ti
+JOIN catalog_interests ci ON ci.key = ti.interest_key
+WHERE ti.tayfa_id = ANY(@tayfa_ids::uuid[])
+ORDER BY ti.tayfa_id, ci.position, ci.key;
 
 -- name: ListModulesForTayfas :many
 SELECT tayfa_id, module, enabled FROM tayfa_modules

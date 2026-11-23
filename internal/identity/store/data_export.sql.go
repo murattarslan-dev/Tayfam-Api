@@ -207,7 +207,8 @@ func (q *Queries) ExportDevices(ctx context.Context, userID pgtype.UUID) ([]Expo
 
 const exportUserProfile = `-- name: ExportUserProfile :one
 SELECT id, display_name, avatar_upload_id, locale, birth_date_enc, birth_date_visibility, birth_date_audience,
-       activity_visibility, ref_code, referred_by_user_id, referred_at, registered_at, created_at
+       activity_visibility, ref_code, referred_by_user_id, referred_at, registered_at, created_at,
+       stats_visibility
 FROM users
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -226,6 +227,7 @@ type ExportUserProfileRow struct {
 	ReferredAt          pgtype.Timestamptz
 	RegisteredAt        pgtype.Timestamptz
 	CreatedAt           pgtype.Timestamptz
+	StatsVisibility     string
 }
 
 // Dışa aktarmanın identity bölümleri (docs/data-export-format.md). Doğum
@@ -247,6 +249,7 @@ func (q *Queries) ExportUserProfile(ctx context.Context, id pgtype.UUID) (Export
 		&i.ReferredAt,
 		&i.RegisteredAt,
 		&i.CreatedAt,
+		&i.StatsVisibility,
 	)
 	return i, err
 }

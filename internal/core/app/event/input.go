@@ -3,15 +3,12 @@ package event
 import (
 	"math"
 	"net/url"
-	"regexp"
-	"slices"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
-	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
 // Stored values (events.type, events.mode, …; 00004_events.sql).
@@ -34,45 +31,23 @@ const (
 	RSVPMaybe    = "maybe"
 	RSVPNotGoing = "not_going"
 	RSVPWaitlist = "waitlist"
-
-	SpotTayfa        = "tayfa"
-	SpotParticipants = "participants"
 )
 
-// Types are the event types, in EventType order.
+// Types are the seven Faz 1 event types, in EventType order. The type of
+// an event is a catalog key (ADR-0025): any active type of the catalog can
+// be created, not only these.
 var Types = []string{TypeConvoy, TypeCamp, TypeHike, TypeFishing, TypeGaming, TypeSports, TypeGeneral}
-
-// Platforms and SportKinds are the allowed values of event_gaming.platform and
-// event_sports.sport.
-var (
-	Platforms  = []string{"pc", "playstation", "xbox", "switch", "mobile", "other"}
-	SportKinds = []string{"football", "table_football", "basketball", "volleyball", "tennis", "table_tennis", "other"}
-)
 
 // Limits (data model v14 and 00004_events.sql; the same CHECKs are in the
 // database).
 const (
 	titleMax        = 120
 	descriptionMax  = 5000
-	placeNameMax    = 120 // meeting point, camp site, sports venue
+	placeNameMax    = 120 // meeting point
 	cityMax         = 50
 	onlineURLMax    = 2048
 	capacityMax     = 10000
 	cancelReasonMax = 500
-	campNotesMax    = 1000
-	gameMax         = 60
-	itemNameMax     = 60
-	itemQuantityMax = 999
-	makeMax         = 40
-	modelMax        = 40
-	colorMax        = 30
-	routeMin        = 2
-	routeMax        = 500
-	distanceMax     = 1000
-	elevationMax    = 9000
-	graceDefault    = 30
-	graceMax        = 1440
-	modelYearMin    = 1900
 
 	// startAhead bounds how far ahead an event may start; maxDuration how
 	// long it may last.
@@ -81,10 +56,6 @@ const (
 	// maxRuneBytes bounds the byte length before counting characters.
 	maxRuneBytes = 4
 )
-
-// platePattern is the event_convoy_vehicles_plate CHECK; single spaces only
-// (checked separately).
-var platePattern = regexp.MustCompile(`^[0-9A-Z][0-9A-Z ]{0,14}[0-9A-Z]$`)
 
 // Point is a WGS 84 coordinate in degrees.
 type Point struct {
@@ -106,101 +77,6 @@ type Location struct {
 	City         string
 	District     string
 	OnlineURL    string
-}
-
-// Details are the type-specific fields; at most one is set and it matches
-// the event's type.
-type Details struct {
-	Convoy  *Convoy
-	Camp    *Camp
-	Hike    *Hike
-	Fishing *Fishing
-	Gaming  *Gaming
-	Sports  *Sports
-}
-
-// typ returns the event type the set field belongs to, "" when none is set,
-// or "?" when more than one is.
-func (d Details) typ() string {
-	t := ""
-	for _, c := range []struct {
-		set bool
-		typ string
-	}{
-		{d.Convoy != nil, TypeConvoy}, {d.Camp != nil, TypeCamp}, {d.Hike != nil, TypeHike},
-		{d.Fishing != nil, TypeFishing}, {d.Gaming != nil, TypeGaming}, {d.Sports != nil, TypeSports},
-	} {
-		if c.set {
-			if t != "" {
-				return "?"
-			}
-			t = c.typ
-		}
-	}
-	return t
-}
-
-// Convoy holds a convoy's route and, in views, its vehicles.
-type Convoy struct {
-	Route    []Point
-	Vehicles []Vehicle
-}
-
-// Vehicle is a convoy participant's vehicle.
-type Vehicle struct {
-	ID        id.ID
-	UserID    id.ID
-	Make      string
-	Model     string
-	ModelYear int32
-	Color     string
-	// Plate is empty for callers who are not participants.
-	Plate string
-}
-
-// Camp holds a camp's site details and, in views, its item list.
-type Camp struct {
-	SiteName  string
-	HasWater  *bool
-	HasToilet *bool
-	Notes     string
-	Items     []CampItem
-}
-
-// CampItem is one entry of a camp's list.
-type CampItem struct {
-	ID       id.ID
-	Name     string
-	Quantity int32
-	// AssignedUserID is zero when nobody is assigned.
-	AssignedUserID id.ID
-}
-
-// Hike holds a hike's details. Zero values mean "not given".
-type Hike struct {
-	Difficulty         int32
-	DistanceKm         float64
-	ElevationM         int32
-	ExpectedReturnAt   time.Time
-	ReturnGraceMinutes int32
-}
-
-// Fishing holds who sees the spot.
-type Fishing struct {
-	// SpotVisibility is SpotTayfa or SpotParticipants; "" means SpotTayfa.
-	SpotVisibility string
-}
-
-// Gaming holds the game and platform.
-type Gaming struct {
-	Game     string
-	Platform string
-}
-
-// Sports holds the sport and venue.
-type Sports struct {
-	Sport     string
-	VenueName string
 }
 
 // cleanText trims s and checks its length in characters. Empty is allowed
@@ -324,164 +200,4 @@ func cleanCapacity(c int32) (int32, error) {
 		return 0, apperr.Validation("capacity")
 	}
 	return c, nil
-}
-
-// cleanDetails checks d for an event of type typ starting at start. create
-// fills in the default details of types that have no required field.
-func cleanDetails(typ string, d Details, start time.Time, create bool) (Details, error) {
-	bad := apperr.Validation("details")
-	dt := d.typ()
-	switch {
-	case dt == "?":
-		return Details{}, bad
-	case dt == "" && typ == TypeGeneral:
-		return Details{}, nil
-	case dt == "" && create:
-		switch typ {
-		case TypeConvoy:
-			d.Convoy = &Convoy{}
-		case TypeCamp:
-			d.Camp = &Camp{}
-		case TypeHike:
-			d.Hike = &Hike{}
-		case TypeFishing:
-			d.Fishing = &Fishing{}
-		default:
-			// Gaming and sports have required fields.
-			return Details{}, bad
-		}
-	case dt != typ:
-		return Details{}, bad
-	}
-
-	var out Details
-	var err error
-	switch typ {
-	case TypeConvoy:
-		c := Convoy{}
-		if n := len(d.Convoy.Route); n != 0 && (n < routeMin || n > routeMax) {
-			return Details{}, apperr.Validation("route")
-		}
-		for _, p := range d.Convoy.Route {
-			if !p.valid() {
-				return Details{}, apperr.Validation("route")
-			}
-			c.Route = append(c.Route, p)
-		}
-		out.Convoy = &c
-	case TypeCamp:
-		c := Camp{HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet}
-		if c.SiteName, err = cleanText(d.Camp.SiteName, "site_name", 0, placeNameMax, false); err != nil {
-			return Details{}, err
-		}
-		if c.Notes, err = cleanText(d.Camp.Notes, "notes", 0, campNotesMax, true); err != nil {
-			return Details{}, err
-		}
-		out.Camp = &c
-	case TypeHike:
-		h := *d.Hike
-		if h.Difficulty < 0 || h.Difficulty > 5 {
-			return Details{}, apperr.Validation("difficulty")
-		}
-		if math.IsNaN(h.DistanceKm) || h.DistanceKm < 0 || h.DistanceKm > distanceMax {
-			return Details{}, apperr.Validation("distance_km")
-		}
-		h.DistanceKm = math.Round(h.DistanceKm*100) / 100
-		if h.ElevationM < 0 || h.ElevationM > elevationMax {
-			return Details{}, apperr.Validation("elevation_m")
-		}
-		if !h.ExpectedReturnAt.IsZero() {
-			if !h.ExpectedReturnAt.After(start) {
-				return Details{}, apperr.Validation("expected_return_time")
-			}
-			h.ExpectedReturnAt = h.ExpectedReturnAt.UTC().Truncate(time.Microsecond)
-		}
-		switch {
-		case h.ReturnGraceMinutes == 0:
-			h.ReturnGraceMinutes = graceDefault
-		case h.ReturnGraceMinutes < 0 || h.ReturnGraceMinutes > graceMax:
-			return Details{}, apperr.Validation("return_grace_minutes")
-		}
-		out.Hike = &h
-	case TypeFishing:
-		f := *d.Fishing
-		switch f.SpotVisibility {
-		case "":
-			f.SpotVisibility = SpotTayfa
-		case SpotTayfa, SpotParticipants:
-		default:
-			return Details{}, apperr.Validation("spot_visibility")
-		}
-		out.Fishing = &f
-	case TypeGaming:
-		g := Gaming{Platform: d.Gaming.Platform}
-		if g.Game, err = cleanText(d.Gaming.Game, "game", 1, gameMax, false); err != nil {
-			return Details{}, err
-		}
-		if !slices.Contains(Platforms, g.Platform) {
-			return Details{}, apperr.Validation("platform")
-		}
-		out.Gaming = &g
-	case TypeSports:
-		sp := Sports{Sport: d.Sports.Sport}
-		if !slices.Contains(SportKinds, sp.Sport) {
-			return Details{}, apperr.Validation("sport")
-		}
-		if sp.VenueName, err = cleanText(d.Sports.VenueName, "venue_name", 0, placeNameMax, false); err != nil {
-			return Details{}, err
-		}
-		out.Sports = &sp
-	default:
-		return Details{}, bad
-	}
-	return out, nil
-}
-
-// VehicleInput is a convoy vehicle to add.
-type VehicleInput struct {
-	Make      string
-	Model     string
-	ModelYear int32
-	Color     string
-	Plate     string
-}
-
-func cleanVehicle(v VehicleInput, now time.Time) (VehicleInput, error) {
-	var (
-		out VehicleInput
-		err error
-	)
-	if out.Make, err = cleanText(v.Make, "make", 1, makeMax, false); err != nil {
-		return VehicleInput{}, err
-	}
-	if out.Model, err = cleanText(v.Model, "model", 0, modelMax, false); err != nil {
-		return VehicleInput{}, err
-	}
-	if out.Color, err = cleanText(v.Color, "color", 0, colorMax, false); err != nil {
-		return VehicleInput{}, err
-	}
-	if v.ModelYear != 0 && (v.ModelYear < modelYearMin || int(v.ModelYear) > now.Year()+1) {
-		return VehicleInput{}, apperr.Validation("model_year")
-	}
-	out.ModelYear = v.ModelYear
-	if out.Plate, err = cleanPlate(v.Plate); err != nil {
-		return VehicleInput{}, err
-	}
-	return out, nil
-}
-
-// cleanPlate upper-cases the plate and collapses runs of spaces; the
-// result has only A–Z, digits and single spaces. Empty means no plate.
-func cleanPlate(s string) (string, error) {
-	if len(s) > 64 {
-		return "", apperr.Validation("plate")
-	}
-	p := strings.Join(strings.Fields(strings.ToUpper(s)), " ")
-	if p == "" {
-		return "", nil
-	}
-	if !platePattern.MatchString(p) {
-		return "", apperr.Validation("plate")
-	}
-	return p, nil
 }

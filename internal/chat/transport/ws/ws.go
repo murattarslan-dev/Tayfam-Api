@@ -104,6 +104,9 @@ type Live interface {
 	Unsubscribe(m *realtime.Member, tayfa, ch id.ID) bool
 	Send(ctx context.Context, m *realtime.Member, tayfa, ch id.ID, in channel.SendInput) (channel.Message, error)
 	AckEnvelopes(ctx context.Context, m *realtime.Member, ids []id.ID) error
+	// Watch and Unwatch follow an event's component changes (issue #238).
+	Watch(ctx context.Context, m *realtime.Member, tayfa, event id.ID) error
+	Unwatch(m *realtime.Member, tayfa, event id.ID) bool
 }
 
 // Config wires a Handler.
@@ -434,6 +437,12 @@ type sendData struct {
 	Place         *realtime.PlaceData `json:"place"`
 }
 
+// eventRef names an event to watch for component changes (issue #238).
+type eventRef struct {
+	TayfaID string `json:"tayfa_id"`
+	EventID string `json:"event_id"`
+}
+
 // envelopeAckData acknowledges end-to-end envelopes of the connection's
 // device (issue #127).
 type envelopeAckData struct {
@@ -471,6 +480,8 @@ func (c *conn) invalid(frameID, field string) {
 //	unsubscribe { tayfa_id, channel_id }  → unsubscribed (reason requested)
 //	send        { tayfa_id, channel_id, body, client_request_id } → sent
 //	dm.envelope_ack { envelope_ids }                                → dm.envelope_acked
+//	event.watch   { tayfa_id, event_id }  → event.watching
+//	event.unwatch { tayfa_id, event_id }  → event.unwatched (reason requested)
 //
 // Direct messages are end to end and sent over REST only (their envelopes
 // exceed a frame); the WebSocket delivers them (dm.envelope) and takes the
@@ -553,6 +564,34 @@ func (c *conn) handle(ctx context.Context, f frame) {
 			return
 		}
 		c.sendFrame("dm.envelope_acked", f.ID, envelopeAckData{EnvelopeIDs: d.EnvelopeIDs})
+	case "event.watch", "event.unwatch":
+		var d eventRef
+		if !decodeData(f.Data, &d) {
+			c.invalid(f.ID, "data")
+			return
+		}
+		tayfa, ok := id.Parse(d.TayfaID)
+		if !ok {
+			c.invalid(f.ID, "tayfa_id")
+			return
+		}
+		event, ok := id.Parse(d.EventID)
+		if !ok {
+			c.invalid(f.ID, "event_id")
+			return
+		}
+		ref := realtime.WatchData{TayfaID: tayfa.String(), EventID: event.String()}
+		if f.Type == "event.unwatch" {
+			c.cfg.Live.Unwatch(c.m, tayfa, event)
+			ref.Reason = realtime.ReasonRequested
+			c.sendFrame(realtime.EventUnwatched, f.ID, ref)
+			return
+		}
+		if err := c.cfg.Live.Watch(ctx, c.m, tayfa, event); err != nil {
+			c.appError(ctx, f.ID, err)
+			return
+		}
+		c.sendFrame("event.watching", f.ID, ref)
 	default:
 		c.fail(f.ID, "unsupported_type")
 	}
@@ -584,6 +623,8 @@ func (c *conn) appError(ctx context.Context, frameID string, err error) {
 		{apperr.ErrChannelArchived, "channel_archived"},
 		{apperr.ErrTayfaReadOnly, "tayfa_read_only"},
 		{realtime.ErrTooManySubscriptions, "too_many_subscriptions"},
+		{apperr.ErrEventNotFound, "event_not_found"},
+		{realtime.ErrTooManyWatches, "too_many_watches"},
 		{apperr.ErrUnavailable, "unavailable"},
 		{apperr.ErrChannelsUnavailable, "unavailable"},
 		{apperr.ErrConversationNotFound, "conversation_not_found"},

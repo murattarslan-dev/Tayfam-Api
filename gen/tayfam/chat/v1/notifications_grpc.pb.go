@@ -76,7 +76,12 @@ type NotificationServiceClient interface {
 	// ADR-0009); UNAVAILABLE when core cannot answer. Level
 	// MENTIONS or NONE may last until mute_until (at most a year ahead), then
 	// the tayfa is back to ALL. Level ALL without mute_until removes the
-	// preference; ALL with mute_until is ERROR_REASON_VALIDATION.
+	// preference; ALL with mute_until is ERROR_REASON_VALIDATION. With now
+	// set it is the tayfa's "Şimdi bildirimleri" instead (scope
+	// NOTIFICATION_SCOPE_TYPE_TAYFA_NOW; issue #265, ADR-0038 §4): ALL or NONE
+	// only (MENTIONS is ERROR_REASON_VALIDATION), the same membership and
+	// mute_until rules; it mutes NOW_STARTED pushes of that tayfa. A tayfa at
+	// level NONE pushes no NOW_STARTED either.
 	SetTayfaNotificationPreference(ctx context.Context, in *SetTayfaNotificationPreferenceRequest, opts ...grpc.CallOption) (*SetTayfaNotificationPreferenceResponse, error)
 	// SetConversationNotificationPreference sets how the caller hears about a
 	// direct conversation they see as a party (the same conversations
@@ -219,7 +224,12 @@ type NotificationServiceServer interface {
 	// ADR-0009); UNAVAILABLE when core cannot answer. Level
 	// MENTIONS or NONE may last until mute_until (at most a year ahead), then
 	// the tayfa is back to ALL. Level ALL without mute_until removes the
-	// preference; ALL with mute_until is ERROR_REASON_VALIDATION.
+	// preference; ALL with mute_until is ERROR_REASON_VALIDATION. With now
+	// set it is the tayfa's "Şimdi bildirimleri" instead (scope
+	// NOTIFICATION_SCOPE_TYPE_TAYFA_NOW; issue #265, ADR-0038 §4): ALL or NONE
+	// only (MENTIONS is ERROR_REASON_VALIDATION), the same membership and
+	// mute_until rules; it mutes NOW_STARTED pushes of that tayfa. A tayfa at
+	// level NONE pushes no NOW_STARTED either.
 	SetTayfaNotificationPreference(context.Context, *SetTayfaNotificationPreferenceRequest) (*SetTayfaNotificationPreferenceResponse, error)
 	// SetConversationNotificationPreference sets how the caller hears about a
 	// direct conversation they see as a party (the same conversations

@@ -103,9 +103,28 @@ const (
 	TargetQuestion     TargetType = "question"
 	TargetAnswer       TargetType = "answer"
 	TargetPoll         TargetType = "poll"
-	TargetFishingCatch TargetType = "fishing_catch"
+	// TargetLogEntry: a log component entry (issue #243; a fishing catch
+	// before it).
+	TargetLogEntry TargetType = "log_entry"
 	// TargetEventPhoto: an event album photo (issue #206, ADR-0028).
 	TargetEventPhoto TargetType = "event_photo"
+	// TargetEventQuestion: a question of an event's questions component
+	// (issue #256). The author of an anonymous question is kept for the
+	// platform only: the tayfa's queue reads such a report without its
+	// subject (reports.subject_hidden; ADR-0025 §5).
+	TargetEventQuestion TargetType = "event_question"
+	// TargetDailyItem: an item of the tayfa's daily content pool (issue
+	// #269, ADR-0027 §5); its subject is the member who added it.
+	TargetDailyItem TargetType = "daily_item"
+	// TargetLibraryItem: an item of the tayfa's library (issue #270,
+	// ADR-0040 §1); its subject is the item's owner.
+	TargetLibraryItem TargetType = "library_item"
+	// TargetMaterial: a material of the tayfa's material library (issue
+	// #261, ADR-0040 §3); its subject is the author.
+	TargetMaterial TargetType = "material"
+	// TargetGarageVehicle: a vehicle of a member's garage that shows in the
+	// tayfa (issue #272, ADR-0040 §4); its subject is the owner.
+	TargetGarageVehicle TargetType = "garage_vehicle"
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
 	// createDirect.
 	TargetDMMessage TargetType = "dm_message"
@@ -118,8 +137,9 @@ const (
 // content reports whether t is content (has an author and can be removed).
 func (t TargetType) content() bool {
 	switch t {
-	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetFishingCatch, TargetEventPhoto,
-		TargetChannelMessage:
+	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetLogEntry, TargetEventPhoto,
+		TargetChannelMessage, TargetEventQuestion, TargetDailyItem, TargetLibraryItem, TargetMaterial,
+		TargetGarageVehicle:
 		return true
 	}
 	return false
@@ -154,6 +174,9 @@ const (
 	// platform only.
 	ReasonStaffConduct Reason = "staff_conduct"
 	ReasonOther        Reason = "other"
+	// ReasonPaidTutoring: a paid private lesson offer or advertisement
+	// (issue #271; ADR-0040 §2, Topluluk Kuralları).
+	ReasonPaidTutoring Reason = "paid_tutoring"
 )
 
 // Reasons lists every reason, in the proto's order.
@@ -162,6 +185,7 @@ func Reasons() []Reason {
 		ReasonHarassment, ReasonHateSpeech, ReasonViolence, ReasonPrivacy, ReasonImpersonation,
 		ReasonIllegalTrade, ReasonDrugs, ReasonGambling, ReasonDangerousActivity, ReasonFakeEvent,
 		ReasonSexualContent, ReasonChildSafety, ReasonSpam, ReasonCopyright, ReasonStaffConduct, ReasonOther,
+		ReasonPaidTutoring,
 	}
 }
 
@@ -412,6 +436,9 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in CreateInput)
 		if subject != (id.ID{}) {
 			p.SubjectUserID = subject.PG()
 		}
+		if p.SubjectHidden, err = subjectHidden(ctx, q, tayfa, in.TargetType, target); err != nil {
+			return err
+		}
 		if desc != "" {
 			p.Description = pgtype.Text{String: desc, Valid: true}
 		}
@@ -559,16 +586,21 @@ func (s *Service) subjectOf(ctx context.Context, q *store.Queries, tayfa, user i
 		}
 		return target, nil
 	}
-	if err := access.RequireModule(ctx, q, tayfa, moduleOf(t)); errors.Is(err, apperr.ErrModuleDisabled) {
-		return id.ID{}, apperr.ErrReportTargetNotFound
-	} else if err != nil {
-		return id.ID{}, err
-	}
 	c, err := lookup(ctx, q, tayfa, t, target)
 	if err != nil {
 		return id.ID{}, err
 	}
-	if !c.found || !c.visible || (c.ownOnly && c.author != user) {
+	// A question's or answer's module is its pool's (issue #271).
+	module := moduleOf(t)
+	if c.module != "" {
+		module = c.module
+	}
+	if err := access.RequireModule(ctx, q, tayfa, module); errors.Is(err, apperr.ErrModuleDisabled) {
+		return id.ID{}, apperr.ErrReportTargetNotFound
+	} else if err != nil {
+		return id.ID{}, err
+	}
+	if !c.found || !c.visible {
 		return id.ID{}, apperr.ErrReportTargetNotFound
 	}
 	if c.author == user {
@@ -585,8 +617,25 @@ func moduleOf(t TargetType) string {
 		return access.ModuleQA
 	case TargetPoll:
 		return access.ModulePolls
+	case TargetDailyItem:
+		return access.ModuleDaily
+	case TargetLibraryItem:
+		return access.ModuleLibrary
+	case TargetMaterial:
+		return access.ModuleMaterials
+	case TargetGarageVehicle:
+		return access.ModuleGarage
 	}
-	return access.ModuleEvents // events, fishing catches and album photos
+	return access.ModuleEvents // events, log entries, album photos and event questions
+}
+
+// poolModule is the module of a question pool (questions.pool): the pool
+// names its module.
+func poolModule(pool string) string {
+	if pool == access.ModuleQuestionPool {
+		return access.ModuleQuestionPool
+	}
+	return access.ModuleQA
 }
 
 // content is a reported piece of content as the report needs it.
@@ -596,9 +645,10 @@ type content struct {
 	// removed: no longer visible to members (deleted, or a cancelled
 	// event), or gone for good.
 	removed bool
-	// ownOnly: only the author sees it (a fishing catch kept to oneself).
-	ownOnly bool
 	author  id.ID // zero when the account was deleted
+	// module is set for content whose module depends on the row: a
+	// question's or answer's pool (qa or question_pool, issue #271).
+	module string
 }
 
 // lookup reads content of tayfa; a missing row is found = false.
@@ -623,23 +673,44 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 	case TargetQuestion:
 		var r store.GetReportTargetQuestionRow
 		r, err = q.GetReportTargetQuestion(ctx, store.GetReportTargetQuestionParams{TayfaID: p.t, ID: p.i})
-		author, visible = r.AuthorID, r.Visible
+		author, visible, c.module = r.AuthorID, r.Visible, poolModule(r.Pool)
 	case TargetAnswer:
 		var r store.GetReportTargetAnswerRow
 		r, err = q.GetReportTargetAnswer(ctx, store.GetReportTargetAnswerParams{TayfaID: p.t, ID: p.i})
-		author, visible = r.AuthorID, r.Visible
+		author, visible, c.module = r.AuthorID, r.Visible, poolModule(r.Pool)
 	case TargetPoll:
 		var r store.GetReportTargetPollRow
 		r, err = q.GetReportTargetPoll(ctx, store.GetReportTargetPollParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
-	case TargetFishingCatch:
-		var r store.GetReportTargetCatchRow
-		r, err = q.GetReportTargetCatch(ctx, store.GetReportTargetCatchParams{TayfaID: p.t, ID: p.i})
+	case TargetLogEntry:
+		// Every member who sees the event sees the entry; its location is
+		// not part of the report.
+		var r store.GetReportTargetLogEntryRow
+		r, err = q.GetReportTargetLogEntry(ctx, store.GetReportTargetLogEntryParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
-		c.ownOnly = r.Visibility != "tayfa"
 	case TargetEventPhoto:
 		var r store.GetReportTargetEventPhotoRow
 		r, err = q.GetReportTargetEventPhoto(ctx, store.GetReportTargetEventPhotoParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetEventQuestion:
+		var r store.GetReportTargetEventQuestionRow
+		r, err = q.GetReportTargetEventQuestion(ctx, store.GetReportTargetEventQuestionParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetDailyItem:
+		var r store.GetReportTargetDailyItemRow
+		r, err = q.GetReportTargetDailyItem(ctx, store.GetReportTargetDailyItemParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetLibraryItem:
+		var r store.GetReportTargetLibraryItemRow
+		r, err = q.GetReportTargetLibraryItem(ctx, store.GetReportTargetLibraryItemParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetMaterial:
+		var r store.GetReportTargetMaterialRow
+		r, err = q.GetReportTargetMaterial(ctx, store.GetReportTargetMaterialParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetGarageVehicle:
+		var r store.GetReportTargetGarageVehicleRow
+		r, err = q.GetReportTargetGarageVehicle(ctx, store.GetReportTargetGarageVehicleParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
 	default:
 		return content{}, errors.New("içerik olmayan hedef")
@@ -657,6 +728,24 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 		c.author = id.ID(author.Bytes)
 	}
 	return c, nil
+}
+
+// subjectHidden reports whether the report's subject must stay hidden from
+// the tayfa's moderators: the author of an anonymous event question (issue
+// #256; ADR-0025 §5). The author is kept for the platform only. A question
+// that is gone counts as anonymous (the safe side).
+func subjectHidden(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, target id.ID) (bool, error) {
+	if t != TargetEventQuestion {
+		return false, nil
+	}
+	r, err := q.GetReportTargetEventQuestion(ctx, store.GetReportTargetEventQuestionParams{TayfaID: tayfa.PG(), ID: target.PG()})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return true, nil
+	case err != nil:
+		return false, fmt.Errorf("şikâyet hedefi: %w", err)
+	}
+	return r.Anonymous, nil
 }
 
 // minorInvolved asks identity whether the reporter or the subject is under

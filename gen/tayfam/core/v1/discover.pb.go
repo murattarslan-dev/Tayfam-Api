@@ -276,8 +276,12 @@ type DiscoverTayfa struct {
 	EventCount int32 `protobuf:"varint,6,opt,name=event_count,json=eventCount,proto3" json:"event_count,omitempty"`
 	// Verified attendances (ATTENDED) at those events.
 	AttendanceCount int32 `protobuf:"varint,7,opt,name=attendance_count,json=attendanceCount,proto3" json:"attendance_count,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The tayfa's statistics card (issue #267); unset when its admins hid
+	// it or it has fewer than three frozen events. The client shows no card
+	// then (not "none yet").
+	Showcase      *TayfaShowcase `protobuf:"bytes,8,opt,name=showcase,proto3" json:"showcase,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DiscoverTayfa) Reset() {
@@ -359,24 +363,94 @@ func (x *DiscoverTayfa) GetAttendanceCount() int32 {
 	return 0
 }
 
+func (x *DiscoverTayfa) GetShowcase() *TayfaShowcase {
+	if x != nil {
+		return x.Showcase
+	}
+	return nil
+}
+
+// TayfaShowcase is what Keşfet shows of a tayfa's statistics (ADR-0026 §3,
+// ADR-0039 §3): its all-time totals and its badges. Only the overall
+// common metrics (events, attended, participants, duration), the common
+// metrics of each type ("<type>.<metric>") and the measures the catalog
+// allows in the showcase; no log metric, nothing of a type whose
+// attendance is sensitive, no person, date, time, place or year breakdown.
+type TayfaShowcase struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Stats []*TayfaStat           `protobuf:"bytes,1,rep,name=stats,proto3" json:"stats,omitempty"`
+	// In the order earned.
+	Badges        []*EarnedBadge `protobuf:"bytes,2,rep,name=badges,proto3" json:"badges,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TayfaShowcase) Reset() {
+	*x = TayfaShowcase{}
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TayfaShowcase) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TayfaShowcase) ProtoMessage() {}
+
+func (x *TayfaShowcase) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TayfaShowcase.ProtoReflect.Descriptor instead.
+func (*TayfaShowcase) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TayfaShowcase) GetStats() []*TayfaStat {
+	if x != nil {
+		return x.Stats
+	}
+	return nil
+}
+
+func (x *TayfaShowcase) GetBadges() []*EarnedBadge {
+	if x != nil {
+		return x.Badges
+	}
+	return nil
+}
+
 // DiscoverEvent is an event as the feed shows it: no description, no
 // meeting point, no coordinates (they are for members only).
 type DiscoverEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Type          EventType              `protobuf:"varint,2,opt,name=type,proto3,enum=tayfam.core.v1.EventType" json:"type,omitempty"`
-	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	StartTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	City          string                 `protobuf:"bytes,6,opt,name=city,proto3" json:"city,omitempty"`
-	District      string                 `protobuf:"bytes,7,opt,name=district,proto3" json:"district,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	EventId string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	// Faz 1; never filled. See type_key.
+	Type      EventType              `protobuf:"varint,2,opt,name=type,proto3,enum=tayfam.core.v1.EventType" json:"type,omitempty"`
+	Title     string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	City      string                 `protobuf:"bytes,6,opt,name=city,proto3" json:"city,omitempty"`
+	District  string                 `protobuf:"bytes,7,opt,name=district,proto3" json:"district,omitempty"`
+	// The event's type: a key of the catalog (CatalogEventType.key,
+	// ADR-0025).
+	TypeKey       string `protobuf:"bytes,8,opt,name=type_key,json=typeKey,proto3" json:"type_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DiscoverEvent) Reset() {
 	*x = DiscoverEvent{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[2]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -388,7 +462,7 @@ func (x *DiscoverEvent) String() string {
 func (*DiscoverEvent) ProtoMessage() {}
 
 func (x *DiscoverEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[2]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -401,7 +475,7 @@ func (x *DiscoverEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverEvent.ProtoReflect.Descriptor instead.
 func (*DiscoverEvent) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{2}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DiscoverEvent) GetEventId() string {
@@ -453,6 +527,13 @@ func (x *DiscoverEvent) GetDistrict() string {
 	return ""
 }
 
+func (x *DiscoverEvent) GetTypeKey() string {
+	if x != nil {
+		return x.TypeKey
+	}
+	return ""
+}
+
 // DiscoverItem is one feed entry: "Ayşe and 2 friends are at this event".
 type DiscoverItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -469,7 +550,7 @@ type DiscoverItem struct {
 
 func (x *DiscoverItem) Reset() {
 	*x = DiscoverItem{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -481,7 +562,7 @@ func (x *DiscoverItem) String() string {
 func (*DiscoverItem) ProtoMessage() {}
 
 func (x *DiscoverItem) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[3]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -494,7 +575,7 @@ func (x *DiscoverItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverItem.ProtoReflect.Descriptor instead.
 func (*DiscoverItem) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{3}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DiscoverItem) GetEvent() *DiscoverEvent {
@@ -533,7 +614,7 @@ type ListDiscoverFeedRequest struct {
 
 func (x *ListDiscoverFeedRequest) Reset() {
 	*x = ListDiscoverFeedRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[4]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -545,7 +626,7 @@ func (x *ListDiscoverFeedRequest) String() string {
 func (*ListDiscoverFeedRequest) ProtoMessage() {}
 
 func (x *ListDiscoverFeedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[4]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -558,7 +639,7 @@ func (x *ListDiscoverFeedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDiscoverFeedRequest.ProtoReflect.Descriptor instead.
 func (*ListDiscoverFeedRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{4}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{5}
 }
 
 type ListDiscoverFeedResponse struct {
@@ -571,7 +652,7 @@ type ListDiscoverFeedResponse struct {
 
 func (x *ListDiscoverFeedResponse) Reset() {
 	*x = ListDiscoverFeedResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[5]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -583,7 +664,7 @@ func (x *ListDiscoverFeedResponse) String() string {
 func (*ListDiscoverFeedResponse) ProtoMessage() {}
 
 func (x *ListDiscoverFeedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[5]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -596,7 +677,7 @@ func (x *ListDiscoverFeedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDiscoverFeedResponse.ProtoReflect.Descriptor instead.
 func (*ListDiscoverFeedResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{5}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListDiscoverFeedResponse) GetItems() []*DiscoverItem {
@@ -615,7 +696,7 @@ type JoinFromDiscoverRequest struct {
 
 func (x *JoinFromDiscoverRequest) Reset() {
 	*x = JoinFromDiscoverRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[6]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -627,7 +708,7 @@ func (x *JoinFromDiscoverRequest) String() string {
 func (*JoinFromDiscoverRequest) ProtoMessage() {}
 
 func (x *JoinFromDiscoverRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[6]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -640,7 +721,7 @@ func (x *JoinFromDiscoverRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinFromDiscoverRequest.ProtoReflect.Descriptor instead.
 func (*JoinFromDiscoverRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{6}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *JoinFromDiscoverRequest) GetTayfaId() string {
@@ -660,7 +741,7 @@ type JoinFromDiscoverResponse struct {
 
 func (x *JoinFromDiscoverResponse) Reset() {
 	*x = JoinFromDiscoverResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[7]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -672,7 +753,7 @@ func (x *JoinFromDiscoverResponse) String() string {
 func (*JoinFromDiscoverResponse) ProtoMessage() {}
 
 func (x *JoinFromDiscoverResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[7]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -685,7 +766,7 @@ func (x *JoinFromDiscoverResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinFromDiscoverResponse.ProtoReflect.Descriptor instead.
 func (*JoinFromDiscoverResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{7}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *JoinFromDiscoverResponse) GetMembership() *Membership {
@@ -704,7 +785,7 @@ type GetTayfaDiscoverRequest struct {
 
 func (x *GetTayfaDiscoverRequest) Reset() {
 	*x = GetTayfaDiscoverRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[8]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -716,7 +797,7 @@ func (x *GetTayfaDiscoverRequest) String() string {
 func (*GetTayfaDiscoverRequest) ProtoMessage() {}
 
 func (x *GetTayfaDiscoverRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[8]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -729,7 +810,7 @@ func (x *GetTayfaDiscoverRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTayfaDiscoverRequest.ProtoReflect.Descriptor instead.
 func (*GetTayfaDiscoverRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{8}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetTayfaDiscoverRequest) GetTayfaId() string {
@@ -743,14 +824,16 @@ type GetTayfaDiscoverResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	State TayfaDiscoverState     `protobuf:"varint,1,opt,name=state,proto3,enum=tayfam.core.v1.TayfaDiscoverState" json:"state,omitempty"`
 	// The admins' wish (tayfas.visibility = listed).
-	Enabled       bool `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Enabled bool `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// Show the statistics and badges in the Keşfet card (issue #267).
+	StatsShowcase bool `protobuf:"varint,3,opt,name=stats_showcase,json=statsShowcase,proto3" json:"stats_showcase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetTayfaDiscoverResponse) Reset() {
 	*x = GetTayfaDiscoverResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[9]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -762,7 +845,7 @@ func (x *GetTayfaDiscoverResponse) String() string {
 func (*GetTayfaDiscoverResponse) ProtoMessage() {}
 
 func (x *GetTayfaDiscoverResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[9]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -775,7 +858,7 @@ func (x *GetTayfaDiscoverResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTayfaDiscoverResponse.ProtoReflect.Descriptor instead.
 func (*GetTayfaDiscoverResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{9}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetTayfaDiscoverResponse) GetState() TayfaDiscoverState {
@@ -792,6 +875,13 @@ func (x *GetTayfaDiscoverResponse) GetEnabled() bool {
 	return false
 }
 
+func (x *GetTayfaDiscoverResponse) GetStatsShowcase() bool {
+	if x != nil {
+		return x.StatsShowcase
+	}
+	return false
+}
+
 type SetTayfaDiscoverRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
@@ -802,7 +892,7 @@ type SetTayfaDiscoverRequest struct {
 
 func (x *SetTayfaDiscoverRequest) Reset() {
 	*x = SetTayfaDiscoverRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[10]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -814,7 +904,7 @@ func (x *SetTayfaDiscoverRequest) String() string {
 func (*SetTayfaDiscoverRequest) ProtoMessage() {}
 
 func (x *SetTayfaDiscoverRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[10]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -827,7 +917,7 @@ func (x *SetTayfaDiscoverRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTayfaDiscoverRequest.ProtoReflect.Descriptor instead.
 func (*SetTayfaDiscoverRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{10}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SetTayfaDiscoverRequest) GetTayfaId() string {
@@ -848,13 +938,14 @@ type SetTayfaDiscoverResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	State         TayfaDiscoverState     `protobuf:"varint,1,opt,name=state,proto3,enum=tayfam.core.v1.TayfaDiscoverState" json:"state,omitempty"`
 	Enabled       bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	StatsShowcase bool                   `protobuf:"varint,3,opt,name=stats_showcase,json=statsShowcase,proto3" json:"stats_showcase,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetTayfaDiscoverResponse) Reset() {
 	*x = SetTayfaDiscoverResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[11]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -866,7 +957,7 @@ func (x *SetTayfaDiscoverResponse) String() string {
 func (*SetTayfaDiscoverResponse) ProtoMessage() {}
 
 func (x *SetTayfaDiscoverResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[11]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -879,7 +970,7 @@ func (x *SetTayfaDiscoverResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTayfaDiscoverResponse.ProtoReflect.Descriptor instead.
 func (*SetTayfaDiscoverResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{11}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SetTayfaDiscoverResponse) GetState() TayfaDiscoverState {
@@ -896,6 +987,125 @@ func (x *SetTayfaDiscoverResponse) GetEnabled() bool {
 	return false
 }
 
+func (x *SetTayfaDiscoverResponse) GetStatsShowcase() bool {
+	if x != nil {
+		return x.StatsShowcase
+	}
+	return false
+}
+
+type SetTayfaStatsShowcaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	StatsShowcase bool                   `protobuf:"varint,2,opt,name=stats_showcase,json=statsShowcase,proto3" json:"stats_showcase,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetTayfaStatsShowcaseRequest) Reset() {
+	*x = SetTayfaStatsShowcaseRequest{}
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetTayfaStatsShowcaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetTayfaStatsShowcaseRequest) ProtoMessage() {}
+
+func (x *SetTayfaStatsShowcaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetTayfaStatsShowcaseRequest.ProtoReflect.Descriptor instead.
+func (*SetTayfaStatsShowcaseRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SetTayfaStatsShowcaseRequest) GetTayfaId() string {
+	if x != nil {
+		return x.TayfaId
+	}
+	return ""
+}
+
+func (x *SetTayfaStatsShowcaseRequest) GetStatsShowcase() bool {
+	if x != nil {
+		return x.StatsShowcase
+	}
+	return false
+}
+
+type SetTayfaStatsShowcaseResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         TayfaDiscoverState     `protobuf:"varint,1,opt,name=state,proto3,enum=tayfam.core.v1.TayfaDiscoverState" json:"state,omitempty"`
+	Enabled       bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	StatsShowcase bool                   `protobuf:"varint,3,opt,name=stats_showcase,json=statsShowcase,proto3" json:"stats_showcase,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetTayfaStatsShowcaseResponse) Reset() {
+	*x = SetTayfaStatsShowcaseResponse{}
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetTayfaStatsShowcaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetTayfaStatsShowcaseResponse) ProtoMessage() {}
+
+func (x *SetTayfaStatsShowcaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetTayfaStatsShowcaseResponse.ProtoReflect.Descriptor instead.
+func (*SetTayfaStatsShowcaseResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SetTayfaStatsShowcaseResponse) GetState() TayfaDiscoverState {
+	if x != nil {
+		return x.State
+	}
+	return TayfaDiscoverState_TAYFA_DISCOVER_STATE_UNSPECIFIED
+}
+
+func (x *SetTayfaStatsShowcaseResponse) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *SetTayfaStatsShowcaseResponse) GetStatsShowcase() bool {
+	if x != nil {
+		return x.StatsShowcase
+	}
+	return false
+}
+
 type GetEventFeedbackRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TayfaId       string                 `protobuf:"bytes,1,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
@@ -906,7 +1116,7 @@ type GetEventFeedbackRequest struct {
 
 func (x *GetEventFeedbackRequest) Reset() {
 	*x = GetEventFeedbackRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[12]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -918,7 +1128,7 @@ func (x *GetEventFeedbackRequest) String() string {
 func (*GetEventFeedbackRequest) ProtoMessage() {}
 
 func (x *GetEventFeedbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[12]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -931,7 +1141,7 @@ func (x *GetEventFeedbackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventFeedbackRequest.ProtoReflect.Descriptor instead.
 func (*GetEventFeedbackRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{12}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetEventFeedbackRequest) GetTayfaId() string {
@@ -958,7 +1168,7 @@ type GetEventFeedbackResponse struct {
 
 func (x *GetEventFeedbackResponse) Reset() {
 	*x = GetEventFeedbackResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[13]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -970,7 +1180,7 @@ func (x *GetEventFeedbackResponse) String() string {
 func (*GetEventFeedbackResponse) ProtoMessage() {}
 
 func (x *GetEventFeedbackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[13]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -983,7 +1193,7 @@ func (x *GetEventFeedbackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEventFeedbackResponse.ProtoReflect.Descriptor instead.
 func (*GetEventFeedbackResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{13}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetEventFeedbackResponse) GetAnswer() FeedbackAnswer {
@@ -1012,7 +1222,7 @@ type SetEventFeedbackRequest struct {
 
 func (x *SetEventFeedbackRequest) Reset() {
 	*x = SetEventFeedbackRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[14]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1024,7 +1234,7 @@ func (x *SetEventFeedbackRequest) String() string {
 func (*SetEventFeedbackRequest) ProtoMessage() {}
 
 func (x *SetEventFeedbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[14]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1037,7 +1247,7 @@ func (x *SetEventFeedbackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEventFeedbackRequest.ProtoReflect.Descriptor instead.
 func (*SetEventFeedbackRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{14}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SetEventFeedbackRequest) GetTayfaId() string {
@@ -1071,7 +1281,7 @@ type SetEventFeedbackResponse struct {
 
 func (x *SetEventFeedbackResponse) Reset() {
 	*x = SetEventFeedbackResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[15]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1083,7 +1293,7 @@ func (x *SetEventFeedbackResponse) String() string {
 func (*SetEventFeedbackResponse) ProtoMessage() {}
 
 func (x *SetEventFeedbackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[15]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1096,7 +1306,7 @@ func (x *SetEventFeedbackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEventFeedbackResponse.ProtoReflect.Descriptor instead.
 func (*SetEventFeedbackResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{15}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SetEventFeedbackResponse) GetAnswer() FeedbackAnswer {
@@ -1130,7 +1340,7 @@ type SafetyContact struct {
 
 func (x *SafetyContact) Reset() {
 	*x = SafetyContact{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[16]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1142,7 +1352,7 @@ func (x *SafetyContact) String() string {
 func (*SafetyContact) ProtoMessage() {}
 
 func (x *SafetyContact) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[16]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1155,7 +1365,7 @@ func (x *SafetyContact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SafetyContact.ProtoReflect.Descriptor instead.
 func (*SafetyContact) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{16}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SafetyContact) GetContact() *DiscoverPerson {
@@ -1196,7 +1406,7 @@ type GetSafetyContactRequest struct {
 
 func (x *GetSafetyContactRequest) Reset() {
 	*x = GetSafetyContactRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[17]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1208,7 +1418,7 @@ func (x *GetSafetyContactRequest) String() string {
 func (*GetSafetyContactRequest) ProtoMessage() {}
 
 func (x *GetSafetyContactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[17]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1221,7 +1431,7 @@ func (x *GetSafetyContactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSafetyContactRequest.ProtoReflect.Descriptor instead.
 func (*GetSafetyContactRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{17}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetSafetyContactRequest) GetTayfaId() string {
@@ -1247,7 +1457,7 @@ type GetSafetyContactResponse struct {
 
 func (x *GetSafetyContactResponse) Reset() {
 	*x = GetSafetyContactResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[18]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1259,7 +1469,7 @@ func (x *GetSafetyContactResponse) String() string {
 func (*GetSafetyContactResponse) ProtoMessage() {}
 
 func (x *GetSafetyContactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[18]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1272,7 +1482,7 @@ func (x *GetSafetyContactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSafetyContactResponse.ProtoReflect.Descriptor instead.
 func (*GetSafetyContactResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{18}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetSafetyContactResponse) GetSafetyContact() *SafetyContact {
@@ -1296,7 +1506,7 @@ type SetSafetyContactRequest struct {
 
 func (x *SetSafetyContactRequest) Reset() {
 	*x = SetSafetyContactRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[19]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1308,7 +1518,7 @@ func (x *SetSafetyContactRequest) String() string {
 func (*SetSafetyContactRequest) ProtoMessage() {}
 
 func (x *SetSafetyContactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[19]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1321,7 +1531,7 @@ func (x *SetSafetyContactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSafetyContactRequest.ProtoReflect.Descriptor instead.
 func (*SetSafetyContactRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{19}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SetSafetyContactRequest) GetTayfaId() string {
@@ -1361,7 +1571,7 @@ type SetSafetyContactResponse struct {
 
 func (x *SetSafetyContactResponse) Reset() {
 	*x = SetSafetyContactResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[20]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1373,7 +1583,7 @@ func (x *SetSafetyContactResponse) String() string {
 func (*SetSafetyContactResponse) ProtoMessage() {}
 
 func (x *SetSafetyContactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[20]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1386,7 +1596,7 @@ func (x *SetSafetyContactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSafetyContactResponse.ProtoReflect.Descriptor instead.
 func (*SetSafetyContactResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{20}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SetSafetyContactResponse) GetSafetyContact() *SafetyContact {
@@ -1406,7 +1616,7 @@ type ClearSafetyContactRequest struct {
 
 func (x *ClearSafetyContactRequest) Reset() {
 	*x = ClearSafetyContactRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[21]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1418,7 +1628,7 @@ func (x *ClearSafetyContactRequest) String() string {
 func (*ClearSafetyContactRequest) ProtoMessage() {}
 
 func (x *ClearSafetyContactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[21]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1431,7 +1641,7 @@ func (x *ClearSafetyContactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearSafetyContactRequest.ProtoReflect.Descriptor instead.
 func (*ClearSafetyContactRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{21}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ClearSafetyContactRequest) GetTayfaId() string {
@@ -1456,7 +1666,7 @@ type ClearSafetyContactResponse struct {
 
 func (x *ClearSafetyContactResponse) Reset() {
 	*x = ClearSafetyContactResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[22]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1468,7 +1678,7 @@ func (x *ClearSafetyContactResponse) String() string {
 func (*ClearSafetyContactResponse) ProtoMessage() {}
 
 func (x *ClearSafetyContactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[22]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1481,7 +1691,7 @@ func (x *ClearSafetyContactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearSafetyContactResponse.ProtoReflect.Descriptor instead.
 func (*ClearSafetyContactResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{22}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{25}
 }
 
 type MarkReturnedRequest struct {
@@ -1494,7 +1704,7 @@ type MarkReturnedRequest struct {
 
 func (x *MarkReturnedRequest) Reset() {
 	*x = MarkReturnedRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[23]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1506,7 +1716,7 @@ func (x *MarkReturnedRequest) String() string {
 func (*MarkReturnedRequest) ProtoMessage() {}
 
 func (x *MarkReturnedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[23]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1519,7 +1729,7 @@ func (x *MarkReturnedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReturnedRequest.ProtoReflect.Descriptor instead.
 func (*MarkReturnedRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{23}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *MarkReturnedRequest) GetTayfaId() string {
@@ -1545,7 +1755,7 @@ type MarkReturnedResponse struct {
 
 func (x *MarkReturnedResponse) Reset() {
 	*x = MarkReturnedResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[24]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1557,7 +1767,7 @@ func (x *MarkReturnedResponse) String() string {
 func (*MarkReturnedResponse) ProtoMessage() {}
 
 func (x *MarkReturnedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[24]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1570,7 +1780,7 @@ func (x *MarkReturnedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReturnedResponse.ProtoReflect.Descriptor instead.
 func (*MarkReturnedResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{24}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *MarkReturnedResponse) GetSafetyContact() *SafetyContact {
@@ -1601,7 +1811,7 @@ type SafetyShare struct {
 
 func (x *SafetyShare) Reset() {
 	*x = SafetyShare{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[25]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1613,7 +1823,7 @@ func (x *SafetyShare) String() string {
 func (*SafetyShare) ProtoMessage() {}
 
 func (x *SafetyShare) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[25]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1626,7 +1836,7 @@ func (x *SafetyShare) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SafetyShare.ProtoReflect.Descriptor instead.
 func (*SafetyShare) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{25}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SafetyShare) GetParticipant() *DiscoverPerson {
@@ -1686,7 +1896,7 @@ type ListSafetySharesRequest struct {
 
 func (x *ListSafetySharesRequest) Reset() {
 	*x = ListSafetySharesRequest{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[26]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1698,7 +1908,7 @@ func (x *ListSafetySharesRequest) String() string {
 func (*ListSafetySharesRequest) ProtoMessage() {}
 
 func (x *ListSafetySharesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[26]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1711,7 +1921,7 @@ func (x *ListSafetySharesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSafetySharesRequest.ProtoReflect.Descriptor instead.
 func (*ListSafetySharesRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{26}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{29}
 }
 
 type ListSafetySharesResponse struct {
@@ -1723,7 +1933,7 @@ type ListSafetySharesResponse struct {
 
 func (x *ListSafetySharesResponse) Reset() {
 	*x = ListSafetySharesResponse{}
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[27]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1735,7 +1945,7 @@ func (x *ListSafetySharesResponse) String() string {
 func (*ListSafetySharesResponse) ProtoMessage() {}
 
 func (x *ListSafetySharesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_discover_proto_msgTypes[27]
+	mi := &file_tayfam_core_v1_discover_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1748,7 +1958,7 @@ func (x *ListSafetySharesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSafetySharesResponse.ProtoReflect.Descriptor instead.
 func (*ListSafetySharesResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{27}
+	return file_tayfam_core_v1_discover_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ListSafetySharesResponse) GetShares() []*SafetyShare {
@@ -1762,11 +1972,11 @@ var File_tayfam_core_v1_discover_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"\n" +
-	"\x1dtayfam/core/v1/discover.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1ftayfam/core/v1/membership.proto\x1a\x1atayfam/core/v1/tayfa.proto\"v\n" +
+	"\x1dtayfam/core/v1/discover.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1atayfam/core/v1/badge.proto\x1a\x1ftayfam/core/v1/membership.proto\x1a\x1atayfam/core/v1/stats.proto\x1a\x1atayfam/core/v1/tayfa.proto\"v\n" +
 	"\x0eDiscoverPerson\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12(\n" +
-	"\x10avatar_upload_id\x18\x03 \x01(\tR\x0eavatarUploadId\"\xfd\x01\n" +
+	"\x10avatar_upload_id\x18\x03 \x01(\tR\x0eavatarUploadId\"\xb8\x02\n" +
 	"\rDiscoverTayfa\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -1776,7 +1986,11 @@ const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"createTime\x12\x1f\n" +
 	"\vevent_count\x18\x06 \x01(\x05R\n" +
 	"eventCount\x12)\n" +
-	"\x10attendance_count\x18\a \x01(\x05R\x0fattendanceCount\"\x91\x02\n" +
+	"\x10attendance_count\x18\a \x01(\x05R\x0fattendanceCount\x129\n" +
+	"\bshowcase\x18\b \x01(\v2\x1d.tayfam.core.v1.TayfaShowcaseR\bshowcase\"u\n" +
+	"\rTayfaShowcase\x12/\n" +
+	"\x05stats\x18\x01 \x03(\v2\x19.tayfam.core.v1.TayfaStatR\x05stats\x123\n" +
+	"\x06badges\x18\x02 \x03(\v2\x1b.tayfam.core.v1.EarnedBadgeR\x06badges\"\xac\x02\n" +
 	"\rDiscoverEvent\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12-\n" +
 	"\x04type\x18\x02 \x01(\x0e2\x19.tayfam.core.v1.EventTypeR\x04type\x12\x14\n" +
@@ -1785,7 +1999,8 @@ const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"start_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
 	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x12\n" +
 	"\x04city\x18\x06 \x01(\tR\x04city\x12\x1a\n" +
-	"\bdistrict\x18\a \x01(\tR\bdistrict\"\xd5\x01\n" +
+	"\bdistrict\x18\a \x01(\tR\bdistrict\x12\x19\n" +
+	"\btype_key\x18\b \x01(\tR\atypeKey\"\xd5\x01\n" +
 	"\fDiscoverItem\x123\n" +
 	"\x05event\x18\x01 \x01(\v2\x1d.tayfam.core.v1.DiscoverEventR\x05event\x123\n" +
 	"\x05tayfa\x18\x02 \x01(\v2\x1d.tayfam.core.v1.DiscoverTayfaR\x05tayfa\x128\n" +
@@ -1801,16 +2016,25 @@ const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"membership\x18\x01 \x01(\v2\x1a.tayfam.core.v1.MembershipR\n" +
 	"membership\"4\n" +
 	"\x17GetTayfaDiscoverRequest\x12\x19\n" +
-	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\"n\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\"\x95\x01\n" +
 	"\x18GetTayfaDiscoverResponse\x128\n" +
 	"\x05state\x18\x01 \x01(\x0e2\".tayfam.core.v1.TayfaDiscoverStateR\x05state\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"N\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\x12%\n" +
+	"\x0estats_showcase\x18\x03 \x01(\bR\rstatsShowcase\"N\n" +
 	"\x17SetTayfaDiscoverRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"n\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\"\x95\x01\n" +
 	"\x18SetTayfaDiscoverResponse\x128\n" +
 	"\x05state\x18\x01 \x01(\x0e2\".tayfam.core.v1.TayfaDiscoverStateR\x05state\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"O\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\x12%\n" +
+	"\x0estats_showcase\x18\x03 \x01(\bR\rstatsShowcase\"`\n" +
+	"\x1cSetTayfaStatsShowcaseRequest\x12\x19\n" +
+	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12%\n" +
+	"\x0estats_showcase\x18\x02 \x01(\bR\rstatsShowcase\"\x9a\x01\n" +
+	"\x1dSetTayfaStatsShowcaseResponse\x128\n" +
+	"\x05state\x18\x01 \x01(\x0e2\".tayfam.core.v1.TayfaDiscoverStateR\x05state\x12\x18\n" +
+	"\aenabled\x18\x02 \x01(\bR\aenabled\x12%\n" +
+	"\x0estats_showcase\x18\x03 \x01(\bR\rstatsShowcase\"O\n" +
 	"\x17GetEventFeedbackRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\"\x8f\x01\n" +
@@ -1887,12 +2111,13 @@ const file_tayfam_core_v1_discover_proto_rawDesc = "" +
 	"\x1eSAFETY_SHARE_STATE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fSAFETY_SHARE_STATE_NOT_RETURNED\x10\x01\x12\x1f\n" +
 	"\x1bSAFETY_SHARE_STATE_RETURNED\x10\x02\x12!\n" +
-	"\x1dSAFETY_SHARE_STATE_ALERT_SENT\x10\x032\xf8\b\n" +
+	"\x1dSAFETY_SHARE_STATE_ALERT_SENT\x10\x032\xee\t\n" +
 	"\x0fDiscoverService\x12e\n" +
 	"\x10ListDiscoverFeed\x12'.tayfam.core.v1.ListDiscoverFeedRequest\x1a(.tayfam.core.v1.ListDiscoverFeedResponse\x12e\n" +
 	"\x10JoinFromDiscover\x12'.tayfam.core.v1.JoinFromDiscoverRequest\x1a(.tayfam.core.v1.JoinFromDiscoverResponse\x12e\n" +
 	"\x10GetTayfaDiscover\x12'.tayfam.core.v1.GetTayfaDiscoverRequest\x1a(.tayfam.core.v1.GetTayfaDiscoverResponse\x12e\n" +
-	"\x10SetTayfaDiscover\x12'.tayfam.core.v1.SetTayfaDiscoverRequest\x1a(.tayfam.core.v1.SetTayfaDiscoverResponse\x12e\n" +
+	"\x10SetTayfaDiscover\x12'.tayfam.core.v1.SetTayfaDiscoverRequest\x1a(.tayfam.core.v1.SetTayfaDiscoverResponse\x12t\n" +
+	"\x15SetTayfaStatsShowcase\x12,.tayfam.core.v1.SetTayfaStatsShowcaseRequest\x1a-.tayfam.core.v1.SetTayfaStatsShowcaseResponse\x12e\n" +
 	"\x10GetEventFeedback\x12'.tayfam.core.v1.GetEventFeedbackRequest\x1a(.tayfam.core.v1.GetEventFeedbackResponse\x12e\n" +
 	"\x10SetEventFeedback\x12'.tayfam.core.v1.SetEventFeedbackRequest\x1a(.tayfam.core.v1.SetEventFeedbackResponse\x12e\n" +
 	"\x10GetSafetyContact\x12'.tayfam.core.v1.GetSafetyContactRequest\x1a(.tayfam.core.v1.GetSafetyContactResponse\x12e\n" +
@@ -1915,100 +2140,111 @@ func file_tayfam_core_v1_discover_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_discover_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_tayfam_core_v1_discover_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_tayfam_core_v1_discover_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_tayfam_core_v1_discover_proto_goTypes = []any{
-	(TayfaDiscoverState)(0),            // 0: tayfam.core.v1.TayfaDiscoverState
-	(FeedbackAnswer)(0),                // 1: tayfam.core.v1.FeedbackAnswer
-	(SafetyShareState)(0),              // 2: tayfam.core.v1.SafetyShareState
-	(*DiscoverPerson)(nil),             // 3: tayfam.core.v1.DiscoverPerson
-	(*DiscoverTayfa)(nil),              // 4: tayfam.core.v1.DiscoverTayfa
-	(*DiscoverEvent)(nil),              // 5: tayfam.core.v1.DiscoverEvent
-	(*DiscoverItem)(nil),               // 6: tayfam.core.v1.DiscoverItem
-	(*ListDiscoverFeedRequest)(nil),    // 7: tayfam.core.v1.ListDiscoverFeedRequest
-	(*ListDiscoverFeedResponse)(nil),   // 8: tayfam.core.v1.ListDiscoverFeedResponse
-	(*JoinFromDiscoverRequest)(nil),    // 9: tayfam.core.v1.JoinFromDiscoverRequest
-	(*JoinFromDiscoverResponse)(nil),   // 10: tayfam.core.v1.JoinFromDiscoverResponse
-	(*GetTayfaDiscoverRequest)(nil),    // 11: tayfam.core.v1.GetTayfaDiscoverRequest
-	(*GetTayfaDiscoverResponse)(nil),   // 12: tayfam.core.v1.GetTayfaDiscoverResponse
-	(*SetTayfaDiscoverRequest)(nil),    // 13: tayfam.core.v1.SetTayfaDiscoverRequest
-	(*SetTayfaDiscoverResponse)(nil),   // 14: tayfam.core.v1.SetTayfaDiscoverResponse
-	(*GetEventFeedbackRequest)(nil),    // 15: tayfam.core.v1.GetEventFeedbackRequest
-	(*GetEventFeedbackResponse)(nil),   // 16: tayfam.core.v1.GetEventFeedbackResponse
-	(*SetEventFeedbackRequest)(nil),    // 17: tayfam.core.v1.SetEventFeedbackRequest
-	(*SetEventFeedbackResponse)(nil),   // 18: tayfam.core.v1.SetEventFeedbackResponse
-	(*SafetyContact)(nil),              // 19: tayfam.core.v1.SafetyContact
-	(*GetSafetyContactRequest)(nil),    // 20: tayfam.core.v1.GetSafetyContactRequest
-	(*GetSafetyContactResponse)(nil),   // 21: tayfam.core.v1.GetSafetyContactResponse
-	(*SetSafetyContactRequest)(nil),    // 22: tayfam.core.v1.SetSafetyContactRequest
-	(*SetSafetyContactResponse)(nil),   // 23: tayfam.core.v1.SetSafetyContactResponse
-	(*ClearSafetyContactRequest)(nil),  // 24: tayfam.core.v1.ClearSafetyContactRequest
-	(*ClearSafetyContactResponse)(nil), // 25: tayfam.core.v1.ClearSafetyContactResponse
-	(*MarkReturnedRequest)(nil),        // 26: tayfam.core.v1.MarkReturnedRequest
-	(*MarkReturnedResponse)(nil),       // 27: tayfam.core.v1.MarkReturnedResponse
-	(*SafetyShare)(nil),                // 28: tayfam.core.v1.SafetyShare
-	(*ListSafetySharesRequest)(nil),    // 29: tayfam.core.v1.ListSafetySharesRequest
-	(*ListSafetySharesResponse)(nil),   // 30: tayfam.core.v1.ListSafetySharesResponse
-	(*timestamppb.Timestamp)(nil),      // 31: google.protobuf.Timestamp
-	(EventType)(0),                     // 32: tayfam.core.v1.EventType
-	(*Membership)(nil),                 // 33: tayfam.core.v1.Membership
+	(TayfaDiscoverState)(0),               // 0: tayfam.core.v1.TayfaDiscoverState
+	(FeedbackAnswer)(0),                   // 1: tayfam.core.v1.FeedbackAnswer
+	(SafetyShareState)(0),                 // 2: tayfam.core.v1.SafetyShareState
+	(*DiscoverPerson)(nil),                // 3: tayfam.core.v1.DiscoverPerson
+	(*DiscoverTayfa)(nil),                 // 4: tayfam.core.v1.DiscoverTayfa
+	(*TayfaShowcase)(nil),                 // 5: tayfam.core.v1.TayfaShowcase
+	(*DiscoverEvent)(nil),                 // 6: tayfam.core.v1.DiscoverEvent
+	(*DiscoverItem)(nil),                  // 7: tayfam.core.v1.DiscoverItem
+	(*ListDiscoverFeedRequest)(nil),       // 8: tayfam.core.v1.ListDiscoverFeedRequest
+	(*ListDiscoverFeedResponse)(nil),      // 9: tayfam.core.v1.ListDiscoverFeedResponse
+	(*JoinFromDiscoverRequest)(nil),       // 10: tayfam.core.v1.JoinFromDiscoverRequest
+	(*JoinFromDiscoverResponse)(nil),      // 11: tayfam.core.v1.JoinFromDiscoverResponse
+	(*GetTayfaDiscoverRequest)(nil),       // 12: tayfam.core.v1.GetTayfaDiscoverRequest
+	(*GetTayfaDiscoverResponse)(nil),      // 13: tayfam.core.v1.GetTayfaDiscoverResponse
+	(*SetTayfaDiscoverRequest)(nil),       // 14: tayfam.core.v1.SetTayfaDiscoverRequest
+	(*SetTayfaDiscoverResponse)(nil),      // 15: tayfam.core.v1.SetTayfaDiscoverResponse
+	(*SetTayfaStatsShowcaseRequest)(nil),  // 16: tayfam.core.v1.SetTayfaStatsShowcaseRequest
+	(*SetTayfaStatsShowcaseResponse)(nil), // 17: tayfam.core.v1.SetTayfaStatsShowcaseResponse
+	(*GetEventFeedbackRequest)(nil),       // 18: tayfam.core.v1.GetEventFeedbackRequest
+	(*GetEventFeedbackResponse)(nil),      // 19: tayfam.core.v1.GetEventFeedbackResponse
+	(*SetEventFeedbackRequest)(nil),       // 20: tayfam.core.v1.SetEventFeedbackRequest
+	(*SetEventFeedbackResponse)(nil),      // 21: tayfam.core.v1.SetEventFeedbackResponse
+	(*SafetyContact)(nil),                 // 22: tayfam.core.v1.SafetyContact
+	(*GetSafetyContactRequest)(nil),       // 23: tayfam.core.v1.GetSafetyContactRequest
+	(*GetSafetyContactResponse)(nil),      // 24: tayfam.core.v1.GetSafetyContactResponse
+	(*SetSafetyContactRequest)(nil),       // 25: tayfam.core.v1.SetSafetyContactRequest
+	(*SetSafetyContactResponse)(nil),      // 26: tayfam.core.v1.SetSafetyContactResponse
+	(*ClearSafetyContactRequest)(nil),     // 27: tayfam.core.v1.ClearSafetyContactRequest
+	(*ClearSafetyContactResponse)(nil),    // 28: tayfam.core.v1.ClearSafetyContactResponse
+	(*MarkReturnedRequest)(nil),           // 29: tayfam.core.v1.MarkReturnedRequest
+	(*MarkReturnedResponse)(nil),          // 30: tayfam.core.v1.MarkReturnedResponse
+	(*SafetyShare)(nil),                   // 31: tayfam.core.v1.SafetyShare
+	(*ListSafetySharesRequest)(nil),       // 32: tayfam.core.v1.ListSafetySharesRequest
+	(*ListSafetySharesResponse)(nil),      // 33: tayfam.core.v1.ListSafetySharesResponse
+	(*timestamppb.Timestamp)(nil),         // 34: google.protobuf.Timestamp
+	(*TayfaStat)(nil),                     // 35: tayfam.core.v1.TayfaStat
+	(*EarnedBadge)(nil),                   // 36: tayfam.core.v1.EarnedBadge
+	(EventType)(0),                        // 37: tayfam.core.v1.EventType
+	(*Membership)(nil),                    // 38: tayfam.core.v1.Membership
 }
 var file_tayfam_core_v1_discover_proto_depIdxs = []int32{
-	31, // 0: tayfam.core.v1.DiscoverTayfa.create_time:type_name -> google.protobuf.Timestamp
-	32, // 1: tayfam.core.v1.DiscoverEvent.type:type_name -> tayfam.core.v1.EventType
-	31, // 2: tayfam.core.v1.DiscoverEvent.start_time:type_name -> google.protobuf.Timestamp
-	31, // 3: tayfam.core.v1.DiscoverEvent.end_time:type_name -> google.protobuf.Timestamp
-	5,  // 4: tayfam.core.v1.DiscoverItem.event:type_name -> tayfam.core.v1.DiscoverEvent
-	4,  // 5: tayfam.core.v1.DiscoverItem.tayfa:type_name -> tayfam.core.v1.DiscoverTayfa
-	3,  // 6: tayfam.core.v1.DiscoverItem.friends:type_name -> tayfam.core.v1.DiscoverPerson
-	6,  // 7: tayfam.core.v1.ListDiscoverFeedResponse.items:type_name -> tayfam.core.v1.DiscoverItem
-	33, // 8: tayfam.core.v1.JoinFromDiscoverResponse.membership:type_name -> tayfam.core.v1.Membership
-	0,  // 9: tayfam.core.v1.GetTayfaDiscoverResponse.state:type_name -> tayfam.core.v1.TayfaDiscoverState
-	0,  // 10: tayfam.core.v1.SetTayfaDiscoverResponse.state:type_name -> tayfam.core.v1.TayfaDiscoverState
-	1,  // 11: tayfam.core.v1.GetEventFeedbackResponse.answer:type_name -> tayfam.core.v1.FeedbackAnswer
-	31, // 12: tayfam.core.v1.GetEventFeedbackResponse.update_time:type_name -> google.protobuf.Timestamp
-	1,  // 13: tayfam.core.v1.SetEventFeedbackRequest.answer:type_name -> tayfam.core.v1.FeedbackAnswer
-	1,  // 14: tayfam.core.v1.SetEventFeedbackResponse.answer:type_name -> tayfam.core.v1.FeedbackAnswer
-	31, // 15: tayfam.core.v1.SetEventFeedbackResponse.update_time:type_name -> google.protobuf.Timestamp
-	3,  // 16: tayfam.core.v1.SafetyContact.contact:type_name -> tayfam.core.v1.DiscoverPerson
-	31, // 17: tayfam.core.v1.SafetyContact.return_time:type_name -> google.protobuf.Timestamp
-	31, // 18: tayfam.core.v1.SafetyContact.alert_time:type_name -> google.protobuf.Timestamp
-	19, // 19: tayfam.core.v1.GetSafetyContactResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
-	19, // 20: tayfam.core.v1.SetSafetyContactResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
-	19, // 21: tayfam.core.v1.MarkReturnedResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
-	3,  // 22: tayfam.core.v1.SafetyShare.participant:type_name -> tayfam.core.v1.DiscoverPerson
-	31, // 23: tayfam.core.v1.SafetyShare.start_time:type_name -> google.protobuf.Timestamp
-	31, // 24: tayfam.core.v1.SafetyShare.end_time:type_name -> google.protobuf.Timestamp
-	31, // 25: tayfam.core.v1.SafetyShare.return_time:type_name -> google.protobuf.Timestamp
-	31, // 26: tayfam.core.v1.SafetyShare.alert_time:type_name -> google.protobuf.Timestamp
-	2,  // 27: tayfam.core.v1.SafetyShare.state:type_name -> tayfam.core.v1.SafetyShareState
-	28, // 28: tayfam.core.v1.ListSafetySharesResponse.shares:type_name -> tayfam.core.v1.SafetyShare
-	7,  // 29: tayfam.core.v1.DiscoverService.ListDiscoverFeed:input_type -> tayfam.core.v1.ListDiscoverFeedRequest
-	9,  // 30: tayfam.core.v1.DiscoverService.JoinFromDiscover:input_type -> tayfam.core.v1.JoinFromDiscoverRequest
-	11, // 31: tayfam.core.v1.DiscoverService.GetTayfaDiscover:input_type -> tayfam.core.v1.GetTayfaDiscoverRequest
-	13, // 32: tayfam.core.v1.DiscoverService.SetTayfaDiscover:input_type -> tayfam.core.v1.SetTayfaDiscoverRequest
-	15, // 33: tayfam.core.v1.DiscoverService.GetEventFeedback:input_type -> tayfam.core.v1.GetEventFeedbackRequest
-	17, // 34: tayfam.core.v1.DiscoverService.SetEventFeedback:input_type -> tayfam.core.v1.SetEventFeedbackRequest
-	20, // 35: tayfam.core.v1.DiscoverService.GetSafetyContact:input_type -> tayfam.core.v1.GetSafetyContactRequest
-	22, // 36: tayfam.core.v1.DiscoverService.SetSafetyContact:input_type -> tayfam.core.v1.SetSafetyContactRequest
-	24, // 37: tayfam.core.v1.DiscoverService.ClearSafetyContact:input_type -> tayfam.core.v1.ClearSafetyContactRequest
-	26, // 38: tayfam.core.v1.DiscoverService.MarkReturned:input_type -> tayfam.core.v1.MarkReturnedRequest
-	29, // 39: tayfam.core.v1.DiscoverService.ListSafetyShares:input_type -> tayfam.core.v1.ListSafetySharesRequest
-	8,  // 40: tayfam.core.v1.DiscoverService.ListDiscoverFeed:output_type -> tayfam.core.v1.ListDiscoverFeedResponse
-	10, // 41: tayfam.core.v1.DiscoverService.JoinFromDiscover:output_type -> tayfam.core.v1.JoinFromDiscoverResponse
-	12, // 42: tayfam.core.v1.DiscoverService.GetTayfaDiscover:output_type -> tayfam.core.v1.GetTayfaDiscoverResponse
-	14, // 43: tayfam.core.v1.DiscoverService.SetTayfaDiscover:output_type -> tayfam.core.v1.SetTayfaDiscoverResponse
-	16, // 44: tayfam.core.v1.DiscoverService.GetEventFeedback:output_type -> tayfam.core.v1.GetEventFeedbackResponse
-	18, // 45: tayfam.core.v1.DiscoverService.SetEventFeedback:output_type -> tayfam.core.v1.SetEventFeedbackResponse
-	21, // 46: tayfam.core.v1.DiscoverService.GetSafetyContact:output_type -> tayfam.core.v1.GetSafetyContactResponse
-	23, // 47: tayfam.core.v1.DiscoverService.SetSafetyContact:output_type -> tayfam.core.v1.SetSafetyContactResponse
-	25, // 48: tayfam.core.v1.DiscoverService.ClearSafetyContact:output_type -> tayfam.core.v1.ClearSafetyContactResponse
-	27, // 49: tayfam.core.v1.DiscoverService.MarkReturned:output_type -> tayfam.core.v1.MarkReturnedResponse
-	30, // 50: tayfam.core.v1.DiscoverService.ListSafetyShares:output_type -> tayfam.core.v1.ListSafetySharesResponse
-	40, // [40:51] is the sub-list for method output_type
-	29, // [29:40] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	34, // 0: tayfam.core.v1.DiscoverTayfa.create_time:type_name -> google.protobuf.Timestamp
+	5,  // 1: tayfam.core.v1.DiscoverTayfa.showcase:type_name -> tayfam.core.v1.TayfaShowcase
+	35, // 2: tayfam.core.v1.TayfaShowcase.stats:type_name -> tayfam.core.v1.TayfaStat
+	36, // 3: tayfam.core.v1.TayfaShowcase.badges:type_name -> tayfam.core.v1.EarnedBadge
+	37, // 4: tayfam.core.v1.DiscoverEvent.type:type_name -> tayfam.core.v1.EventType
+	34, // 5: tayfam.core.v1.DiscoverEvent.start_time:type_name -> google.protobuf.Timestamp
+	34, // 6: tayfam.core.v1.DiscoverEvent.end_time:type_name -> google.protobuf.Timestamp
+	6,  // 7: tayfam.core.v1.DiscoverItem.event:type_name -> tayfam.core.v1.DiscoverEvent
+	4,  // 8: tayfam.core.v1.DiscoverItem.tayfa:type_name -> tayfam.core.v1.DiscoverTayfa
+	3,  // 9: tayfam.core.v1.DiscoverItem.friends:type_name -> tayfam.core.v1.DiscoverPerson
+	7,  // 10: tayfam.core.v1.ListDiscoverFeedResponse.items:type_name -> tayfam.core.v1.DiscoverItem
+	38, // 11: tayfam.core.v1.JoinFromDiscoverResponse.membership:type_name -> tayfam.core.v1.Membership
+	0,  // 12: tayfam.core.v1.GetTayfaDiscoverResponse.state:type_name -> tayfam.core.v1.TayfaDiscoverState
+	0,  // 13: tayfam.core.v1.SetTayfaDiscoverResponse.state:type_name -> tayfam.core.v1.TayfaDiscoverState
+	0,  // 14: tayfam.core.v1.SetTayfaStatsShowcaseResponse.state:type_name -> tayfam.core.v1.TayfaDiscoverState
+	1,  // 15: tayfam.core.v1.GetEventFeedbackResponse.answer:type_name -> tayfam.core.v1.FeedbackAnswer
+	34, // 16: tayfam.core.v1.GetEventFeedbackResponse.update_time:type_name -> google.protobuf.Timestamp
+	1,  // 17: tayfam.core.v1.SetEventFeedbackRequest.answer:type_name -> tayfam.core.v1.FeedbackAnswer
+	1,  // 18: tayfam.core.v1.SetEventFeedbackResponse.answer:type_name -> tayfam.core.v1.FeedbackAnswer
+	34, // 19: tayfam.core.v1.SetEventFeedbackResponse.update_time:type_name -> google.protobuf.Timestamp
+	3,  // 20: tayfam.core.v1.SafetyContact.contact:type_name -> tayfam.core.v1.DiscoverPerson
+	34, // 21: tayfam.core.v1.SafetyContact.return_time:type_name -> google.protobuf.Timestamp
+	34, // 22: tayfam.core.v1.SafetyContact.alert_time:type_name -> google.protobuf.Timestamp
+	22, // 23: tayfam.core.v1.GetSafetyContactResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
+	22, // 24: tayfam.core.v1.SetSafetyContactResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
+	22, // 25: tayfam.core.v1.MarkReturnedResponse.safety_contact:type_name -> tayfam.core.v1.SafetyContact
+	3,  // 26: tayfam.core.v1.SafetyShare.participant:type_name -> tayfam.core.v1.DiscoverPerson
+	34, // 27: tayfam.core.v1.SafetyShare.start_time:type_name -> google.protobuf.Timestamp
+	34, // 28: tayfam.core.v1.SafetyShare.end_time:type_name -> google.protobuf.Timestamp
+	34, // 29: tayfam.core.v1.SafetyShare.return_time:type_name -> google.protobuf.Timestamp
+	34, // 30: tayfam.core.v1.SafetyShare.alert_time:type_name -> google.protobuf.Timestamp
+	2,  // 31: tayfam.core.v1.SafetyShare.state:type_name -> tayfam.core.v1.SafetyShareState
+	31, // 32: tayfam.core.v1.ListSafetySharesResponse.shares:type_name -> tayfam.core.v1.SafetyShare
+	8,  // 33: tayfam.core.v1.DiscoverService.ListDiscoverFeed:input_type -> tayfam.core.v1.ListDiscoverFeedRequest
+	10, // 34: tayfam.core.v1.DiscoverService.JoinFromDiscover:input_type -> tayfam.core.v1.JoinFromDiscoverRequest
+	12, // 35: tayfam.core.v1.DiscoverService.GetTayfaDiscover:input_type -> tayfam.core.v1.GetTayfaDiscoverRequest
+	14, // 36: tayfam.core.v1.DiscoverService.SetTayfaDiscover:input_type -> tayfam.core.v1.SetTayfaDiscoverRequest
+	16, // 37: tayfam.core.v1.DiscoverService.SetTayfaStatsShowcase:input_type -> tayfam.core.v1.SetTayfaStatsShowcaseRequest
+	18, // 38: tayfam.core.v1.DiscoverService.GetEventFeedback:input_type -> tayfam.core.v1.GetEventFeedbackRequest
+	20, // 39: tayfam.core.v1.DiscoverService.SetEventFeedback:input_type -> tayfam.core.v1.SetEventFeedbackRequest
+	23, // 40: tayfam.core.v1.DiscoverService.GetSafetyContact:input_type -> tayfam.core.v1.GetSafetyContactRequest
+	25, // 41: tayfam.core.v1.DiscoverService.SetSafetyContact:input_type -> tayfam.core.v1.SetSafetyContactRequest
+	27, // 42: tayfam.core.v1.DiscoverService.ClearSafetyContact:input_type -> tayfam.core.v1.ClearSafetyContactRequest
+	29, // 43: tayfam.core.v1.DiscoverService.MarkReturned:input_type -> tayfam.core.v1.MarkReturnedRequest
+	32, // 44: tayfam.core.v1.DiscoverService.ListSafetyShares:input_type -> tayfam.core.v1.ListSafetySharesRequest
+	9,  // 45: tayfam.core.v1.DiscoverService.ListDiscoverFeed:output_type -> tayfam.core.v1.ListDiscoverFeedResponse
+	11, // 46: tayfam.core.v1.DiscoverService.JoinFromDiscover:output_type -> tayfam.core.v1.JoinFromDiscoverResponse
+	13, // 47: tayfam.core.v1.DiscoverService.GetTayfaDiscover:output_type -> tayfam.core.v1.GetTayfaDiscoverResponse
+	15, // 48: tayfam.core.v1.DiscoverService.SetTayfaDiscover:output_type -> tayfam.core.v1.SetTayfaDiscoverResponse
+	17, // 49: tayfam.core.v1.DiscoverService.SetTayfaStatsShowcase:output_type -> tayfam.core.v1.SetTayfaStatsShowcaseResponse
+	19, // 50: tayfam.core.v1.DiscoverService.GetEventFeedback:output_type -> tayfam.core.v1.GetEventFeedbackResponse
+	21, // 51: tayfam.core.v1.DiscoverService.SetEventFeedback:output_type -> tayfam.core.v1.SetEventFeedbackResponse
+	24, // 52: tayfam.core.v1.DiscoverService.GetSafetyContact:output_type -> tayfam.core.v1.GetSafetyContactResponse
+	26, // 53: tayfam.core.v1.DiscoverService.SetSafetyContact:output_type -> tayfam.core.v1.SetSafetyContactResponse
+	28, // 54: tayfam.core.v1.DiscoverService.ClearSafetyContact:output_type -> tayfam.core.v1.ClearSafetyContactResponse
+	30, // 55: tayfam.core.v1.DiscoverService.MarkReturned:output_type -> tayfam.core.v1.MarkReturnedResponse
+	33, // 56: tayfam.core.v1.DiscoverService.ListSafetyShares:output_type -> tayfam.core.v1.ListSafetySharesResponse
+	45, // [45:57] is the sub-list for method output_type
+	33, // [33:45] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_discover_proto_init() }
@@ -2016,7 +2252,9 @@ func file_tayfam_core_v1_discover_proto_init() {
 	if File_tayfam_core_v1_discover_proto != nil {
 		return
 	}
+	file_tayfam_core_v1_badge_proto_init()
 	file_tayfam_core_v1_membership_proto_init()
+	file_tayfam_core_v1_stats_proto_init()
 	file_tayfam_core_v1_tayfa_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2024,7 +2262,7 @@ func file_tayfam_core_v1_discover_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_discover_proto_rawDesc), len(file_tayfam_core_v1_discover_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   28,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

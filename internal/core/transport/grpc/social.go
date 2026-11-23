@@ -297,9 +297,16 @@ func (s *SocialServer) UpdateSocialSettings(ctx context.Context, req *corev1.Upd
 	if err != nil {
 		return nil, err
 	}
+	nowFrom := ""
+	if v := req.GetNowFromFriends(); v != corev1.NowFromFriends_NOW_FROM_FRIENDS_UNSPECIFIED {
+		var ok bool
+		if nowFrom, ok = nowFromFriends[v]; !ok {
+			return nil, validation("now_from_friends")
+		}
+	}
 	st, err := s.app.UpdateSocialSettings(ctx, u, social.SettingsUpdate{
 		ProfilingEnabled: req.ProfilingEnabled, HideFromSuggestions: req.HideFromSuggestions,
-		DiscoverVisibleToFriends: req.DiscoverVisibleToFriends,
+		DiscoverVisibleToFriends: req.DiscoverVisibleToFriends, NowFromFriends: nowFrom,
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -307,9 +314,22 @@ func (s *SocialServer) UpdateSocialSettings(ctx context.Context, req *corev1.Upd
 	return &corev1.UpdateSocialSettingsResponse{Settings: settingsPB(st)}, nil
 }
 
+// nowFromFriends maps SocialSettings.now_from_friends (ADR-0038 §4).
+var nowFromFriends = map[corev1.NowFromFriends]string{
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_ALL:   social.NowFromAll,
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_CLOSE: social.NowFromClose,
+	corev1.NowFromFriends_NOW_FROM_FRIENDS_OFF:   social.NowFromOff,
+}
+
 func settingsPB(st social.Settings) *corev1.SocialSettings {
-	return &corev1.SocialSettings{
+	out := &corev1.SocialSettings{
 		ProfilingEnabled: st.ProfilingEnabled, HideFromSuggestions: st.HideFromSuggestions,
 		DiscoverVisibleToFriends: st.DiscoverVisibleToFriends,
 	}
+	for k, v := range nowFromFriends {
+		if v == st.NowFromFriends {
+			out.NowFromFriends = k
+		}
+	}
+	return out
 }

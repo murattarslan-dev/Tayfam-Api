@@ -11,12 +11,6 @@ import (
 // gateway only maps names and bounds the input.
 
 var (
-	profileInterests = newEnum(map[string]identityv1.ProfileInterest{
-		"convoy": identityv1.ProfileInterest_PROFILE_INTEREST_CONVOY, "camp": identityv1.ProfileInterest_PROFILE_INTEREST_CAMP,
-		"hike": identityv1.ProfileInterest_PROFILE_INTEREST_HIKE, "fishing": identityv1.ProfileInterest_PROFILE_INTEREST_FISHING,
-		"gaming": identityv1.ProfileInterest_PROFILE_INTEREST_GAMING, "sports": identityv1.ProfileInterest_PROFILE_INTEREST_SPORTS,
-		"general": identityv1.ProfileInterest_PROFILE_INTEREST_GENERAL,
-	})
 	socialPlatforms = newEnum(map[string]identityv1.SocialPlatform{
 		"instagram": identityv1.SocialPlatform_SOCIAL_PLATFORM_INSTAGRAM, "x": identityv1.SocialPlatform_SOCIAL_PLATFORM_X,
 		"tiktok": identityv1.SocialPlatform_SOCIAL_PLATFORM_TIKTOK, "youtube": identityv1.SocialPlatform_SOCIAL_PLATFORM_YOUTUBE,
@@ -66,7 +60,7 @@ type aboutJSON struct {
 
 func aboutFrom(p *identityv1.ProfileFields) aboutJSON {
 	out := aboutJSON{
-		Interests: profileInterests.names(p.GetInterests()), About: p.GetAbout(), Occupation: p.GetOccupation(),
+		Interests: interestNames(p.GetInterestKeys()), About: p.GetAbout(), Occupation: p.GetOccupation(),
 		Team: p.GetTeam(), Languages: p.GetLanguages(),
 	}
 	if len(p.GetSocialAccounts()) > 0 {
@@ -92,7 +86,7 @@ type accountProfileJSON struct {
 func accountProfileFrom(a *identityv1.GetAccountResponse) accountProfileJSON {
 	p := a.GetProfile()
 	return accountProfileJSON{
-		Interests: profileInterests.names(p.GetInterests()), About: p.GetAbout(), Occupation: p.GetOccupation(),
+		Interests: interestNames(p.GetInterestKeys()), About: p.GetAbout(), Occupation: p.GetOccupation(),
 		Team: p.GetTeam(), Languages: stringsOrEmpty(p.GetLanguages()), SocialAccounts: socialFrom(p.GetSocialAccounts()),
 		DeclinedProfileFields:    profileFieldNames.names(a.GetDeclinedProfileFields()),
 		AboutVisibility:          aboutVisibilities.name(a.GetAboutVisibility()),
@@ -132,11 +126,13 @@ func (p profilePatch) apply(req *identityv1.UpdateAccountRequest) bool {
 	}
 	u := &identityv1.ProfileUpdate{About: p.About, Occupation: p.Occupation, Team: p.Team}
 	if p.Interests != nil {
-		v, ok := profileInterests.values(*p.Interests)
+		// Interests are catalog interest keys (ADR-0025 §10); identity
+		// checks them against its copy of the catalog.
+		v, ok := interestKeys(*p.Interests)
 		if !ok {
 			return false
 		}
-		u.Interests = &identityv1.InterestList{Values: v}
+		u.Interests = &identityv1.InterestList{Keys: v}
 	}
 	if p.Languages != nil {
 		if len(*p.Languages) > maxProfileList {

@@ -13,6 +13,7 @@ package coreevents
 import (
 	"context"
 	"errors"
+	"regexp"
 
 	"time"
 
@@ -27,7 +28,8 @@ import (
 )
 
 // Event is one core event: exactly one of Notification, Purged,
-// MemberChanged, StatusChanged, Attendance, Schedule and RemovedMessage.
+// MemberChanged, StatusChanged, Attendance, Schedule, RemovedMessage and
+// Component.
 type Event struct {
 	ID    id.ID // core's outbox event ID
 	Tayfa id.ID // zero only for a notification not about a tayfa
@@ -51,6 +53,15 @@ type Event struct {
 	// (issue #205, ADR-0031); RemovedBy is the platform administrator.
 	RemovedMessage id.ID
 	RemovedBy      id.ID
+	// Component: a component of an event changed (issue #238).
+	Component *ComponentChanged
+}
+
+// ComponentChanged is an event_component_changed: IDs only. Key is empty
+// when the event's selections or referees changed.
+type ComponentChanged struct {
+	Event id.ID
+	Key   string
 }
 
 // Attendance is an event_attendance_changed: whether User is in Event's
@@ -65,6 +76,10 @@ type Schedule struct {
 	// End is the event's end, or the moment it was cancelled.
 	End time.Time
 }
+
+// componentKeyPattern is the form of a component key in core's catalog
+// (ADR-0025 §2).
+var componentKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{1,39}$`)
 
 // AccessCache is the channel permission cache that membership and tayfa
 // state changes clear (issue #81). chat keeps no copy of memberships.
@@ -83,6 +98,7 @@ type Live interface {
 	TayfaPurged(tayfa id.ID)
 	Notified(r notification.Request)
 	MessageDeleted(tayfa, ch, message id.ID)
+	ComponentChanged(tayfa, event id.ID, key string)
 }
 
 // Config wires a Service.
@@ -110,7 +126,7 @@ func New(cfg Config) (*Service, error) {
 // Apply applies e in one transaction.
 func (s *Service) Apply(ctx context.Context, e Event) error {
 	kinds := 0
-	for _, set := range []bool{e.Notification != nil, e.Purged, e.MemberChanged != (id.ID{}), e.StatusChanged, e.Attendance != nil, e.Schedule != nil, e.RemovedMessage != (id.ID{})} {
+	for _, set := range []bool{e.Notification != nil, e.Purged, e.MemberChanged != (id.ID{}), e.StatusChanged, e.Attendance != nil, e.Schedule != nil, e.RemovedMessage != (id.ID{}), e.Component != nil} {
 		if set {
 			kinds++
 		}
@@ -125,6 +141,8 @@ func (s *Service) Apply(ctx context.Context, e Event) error {
 		return apperr.Validation("tayfa_id")
 	}
 	switch {
+	case e.Component != nil:
+		return s.component(e)
 	case e.RemovedMessage != (id.ID{}):
 		return s.removeMessage(ctx, e)
 	case e.Attendance != nil:
@@ -217,6 +235,23 @@ func (s *Service) removeMessage(ctx context.Context, e Event) error {
 	}
 	if changed && s.cfg.Live != nil {
 		s.cfg.Live.MessageDeleted(e.Tayfa, ch, e.RemovedMessage)
+	}
+	return nil
+}
+
+// component tells the connections that watch the event (ADR-0025 §6).
+// Nothing is stored, so applying the event again only repeats the frame,
+// and clients read the component again either way.
+func (s *Service) component(e Event) error {
+	c := e.Component
+	if c.Event == (id.ID{}) {
+		return apperr.Validation("event_component_changed.event_id")
+	}
+	if c.Key != "" && !componentKeyPattern.MatchString(c.Key) {
+		return apperr.Validation("event_component_changed.component_key")
+	}
+	if s.cfg.Live != nil {
+		s.cfg.Live.ComponentChanged(e.Tayfa, c.Event, c.Key)
 	}
 	return nil
 }

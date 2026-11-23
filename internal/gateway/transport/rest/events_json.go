@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"encoding/json"
 	"math"
 	"time"
 
@@ -29,23 +30,7 @@ var (
 	attendanceMethods = newEnum(map[string]corev1.AttendanceMethod{
 		"location": corev1.AttendanceMethod_ATTENDANCE_METHOD_LOCATION, "online": corev1.AttendanceMethod_ATTENDANCE_METHOD_ONLINE,
 		"hike_start": corev1.AttendanceMethod_ATTENDANCE_METHOD_HIKE_START, "organizer": corev1.AttendanceMethod_ATTENDANCE_METHOD_ORGANIZER,
-	})
-	catchVisibilities = newEnum(map[string]corev1.CatchVisibility{
-		"self": corev1.CatchVisibility_CATCH_VISIBILITY_SELF, "tayfa": corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA,
-	})
-	spotVisibilities = newEnum(map[string]corev1.SpotVisibility{
-		"tayfa": corev1.SpotVisibility_SPOT_VISIBILITY_TAYFA, "participants": corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS,
-	})
-	gamingPlatforms = newEnum(map[string]corev1.GamingPlatform{
-		"pc": corev1.GamingPlatform_GAMING_PLATFORM_PC, "playstation": corev1.GamingPlatform_GAMING_PLATFORM_PLAYSTATION,
-		"xbox": corev1.GamingPlatform_GAMING_PLATFORM_XBOX, "switch": corev1.GamingPlatform_GAMING_PLATFORM_SWITCH,
-		"mobile": corev1.GamingPlatform_GAMING_PLATFORM_MOBILE, "other": corev1.GamingPlatform_GAMING_PLATFORM_OTHER,
-	})
-	sports = newEnum(map[string]corev1.Sport{
-		"football": corev1.Sport_SPORT_FOOTBALL, "table_football": corev1.Sport_SPORT_TABLE_FOOTBALL,
-		"basketball": corev1.Sport_SPORT_BASKETBALL, "volleyball": corev1.Sport_SPORT_VOLLEYBALL,
-		"tennis": corev1.Sport_SPORT_TENNIS, "table_tennis": corev1.Sport_SPORT_TABLE_TENNIS,
-		"other": corev1.Sport_SPORT_OTHER,
+		"qr": corev1.AttendanceMethod_ATTENDANCE_METHOD_QR,
 	})
 )
 
@@ -89,86 +74,20 @@ func latLngFrom(p *corev1.LatLng) *latLngJSON {
 	return &latLngJSON{p.GetLat(), p.GetLng()}
 }
 
-// --- Type details (output) ---
-
-type convoyVehicleJSON struct {
-	ID        string `json:"id"`
-	UserID    string `json:"user_id"`
-	Make      string `json:"make"`
-	Model     string `json:"model,omitempty"`
-	ModelYear int32  `json:"model_year,omitempty"`
-	Color     string `json:"color,omitempty"`
-	// Only core decides who gets it (participants and the organizer).
-	Plate string `json:"plate,omitempty"`
-}
-
-func convoyVehicleFrom(v *corev1.ConvoyVehicle) convoyVehicleJSON {
-	return convoyVehicleJSON{
-		ID: v.GetId(), UserID: v.GetUserId(), Make: v.GetMake(), Model: v.GetModel(),
-		ModelYear: v.GetModelYear(), Color: v.GetColor(), Plate: v.GetPlate(),
-	}
-}
-
-type convoyJSON struct {
-	Route    []latLngJSON        `json:"route"`
-	Vehicles []convoyVehicleJSON `json:"vehicles"`
-}
-
-type campItemJSON struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Quantity       int32  `json:"quantity"`
-	AssignedUserID string `json:"assigned_user_id,omitempty"`
-}
-
-func campItemFrom(i *corev1.CampItem) campItemJSON {
-	return campItemJSON{ID: i.GetId(), Name: i.GetName(), Quantity: i.GetQuantity(), AssignedUserID: i.GetAssignedUserId()}
-}
-
-type campJSON struct {
-	SiteName  string         `json:"site_name"`
-	HasWater  *bool          `json:"has_water,omitempty"`
-	HasToilet *bool          `json:"has_toilet,omitempty"`
-	Notes     string         `json:"notes"`
-	Items     []campItemJSON `json:"items"`
-}
-
-// hikeJSON is used for both input and output.
-type hikeJSON struct {
-	Difficulty         int32      `json:"difficulty"`
-	DistanceKm         float64    `json:"distance_km"`
-	ElevationM         int32      `json:"elevation_m"`
-	ExpectedReturnAt   *time.Time `json:"expected_return_at,omitempty"`
-	ReturnGraceMinutes int32      `json:"return_grace_minutes"`
-}
-
-// fishingJSON is used for both input and output; an empty input value means
-// the default (tayfa).
-type fishingJSON struct {
-	SpotVisibility string `json:"spot_visibility,omitempty"`
-}
-
-// gamingJSON is used for both input and output.
-type gamingJSON struct {
-	Game     string `json:"game"`
-	Platform string `json:"platform"`
-}
-
-// sportsJSON is used for both input and output.
-type sportsJSON struct {
-	Sport     string `json:"sport"`
-	VenueName string `json:"venue_name"`
-}
-
 type eventJSON struct {
-	ID               string      `json:"id"`
-	TayfaID          string      `json:"tayfa_id"`
-	Type             string      `json:"type"`
-	Mode             string      `json:"mode"`
-	Title            string      `json:"title"`
-	Description      string      `json:"description"`
-	StartsAt         time.Time   `json:"starts_at"`
-	EndsAt           time.Time   `json:"ends_at"`
+	ID      string `json:"id"`
+	TayfaID string `json:"tayfa_id"`
+	// Type is the catalog key of the event's type; TypeVersion the version
+	// it was created with (GET /v1/catalog/event-types/{key}/versions/{version}).
+	Type        string    `json:"type"`
+	TypeVersion int32     `json:"type_version"`
+	Mode        string    `json:"mode"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	StartsAt    time.Time `json:"starts_at"`
+	EndsAt      time.Time `json:"ends_at"`
+	// OpenEnded: started now and not finished (ADR-0038 §1).
+	OpenEnded        bool        `json:"open_ended"`
 	MeetingPointName string      `json:"meeting_point_name,omitempty"`
 	MeetingPoint     *latLngJSON `json:"meeting_point,omitempty"`
 	City             string      `json:"city,omitempty"`
@@ -193,19 +112,41 @@ type eventJSON struct {
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 
-	Convoy  *convoyJSON  `json:"convoy,omitempty"`
-	Camp    *campJSON    `json:"camp,omitempty"`
-	Hike    *hikeJSON    `json:"hike,omitempty"`
-	Fishing *fishingJSON `json:"fishing,omitempty"`
-	Gaming  *gamingJSON  `json:"gaming,omitempty"`
-	Sports  *sportsJSON  `json:"sports,omitempty"`
+	// Fields holds the values of the type's fields by field key; left out
+	// when the event has none and in lists.
+	Fields map[string]json.RawMessage `json:"fields,omitempty"`
+}
+
+// eventTypeKey is the event's catalog key. An older core sends only the
+// Faz 1 enum.
+func eventTypeKey(e *corev1.Event) string {
+	if k := e.GetTypeKey(); k != "" {
+		return k
+	}
+	return eventTypes.name(e.GetType())
+}
+
+// eventFieldsFrom passes core's field values (JSON text by field key) on
+// as JSON. core wrote them itself; a value that is not valid JSON is left
+// out rather than breaking the body.
+func eventFieldsFrom(in map[string]string) map[string]json.RawMessage {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]json.RawMessage, len(in))
+	for k, v := range in {
+		if json.Valid([]byte(v)) {
+			out[k] = json.RawMessage(v)
+		}
+	}
+	return out
 }
 
 func eventFrom(e *corev1.Event) eventJSON {
 	out := eventJSON{
-		ID: e.GetId(), TayfaID: e.GetTayfaId(), Type: eventTypes.name(e.GetType()), Mode: eventModes.name(e.GetMode()),
-		Title: e.GetTitle(), Description: e.GetDescription(),
-		StartsAt: e.GetStartTime().AsTime(), EndsAt: e.GetEndTime().AsTime(),
+		ID: e.GetId(), TayfaID: e.GetTayfaId(), Type: eventTypeKey(e), TypeVersion: e.GetTypeVersion(), Mode: eventModes.name(e.GetMode()),
+		Title: e.GetTitle(), Description: e.GetDescription(), Fields: eventFieldsFrom(e.GetFields()),
+		StartsAt: e.GetStartTime().AsTime(), EndsAt: e.GetEndTime().AsTime(), OpenEnded: e.GetOpenEnded(),
 		MeetingPointName: e.GetMeetingPointName(), MeetingPoint: latLngFrom(e.GetMeetingPoint()),
 		City: e.GetCity(), District: e.GetDistrict(), OnlineURL: e.GetOnlineUrl(),
 		Capacity: e.GetCapacity(), Status: eventStatuses.name(e.GetStatus()),
@@ -216,34 +157,6 @@ func eventFrom(e *corev1.Event) eventJSON {
 		CallerAttendance: optName(attendanceStatuses, e.GetCallerAttendance()),
 		SeriesID:         e.GetSeriesId(), SeriesOverride: e.GetSeriesOverride(), CoverUploadID: e.GetCoverUploadId(),
 		CreatedAt: e.GetCreateTime().AsTime(), UpdatedAt: e.GetUpdateTime().AsTime(),
-	}
-	switch d := e.GetDetails().(type) {
-	case *corev1.Event_Convoy:
-		c := &convoyJSON{Route: make([]latLngJSON, 0, len(d.Convoy.GetRoute())), Vehicles: make([]convoyVehicleJSON, 0, len(d.Convoy.GetVehicles()))}
-		for _, p := range d.Convoy.GetRoute() {
-			c.Route = append(c.Route, latLngJSON{p.GetLat(), p.GetLng()})
-		}
-		for _, v := range d.Convoy.GetVehicles() {
-			c.Vehicles = append(c.Vehicles, convoyVehicleFrom(v))
-		}
-		out.Convoy = c
-	case *corev1.Event_Camp:
-		c := &campJSON{SiteName: d.Camp.GetSiteName(), HasWater: d.Camp.HasWater, HasToilet: d.Camp.HasToilet, Notes: d.Camp.GetNotes(), Items: make([]campItemJSON, 0, len(d.Camp.GetItems()))}
-		for _, i := range d.Camp.GetItems() {
-			c.Items = append(c.Items, campItemFrom(i))
-		}
-		out.Camp = c
-	case *corev1.Event_Hike:
-		out.Hike = &hikeJSON{
-			Difficulty: d.Hike.GetDifficulty(), DistanceKm: d.Hike.GetDistanceKm(), ElevationM: d.Hike.GetElevationM(),
-			ExpectedReturnAt: optTime(d.Hike.GetExpectedReturnTime()), ReturnGraceMinutes: d.Hike.GetReturnGraceMinutes(),
-		}
-	case *corev1.Event_Fishing:
-		out.Fishing = &fishingJSON{SpotVisibility: spotVisibilities.name(d.Fishing.GetSpotVisibility())}
-	case *corev1.Event_Gaming:
-		out.Gaming = &gamingJSON{Game: d.Gaming.GetGame(), Platform: gamingPlatforms.name(d.Gaming.GetPlatform())}
-	case *corev1.Event_Sports:
-		out.Sports = &sportsJSON{Sport: sports.name(d.Sports.GetSport()), VenueName: d.Sports.GetVenueName()}
 	}
 	return out
 }
@@ -273,41 +186,6 @@ type attendeeListJSON struct {
 type checkInJSON struct {
 	Attendance string `json:"attendance"`
 	Method     string `json:"method"`
-}
-
-type hikeCheckinJSON struct {
-	StartedAt  time.Time  `json:"started_at"`
-	ReturnedAt *time.Time `json:"returned_at,omitempty"`
-}
-
-func hikeCheckinFrom(c *corev1.HikeCheckin) hikeCheckinJSON {
-	return hikeCheckinJSON{StartedAt: c.GetStartTime().AsTime(), ReturnedAt: optTime(c.GetReturnTime())}
-}
-
-type fishingCatchJSON struct {
-	ID       string  `json:"id"`
-	UserID   string  `json:"user_id"`
-	Species  string  `json:"species"`
-	LengthCm float64 `json:"length_cm"`
-	// Only core decides who gets it.
-	Location   *latLngJSON `json:"location,omitempty"`
-	Visibility string      `json:"visibility"`
-	CreatedAt  time.Time   `json:"created_at"`
-	// PhotoUploadID: links with POST /v1/media/urls (issue #135).
-	PhotoUploadID string `json:"photo_upload_id,omitempty"`
-}
-
-func fishingCatchFrom(c *corev1.FishingCatch) fishingCatchJSON {
-	return fishingCatchJSON{
-		ID: c.GetId(), UserID: c.GetUserId(), Species: c.GetSpecies(), LengthCm: c.GetLengthCm(),
-		Location: latLngFrom(c.GetLocation()), Visibility: catchVisibilities.name(c.GetVisibility()),
-		CreatedAt: c.GetCreateTime().AsTime(), PhotoUploadID: c.GetPhotoUploadId(),
-	}
-}
-
-type fishingCatchListJSON struct {
-	Catches       []fishingCatchJSON `json:"catches"`
-	NextPageToken string             `json:"next_page_token,omitempty"`
 }
 
 // eventPhotoJSON is an album photo (issue #206). Links come from

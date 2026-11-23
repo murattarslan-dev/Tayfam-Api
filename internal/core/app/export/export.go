@@ -30,7 +30,7 @@ import (
 const (
 	SectionMemberships     = "memberships"
 	SectionEventRSVPs      = "event_rsvps"
-	SectionHikeCheckins    = "hike_checkins"
+	SectionHikeCheckins    = "hike_checkins" // every roll call (#242); the Faz 1 name
 	SectionConvoyVehicles  = "convoy_vehicles"
 	SectionActivityRecords = "activity_records"
 	SectionAnnouncements   = "announcements"
@@ -40,7 +40,7 @@ const (
 	SectionAnswerVotes     = "answer_votes"
 	SectionPolls           = "polls"
 	SectionPollVotes       = "poll_votes"
-	SectionFishingCatches  = "fishing_catches"
+	SectionFishingCatches  = "fishing_catches" // every log entry (#243); the Faz 1 name
 	SectionEventPhotos     = "event_photos"
 	SectionFriendships     = "friendships"
 	SectionBlocks          = "blocks"
@@ -54,6 +54,52 @@ const (
 	// Issue #210, ADR-0033 §13: one's feedback answers and the safety
 	// contacts one chose; being someone else's contact is their data.
 	SectionDiscover = "discover"
+	// Issue #240: one's requests for a seat in someone else's vehicle.
+	// One's own vehicles are SectionConvoyVehicles (the name is from Faz 1).
+	SectionVehicleSeatRequests = "vehicle_seat_requests"
+	// Issue #245: one's personal measurements; totals belong to the event.
+	SectionMeasurements = "measurements"
+	// Issue #248: the teams one is in.
+	SectionTeamMemberships = "team_memberships"
+	// Issue #249: one's places in draws.
+	SectionDrawEntries = "draw_entries"
+	// Issue #250: one's seats and scores at scoreboard tables.
+	SectionScores = "scoreboard_scores"
+	// Issue #251: one's matches in brackets and one's own scores.
+	SectionBracketMatches = "bracket_matches"
+	// Issue #252: the guest players one added and their nicknames.
+	SectionGuestPlayers = "guest_players"
+	// Issue #253: one's rankings entered by hand; the computed ones are
+	// one's measurements.
+	SectionRankingEntries = "ranking_entries"
+	// Issue #255: the celebrations that named one a winner by hand.
+	SectionCelebrationWins = "celebration_wins"
+	// Issue #256: the questions one asked (anonymous ones included) and
+	// voted for.
+	SectionEventQuestions = "event_questions"
+	// Issue #258: one's badges (ADR-0039 §5).
+	SectionBadges = "badges"
+	// Issue #266: one's statistics per tayfa and year (ADR-0026).
+	SectionUserStats = "user_stats"
+	// Issue #269: the daily content items one added (ADR-0027 §5).
+	SectionDailyItems = "daily_items"
+	// Issue #270: the library items one owns and one's loans and queue
+	// places (ADR-0040 §1).
+	SectionLibraryItems = "library_items"
+	SectionLibraryLoans = "library_loans"
+	// Issue #261: the materials one added (ADR-0040 §3).
+	SectionMaterials = "materials"
+	// Issue #272: one's garage vehicles and visibility choices (ADR-0040
+	// §4).
+	SectionGarageVehicles   = "garage_vehicles"
+	SectionGarageVisibility = "garage_visibility"
+	// Issue #275 (the KVKK audit of v3): referee assignments (#238), list
+	// items added or taken on (#241) and vocabulary values added (#244).
+	SectionEventReferees  = "event_referees"
+	SectionChecklistItems = "checklist_items"
+	SectionVocabulary     = "vocabulary"
+	// Issue #254: one's votes in the vote component.
+	SectionEventVotes = "event_votes"
 )
 
 const (
@@ -144,8 +190,8 @@ var sections = []struct {
 		return rows(r, err, func(x store.ExportPollVotesRow) row { return row{x.K, x.Data} })
 	}},
 	{SectionFishingCatches, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
-		r, err := q.ExportFishingCatches(ctx, store.ExportFishingCatchesParams{UserID: u, After: a, N: n})
-		return rows(r, err, func(x store.ExportFishingCatchesRow) row { return row{x.K, x.Data} })
+		r, err := q.ExportLogEntries(ctx, store.ExportLogEntriesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportLogEntriesRow) row { return row{x.K, x.Data} })
 	}},
 	{SectionEventPhotos, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportEventPhotos(ctx, store.ExportEventPhotosParams{UserID: u, After: a, N: n})
@@ -182,6 +228,94 @@ var sections = []struct {
 	{SectionDiscover, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportDiscover(ctx, store.ExportDiscoverParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportDiscoverRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionVehicleSeatRequests, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportVehicleSeatRequests(ctx, store.ExportVehicleSeatRequestsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportVehicleSeatRequestsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionMeasurements, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportMeasurements(ctx, store.ExportMeasurementsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportMeasurementsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionTeamMemberships, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportTeamMemberships(ctx, store.ExportTeamMembershipsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportTeamMembershipsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionDrawEntries, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportDrawEntries(ctx, store.ExportDrawEntriesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportDrawEntriesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionScores, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportScores(ctx, store.ExportScoresParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportScoresRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionBracketMatches, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportBracketMatches(ctx, store.ExportBracketMatchesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportBracketMatchesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionGuestPlayers, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportGuestPlayers(ctx, store.ExportGuestPlayersParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportGuestPlayersRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionRankingEntries, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportRankingEntries(ctx, store.ExportRankingEntriesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportRankingEntriesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionCelebrationWins, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportCelebrationWins(ctx, store.ExportCelebrationWinsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportCelebrationWinsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionEventQuestions, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportEventQuestions(ctx, store.ExportEventQuestionsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportEventQuestionsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionBadges, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportUserBadges(ctx, store.ExportUserBadgesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportUserBadgesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionUserStats, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportUserStats(ctx, store.ExportUserStatsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportUserStatsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionDailyItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportDailyItems(ctx, store.ExportDailyItemsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportDailyItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionLibraryItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportLibraryItems(ctx, store.ExportLibraryItemsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportLibraryItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionLibraryLoans, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportLibraryLoans(ctx, store.ExportLibraryLoansParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportLibraryLoansRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionMaterials, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportMaterials(ctx, store.ExportMaterialsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportMaterialsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionGarageVehicles, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportGarageVehicles(ctx, store.ExportGarageVehiclesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportGarageVehiclesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionGarageVisibility, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportGarageVisibility(ctx, store.ExportGarageVisibilityParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportGarageVisibilityRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionEventReferees, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportEventReferees(ctx, store.ExportEventRefereesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportEventRefereesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionChecklistItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportChecklistItems(ctx, store.ExportChecklistItemsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportChecklistItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionVocabulary, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportVocabulary(ctx, store.ExportVocabularyParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportVocabularyRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionEventVotes, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportEventVotes(ctx, store.ExportEventVotesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportEventVotesRow) row { return row{x.K, x.Data} })
 	}},
 }
 

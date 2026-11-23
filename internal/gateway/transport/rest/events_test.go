@@ -25,7 +25,7 @@ const (
 	eventID   = "01965a3c-0000-7000-8000-000000000005"
 	itemID    = "01965a3c-0000-7000-8000-000000000006"
 	vehicleID = "01965a3c-0000-7000-8000-000000000007"
-	catchID   = "01965a3c-0000-7000-8000-000000000008"
+	entryID   = "01965a3c-0000-7000-8000-000000000008"
 	seriesID  = "01965a3c-0000-7000-8000-000000000009"
 	photoID   = "01965a3c-0000-7000-8000-0000000000a1"
 	uploadID2 = "01965a3c-0000-7000-8000-0000000000a2"
@@ -48,10 +48,6 @@ func testEvent() *corev1.Event {
 		CreateTime: timestamppb.New(t0), UpdateTime: timestamppb.New(t0),
 		GoingCount: 3, MaybeCount: 1, CallerRsvp: corev1.RsvpStatus_RSVP_STATUS_GOING, CallerCanManage: true,
 		SeriesId: seriesID,
-		Details: &corev1.Event_Convoy{Convoy: &corev1.ConvoyDetails{
-			Route:    []*corev1.LatLng{{Lat: 41, Lng: 29}, {Lat: 41.1, Lng: 29.1}},
-			Vehicles: []*corev1.ConvoyVehicle{{Id: vehicleID, UserId: userID, Make: "Ford", ModelYear: 1967, Plate: "34 ABC 12"}},
-		}},
 	}
 }
 
@@ -81,7 +77,23 @@ func (f *fakeCore) CancelEvent(ctx context.Context, in *corev1.CancelEventReques
 	e.Status, e.CancelTime, e.CancelReason = corev1.EventStatus_EVENT_STATUS_CANCELLED, timestamppb.New(t0), in.GetReason()
 	return &corev1.CancelEventResponse{Event: e}, f.record(ctx, in)
 }
+func (f *fakeCore) FinishEvent(ctx context.Context, in *corev1.FinishEventRequest, _ ...grpc.CallOption) (*corev1.FinishEventResponse, error) {
+	e := testEvent()
+	e.EndTime = timestamppb.New(t0)
+	return &corev1.FinishEventResponse{Event: e}, f.record(ctx, in)
+}
+func (f *fakeCore) CreateEventJoinQr(ctx context.Context, in *corev1.CreateEventJoinQrRequest, _ ...grpc.CallOption) (*corev1.CreateEventJoinQrResponse, error) {
+	return &corev1.CreateEventJoinQrResponse{Token: "QRTOKEN", ExpireTime: timestamppb.New(t0)}, f.record(ctx, in)
+}
+func (f *fakeCore) JoinEventByQr(ctx context.Context, in *corev1.JoinEventByQrRequest, _ ...grpc.CallOption) (*corev1.JoinEventByQrResponse, error) {
+	return &corev1.JoinEventByQrResponse{
+		TayfaId: tayfaID, EventId: eventID, Rsvp: corev1.RsvpStatus_RSVP_STATUS_GOING, Attendance: corev1.AttendanceStatus_ATTENDANCE_STATUS_ATTENDED,
+	}, f.record(ctx, in)
+}
 func (f *fakeCore) GetEvent(ctx context.Context, in *corev1.GetEventRequest, _ ...grpc.CallOption) (*corev1.GetEventResponse, error) {
+	if f.event != nil {
+		return &corev1.GetEventResponse{Event: f.event}, f.record(ctx, in)
+	}
 	return &corev1.GetEventResponse{Event: testEvent()}, f.record(ctx, in)
 }
 func (f *fakeCore) ListUpcomingEvents(ctx context.Context, in *corev1.ListUpcomingEventsRequest, _ ...grpc.CallOption) (*corev1.ListUpcomingEventsResponse, error) {
@@ -101,46 +113,11 @@ func (f *fakeCore) ListAttendees(ctx context.Context, in *corev1.ListAttendeesRe
 		{UserId: tayfaID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING, UpdateTime: timestamppb.New(t0)},
 	}}, f.record(ctx, in)
 }
-func (f *fakeCore) AddCampItem(ctx context.Context, in *corev1.AddCampItemRequest, _ ...grpc.CallOption) (*corev1.AddCampItemResponse, error) {
-	return &corev1.AddCampItemResponse{Item: &corev1.CampItem{Id: itemID, Name: in.GetName(), Quantity: 1}}, f.record(ctx, in)
-}
-func (f *fakeCore) RemoveCampItem(ctx context.Context, in *corev1.RemoveCampItemRequest, _ ...grpc.CallOption) (*corev1.RemoveCampItemResponse, error) {
-	return &corev1.RemoveCampItemResponse{}, f.record(ctx, in)
-}
-func (f *fakeCore) AssignCampItem(ctx context.Context, in *corev1.AssignCampItemRequest, _ ...grpc.CallOption) (*corev1.AssignCampItemResponse, error) {
-	return &corev1.AssignCampItemResponse{Item: &corev1.CampItem{Id: in.GetItemId(), Name: "Çadır", Quantity: 1, AssignedUserId: in.GetAssignedUserId()}}, f.record(ctx, in)
-}
-func (f *fakeCore) AddConvoyVehicle(ctx context.Context, in *corev1.AddConvoyVehicleRequest, _ ...grpc.CallOption) (*corev1.AddConvoyVehicleResponse, error) {
-	return &corev1.AddConvoyVehicleResponse{Vehicle: &corev1.ConvoyVehicle{Id: vehicleID, UserId: userID, Make: in.GetMake()}}, f.record(ctx, in)
-}
-func (f *fakeCore) RemoveConvoyVehicle(ctx context.Context, in *corev1.RemoveConvoyVehicleRequest, _ ...grpc.CallOption) (*corev1.RemoveConvoyVehicleResponse, error) {
-	return &corev1.RemoveConvoyVehicleResponse{}, f.record(ctx, in)
-}
 func (f *fakeCore) CheckIn(ctx context.Context, in *corev1.CheckInRequest, _ ...grpc.CallOption) (*corev1.CheckInResponse, error) {
 	return &corev1.CheckInResponse{Attendance: corev1.AttendanceStatus_ATTENDANCE_STATUS_ATTENDED, Method: corev1.AttendanceMethod_ATTENDANCE_METHOD_LOCATION}, f.record(ctx, in)
 }
-func (f *fakeCore) StartHike(ctx context.Context, in *corev1.StartHikeRequest, _ ...grpc.CallOption) (*corev1.StartHikeResponse, error) {
-	return &corev1.StartHikeResponse{Checkin: &corev1.HikeCheckin{StartTime: timestamppb.New(t0)}}, f.record(ctx, in)
-}
-func (f *fakeCore) FinishHike(ctx context.Context, in *corev1.FinishHikeRequest, _ ...grpc.CallOption) (*corev1.FinishHikeResponse, error) {
-	return &corev1.FinishHikeResponse{Checkin: &corev1.HikeCheckin{StartTime: timestamppb.New(t0), ReturnTime: timestamppb.New(t0.Add(time.Hour))}}, f.record(ctx, in)
-}
 func (f *fakeCore) SetAttendance(ctx context.Context, in *corev1.SetAttendanceRequest, _ ...grpc.CallOption) (*corev1.SetAttendanceResponse, error) {
 	return &corev1.SetAttendanceResponse{}, f.record(ctx, in)
-}
-func (f *fakeCore) AddFishingCatch(ctx context.Context, in *corev1.AddFishingCatchRequest, _ ...grpc.CallOption) (*corev1.AddFishingCatchResponse, error) {
-	return &corev1.AddFishingCatchResponse{Catch: &corev1.FishingCatch{
-		Id: catchID, UserId: userID, Species: in.GetSpecies(), LengthCm: in.GetLengthCm(), Location: in.GetLocation(),
-		Visibility: corev1.CatchVisibility_CATCH_VISIBILITY_SELF, CreateTime: timestamppb.New(t0),
-	}}, f.record(ctx, in)
-}
-func (f *fakeCore) ListFishingCatches(ctx context.Context, in *corev1.ListFishingCatchesRequest, _ ...grpc.CallOption) (*corev1.ListFishingCatchesResponse, error) {
-	return &corev1.ListFishingCatchesResponse{Catches: []*corev1.FishingCatch{
-		{Id: catchID, UserId: userID, Species: "Levrek", LengthCm: 42.5, Visibility: corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA, CreateTime: timestamppb.New(t0)},
-	}}, f.record(ctx, in)
-}
-func (f *fakeCore) RemoveFishingCatch(ctx context.Context, in *corev1.RemoveFishingCatchRequest, _ ...grpc.CallOption) (*corev1.RemoveFishingCatchResponse, error) {
-	return &corev1.RemoveFishingCatchResponse{}, f.record(ctx, in)
 }
 func (f *fakeCore) AddEventPhoto(ctx context.Context, in *corev1.AddEventPhotoRequest, _ ...grpc.CallOption) (*corev1.AddEventPhotoResponse, error) {
 	return &corev1.AddEventPhotoResponse{Photo: &corev1.EventPhoto{
@@ -173,7 +150,6 @@ func TestEventRoutes(t *testing.T) {
 	base := "/v1/tayfas/" + tayfaID + "/events"
 	one := base + "/" + eventID
 	series := "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID
-	start := t0.Add(-time.Hour)
 	for _, tc := range []struct {
 		method, path, body string
 		code               int
@@ -183,6 +159,9 @@ func TestEventRoutes(t *testing.T) {
 		{"GET", one, "", 200, &corev1.GetEventRequest{TayfaId: tayfaID, EventId: eventID}},
 		{"POST", one + "/cancellation", `{"reason":"Yağmur"}`, 200, &corev1.CancelEventRequest{TayfaId: tayfaID, EventId: eventID, Reason: "Yağmur"}},
 		{"POST", one + "/cancellation", `{}`, 200, &corev1.CancelEventRequest{TayfaId: tayfaID, EventId: eventID}},
+		{"POST", one + "/finish", "", 200, &corev1.FinishEventRequest{TayfaId: tayfaID, EventId: eventID}},
+		{"POST", one + "/join-qr", "", 201, &corev1.CreateEventJoinQrRequest{TayfaId: tayfaID, EventId: eventID}},
+		{"POST", "/v1/join-qr", `{"token":"AbCdEfGhIjKlMnOpQrStUv"}`, 200, &corev1.JoinEventByQrRequest{Token: "AbCdEfGhIjKlMnOpQrStUv"}},
 		{"PUT", one + "/rsvp", `{"status":"going"}`, 200, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING}},
 		{"PUT", one + "/rsvp", `{"status":"not_going"}`, 200, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_NOT_GOING}},
 		{"GET", one + "/attendees", "", 200, &corev1.ListAttendeesRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING}},
@@ -191,28 +170,13 @@ func TestEventRoutes(t *testing.T) {
 		{"DELETE", one + "/attendees/" + userID + "/attendance", "", 204, &corev1.SetAttendanceRequest{TayfaId: tayfaID, EventId: eventID, UserId: userID}},
 		{"POST", one + "/check-in", `{}`, 200, &corev1.CheckInRequest{TayfaId: tayfaID, EventId: eventID}},
 		{"POST", one + "/check-in", `{"location":{"lat":41.01,"lng":28.97}}`, 200, &corev1.CheckInRequest{TayfaId: tayfaID, EventId: eventID, Location: &corev1.LatLng{Lat: 41.01, Lng: 28.97}}},
-		{"POST", one + "/hike-start", `{}`, 200, &corev1.StartHikeRequest{TayfaId: tayfaID, EventId: eventID}},
-		{"POST", one + "/hike-start", `{"started_at":"` + start.Format(time.RFC3339) + `"}`, 200, &corev1.StartHikeRequest{TayfaId: tayfaID, EventId: eventID, StartTime: timestamppb.New(start)}},
-		{"POST", one + "/hike-return", `{"returned_at":"` + t0.Format(time.RFC3339) + `"}`, 200, &corev1.FinishHikeRequest{TayfaId: tayfaID, EventId: eventID, ReturnTime: timestamppb.New(t0)}},
-		{"POST", one + "/camp-items", `{"name":"Çadır","quantity":2,"assigned_user_id":"` + userID + `"}`, 201, &corev1.AddCampItemRequest{TayfaId: tayfaID, EventId: eventID, Name: "Çadır", Quantity: 2, AssignedUserId: userID}},
-		{"DELETE", one + "/camp-items/" + itemID, "", 204, &corev1.RemoveCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID}},
-		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":"` + userID + `"}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID, AssignedUserId: userID}},
-		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":null}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID}},
-		{"PATCH", one + "/camp-items/" + itemID, `{}`, 200, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: itemID}},
-		{"POST", one + "/convoy-vehicles", `{"make":"Ford","model":"Mustang","model_year":1967,"color":"Kırmızı","plate":"34 ABC 12"}`, 201,
-			&corev1.AddConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, Make: "Ford", Model: "Mustang", ModelYear: 1967, Color: "Kırmızı", Plate: "34 ABC 12"}},
-		{"DELETE", one + "/convoy-vehicles/" + vehicleID, "", 204, &corev1.RemoveConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, VehicleId: vehicleID}},
-		{"GET", one + "/fishing-catches?page_token=P", "", 200, &corev1.ListFishingCatchesRequest{TayfaId: tayfaID, EventId: eventID, PageToken: "P"}},
-		{"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":42.5,"location":{"lat":41,"lng":29},"visibility":"tayfa","client_request_id":"` + reqID + `"}`, 201,
-			&corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Levrek", LengthCm: 42.5, Location: &corev1.LatLng{Lat: 41, Lng: 29}, Visibility: corev1.CatchVisibility_CATCH_VISIBILITY_TAYFA, ClientRequestId: reqID}},
-		{"POST", one + "/fishing-catches", `{"species":"Lüfer","length_cm":20,"client_request_id":"` + reqID + `"}`, 201,
-			&corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Lüfer", LengthCm: 20, ClientRequestId: reqID}},
-		{"DELETE", one + "/fishing-catches/" + catchID, "", 204, &corev1.RemoveFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, CatchId: catchID}},
 		{"GET", one + "/photos?page_size=20&page_token=P", "", 200, &corev1.ListEventPhotosRequest{TayfaId: tayfaID, EventId: eventID, PageSize: 20, PageToken: "P"}},
 		{"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","caption":"Zirvede","client_request_id":"` + reqID + `"}`, 201,
 			&corev1.AddEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, UploadId: uploadID2, Caption: "Zirvede", ClientRequestId: reqID}},
 		{"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","client_request_id":"` + reqID + `"}`, 201,
 			&corev1.AddEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, UploadId: uploadID2, ClientRequestId: reqID}},
+		{"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","client_request_id":"` + reqID + `","consent_ack":true}`, 201,
+			&corev1.AddEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, UploadId: uploadID2, ClientRequestId: reqID, ConsentAck: true}},
 		{"DELETE", one + "/photos/" + photoID, "", 204, &corev1.RemoveEventPhotoRequest{TayfaId: tayfaID, EventId: eventID, PhotoId: photoID}},
 		{"GET", series, "", 200, &corev1.GetEventSeriesRequest{TayfaId: tayfaID, SeriesId: seriesID}},
 		{"POST", series + "/ending", "", 200, &corev1.EndEventSeriesRequest{TayfaId: tayfaID, SeriesId: seriesID}},
@@ -238,10 +202,9 @@ func TestEventResponses(t *testing.T) {
 		e.MeetingPoint == nil || e.MeetingPoint.Lat != 41.5 || e.GoingCount != 3 {
 		t.Fatalf("etkinlik: %+v", e)
 	}
-	if e.Convoy == nil || len(e.Convoy.Route) != 2 || len(e.Convoy.Vehicles) != 1 || e.Convoy.Vehicles[0].Plate != "34 ABC 12" || e.Camp != nil {
-		t.Fatalf("konvoy: %+v", e.Convoy)
-	}
-	for _, absent := range []string{"caller_attendance", "cancelled_at", "cancel_reason", "online_url", `"camp"`} {
+	// No type has details: a convoy's route and vehicles are components
+	// (#239, #240), a fishing event's catches too (#243).
+	for _, absent := range []string{"caller_attendance", "cancelled_at", "cancel_reason", "online_url", `"camp"`, `"convoy":`, `"hike":`, `"fishing":`, "vehicles"} {
 		if strings.Contains(w.Body.String(), absent) {
 			t.Errorf("boş alan yazıldı: %s", absent)
 		}
@@ -250,7 +213,7 @@ func TestEventResponses(t *testing.T) {
 	w = as(h, "GET", "/v1/tayfas/"+tayfaID+"/events", "")
 	l := decodeBody[eventListJSON](t, w)
 	if len(l.Events) != 2 || l.NextPageToken != "SONRAKI" || l.Events[1].Mode != "online" || l.Events[1].OnlineURL == "" ||
-		l.Events[1].MeetingPoint != nil || l.Events[1].CallerRSVP != "" || l.Events[1].CreatedByUserID != "" || l.Events[1].Convoy != nil {
+		l.Events[1].MeetingPoint != nil || l.Events[1].CallerRSVP != "" || l.Events[1].CreatedByUserID != "" {
 		t.Fatalf("liste: %+v", l)
 	}
 
@@ -270,18 +233,6 @@ func TestEventResponses(t *testing.T) {
 	w = as(h, "POST", one+"/check-in", `{}`)
 	if c := decodeBody[checkInJSON](t, w); c.Attendance != "attended" || c.Method != "location" {
 		t.Fatalf("check-in: %+v", c)
-	}
-	w = as(h, "POST", one+"/hike-start", `{}`)
-	if hc := decodeBody[hikeCheckinJSON](t, w); !hc.StartedAt.Equal(t0) || hc.ReturnedAt != nil || strings.Contains(w.Body.String(), "returned_at") {
-		t.Fatalf("yürüyüş: %s", w.Body)
-	}
-	w = as(h, "POST", one+"/hike-return", `{}`)
-	if hc := decodeBody[hikeCheckinJSON](t, w); hc.ReturnedAt == nil || !hc.ReturnedAt.Equal(t0.Add(time.Hour)) {
-		t.Fatalf("dönüş: %s", w.Body)
-	}
-	w = as(h, "GET", one+"/fishing-catches", "")
-	if cl := decodeBody[fishingCatchListJSON](t, w); len(cl.Catches) != 1 || cl.Catches[0].Visibility != "tayfa" || cl.Catches[0].Location != nil || strings.Contains(w.Body.String(), "location") {
-		t.Fatalf("avlar: %s", w.Body)
 	}
 	w = as(h, "GET", one+"/photos", "")
 	if pl := decodeBody[eventPhotoListJSON](t, w); len(pl.Photos) != 1 || pl.Photos[0].UploadID != uploadID2 || pl.Photos[0].UploaderID != userID ||
@@ -307,24 +258,21 @@ func TestCreateEvent(t *testing.T) {
 	h := coreRouter(f)
 	base := "/v1/tayfas/" + tayfaID + "/events"
 	start, end := t0.Add(48*time.Hour), t0.Add(50*time.Hour)
-	ret := t0.Add(49 * time.Hour)
 	body := `{"type":"hike","mode":"in_person","title":"Belgrad turu","description":"Kolay","starts_at":"` + start.Format(time.RFC3339) +
 		`","ends_at":"` + end.Format(time.RFC3339) + `","meeting_point_name":"Bahçeköy girişi","meeting_point":{"lat":41.17,"lng":28.98},` +
 		`"city":"İstanbul","district":"Sarıyer","capacity":15,"discoverable":true,` +
-		`"hike":{"difficulty":2,"distance_km":8.5,"elevation_m":120,"expected_return_at":"` + ret.Format(time.RFC3339) + `","return_grace_minutes":45},` +
+		`"fields":{"difficulty":2,"planned_distance":8.5,"planned_elevation":120},` +
 		`"recurrence":{"rrule":"FREQ=WEEKLY;BYDAY=SA","time_zone":"Europe/Istanbul"},"client_request_id":"` + reqID + `"}`
 	w := as(h, "POST", base, body)
 	if w.Code != 201 || w.Header().Get("Location") != base+"/"+eventID {
 		t.Fatalf("açma: %d %v %s", w.Code, w.Header(), w.Body)
 	}
 	want := &corev1.CreateEventRequest{
-		TayfaId: tayfaID, Type: corev1.EventType_EVENT_TYPE_HIKE, Mode: corev1.EventMode_EVENT_MODE_IN_PERSON,
+		TayfaId: tayfaID, TypeKey: "hike", Mode: corev1.EventMode_EVENT_MODE_IN_PERSON,
 		Title: "Belgrad turu", Description: "Kolay", StartTime: timestamppb.New(start), EndTime: timestamppb.New(end),
 		MeetingPointName: "Bahçeköy girişi", MeetingPoint: &corev1.LatLng{Lat: 41.17, Lng: 28.98},
 		City: "İstanbul", District: "Sarıyer", Capacity: 15, Discoverable: true,
-		Details: &corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{
-			Difficulty: 2, DistanceKm: 8.5, ElevationM: 120, ExpectedReturnTime: timestamppb.New(ret), ReturnGraceMinutes: 45,
-		}},
+		Fields:          map[string]string{"difficulty": `2`, "planned_distance": `8.5`, "planned_elevation": `120`},
 		ClientRequestId: reqID, Recurrence: &corev1.Recurrence{Rrule: "FREQ=WEEKLY;BYDAY=SA", TimeZone: "Europe/Istanbul"},
 	}
 	if got, _, _ := f.last(); !proto.Equal(got, want) {
@@ -334,27 +282,35 @@ func TestCreateEvent(t *testing.T) {
 	times := `"starts_at":"` + start.Format(time.RFC3339) + `","ends_at":"` + end.Format(time.RFC3339) + `"`
 	for _, tc := range []struct {
 		body string
-		want *corev1.CreateEventRequest // only Details
+		want *corev1.CreateEventRequest // only Fields
 	}{
-		{`{"type":"gaming","mode":"online","title":"T",` + times + `,"online_url":"https://x","gaming":{"game":"Satranç","platform":"pc"},"client_request_id":"` + reqID + `"}`,
-			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "Satranç", Platform: corev1.GamingPlatform_GAMING_PLATFORM_PC}}}},
-		{`{"type":"sports","mode":"in_person","title":"T",` + times + `,"sports":{"sport":"table_tennis","venue_name":"Salon"},"client_request_id":"` + reqID + `"}`,
-			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Sports{Sports: &corev1.SportsDetails{Sport: corev1.Sport_SPORT_TABLE_TENNIS, VenueName: "Salon"}}}},
-		{`{"type":"fishing","mode":"in_person","title":"T",` + times + `,"fishing":{"spot_visibility":"participants"},"client_request_id":"` + reqID + `"}`,
-			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS}}}},
-		{`{"type":"camp","mode":"in_person","title":"T",` + times + `,"camp":{"site_name":"Göl","has_water":false},"client_request_id":"` + reqID + `"}`,
-			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Camp{Camp: &corev1.CampDetails{SiteName: "Göl", HasWater: proto.Bool(false)}}}},
-		{`{"type":"convoy","mode":"in_person","title":"T",` + times + `,"convoy":{"route":[{"lat":1,"lng":2},{"lat":3,"lng":4}]},"client_request_id":"` + reqID + `"}`,
-			&corev1.CreateEventRequest{Details: &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{{Lat: 1, Lng: 2}, {Lat: 3, Lng: 4}}}}}},
+		// The type's own data travels as field values, as the JSON the
+		// client wrote (issue #237).
+		{`{"type":"gaming","mode":"online","title":"T",` + times + `,"online_url":"https://x","fields":{"game":"Satranç","platform":"pc"},"client_request_id":"` + reqID + `"}`,
+			&corev1.CreateEventRequest{Fields: map[string]string{"game": `"Satranç"`, "platform": `"pc"`}}},
+		{`{"type":"sports","mode":"in_person","title":"T",` + times + `,"fields":{"sport":"table_tennis","venue_name":"Salon"},"client_request_id":"` + reqID + `"}`,
+			&corev1.CreateEventRequest{Fields: map[string]string{"sport": `"table_tennis"`, "venue_name": `"Salon"`}}},
+		// Any key may be a type: the catalog decides, in core.
+		{`{"type":"board_game_night","mode":"in_person","title":"T",` + times + `,"fields":{"players":4,"langs":["tr","en"],"rated":true,"avg":1.5},"client_request_id":"` + reqID + `"}`,
+			&corev1.CreateEventRequest{Fields: map[string]string{"players": `4`, "langs": `["tr","en"]`, "rated": `true`, "avg": `1.5`}}},
+		{`{"type":"general","mode":"in_person","title":"T",` + times + `,"fields":{},"client_request_id":"` + reqID + `"}`, &corev1.CreateEventRequest{}},
+		// A fishing event has no details to send: its catches are the log
+		// component's (#243).
+		{`{"type":"fishing","mode":"in_person","title":"T",` + times + `,"client_request_id":"` + reqID + `"}`, &corev1.CreateEventRequest{}},
+		// A camp's site details are fields (#241).
+		{`{"type":"camp","mode":"in_person","title":"T",` + times + `,"fields":{"site_name":"Göl","has_water":false},"client_request_id":"` + reqID + `"}`,
+			&corev1.CreateEventRequest{Fields: map[string]string{"site_name": `"Göl"`, "has_water": `false`}}},
+		// A convoy has no details to send: its route is the route component's (#239).
+		{`{"type":"convoy","mode":"in_person","title":"T",` + times + `,"client_request_id":"` + reqID + `"}`, &corev1.CreateEventRequest{}},
 		{`{"type":"general","mode":"in_person","title":"T",` + times + `,"client_request_id":"` + reqID + `"}`, &corev1.CreateEventRequest{}},
 	} {
 		w := as(h, "POST", base, tc.body)
 		got, _, _ := f.last()
 		req := got.(*corev1.CreateEventRequest)
 		if w.Code != 201 || !proto.Equal(req, &corev1.CreateEventRequest{
-			TayfaId: req.GetTayfaId(), Type: req.GetType(), Mode: req.GetMode(), Title: "T", StartTime: timestamppb.New(start),
-			EndTime: timestamppb.New(end), OnlineUrl: req.GetOnlineUrl(), ClientRequestId: reqID, Details: tc.want.Details,
-		}) {
+			TayfaId: req.GetTayfaId(), TypeKey: req.GetTypeKey(), Mode: req.GetMode(), Title: "T", StartTime: timestamppb.New(start),
+			EndTime: timestamppb.New(end), OnlineUrl: req.GetOnlineUrl(), ClientRequestId: reqID, Fields: tc.want.Fields,
+		}) || req.GetTypeKey() == "" || req.GetType() != corev1.EventType_EVENT_TYPE_UNSPECIFIED {
 			t.Errorf("%s: %d; core'a giden %v", tc.body, w.Code, got)
 		}
 	}
@@ -370,72 +326,68 @@ func TestEventBadRequests(t *testing.T) {
 		return `{"type":"general","mode":"in_person","title":"T",` + times + `,"client_request_id":"` + reqID + `"` + extra + `}`
 	}
 	for name, tc := range map[string]struct{ method, path, body string }{
-		"bilinmeyen tür":        {"POST", base, strings.Replace(create(""), "general", "golf", 1)},
-		"bilinmeyen biçim":      {"POST", base, strings.Replace(create(""), "in_person", "hybrid", 1)},
-		"boş başlık":            {"POST", base, strings.Replace(create(""), `"title":"T"`, `"title":" "`, 1)},
-		"uzun başlık":           {"POST", base, strings.Replace(create(""), `"title":"T"`, `"title":"`+strings.Repeat("ş", 121)+`"`, 1)},
-		"uzun açıklama":         {"POST", base, create(`,"description":"` + strings.Repeat("a", 5001) + `"`)},
-		"başlangıç yok":         {"POST", base, `{"type":"general","mode":"online","title":"T","ends_at":"2027-01-02T12:00:00Z","client_request_id":"` + reqID + `"}`},
-		"istek kimliği yok":     {"POST", base, `{"type":"general","mode":"online","title":"T",` + times + `}`},
-		"enlem dışı":            {"POST", base, create(`,"meeting_point":{"lat":90.5,"lng":0}`)},
-		"boylam dışı":           {"POST", base, create(`,"meeting_point":{"lat":0,"lng":-181}`)},
-		"kapasite":              {"POST", base, create(`,"capacity":10001`)},
-		"eksi kapasite":         {"POST", base, create(`,"capacity":-1`)},
-		"tür ayrıntısı uymuyor": {"POST", base, create(`,"camp":{}`)},
-		"iki ayrıntı":           {"POST", base, strings.Replace(create(`,"camp":{},"hike":{}`), "general", "camp", 1)},
-		"bilinmeyen platform":   {"POST", base, strings.Replace(create(`,"gaming":{"game":"x","platform":"amiga"}`), "general", "gaming", 1)},
-		"bilinmeyen spor":       {"POST", base, strings.Replace(create(`,"sports":{"sport":"golf"}`), "general", "sports", 1)},
-		"bilinmeyen görünürlük": {"POST", base, strings.Replace(create(`,"fishing":{"spot_visibility":"herkes"}`), "general", "fishing", 1)},
-		"rota noktası bozuk":    {"POST", base, strings.Replace(create(`,"convoy":{"route":[{"lat":0,"lng":0},{"lat":95,"lng":0}]}`), "general", "convoy", 1)},
-		"araçlar girdi değil":   {"POST", base, strings.Replace(create(`,"convoy":{"vehicles":[]}`), "general", "convoy", 1)},
-		"boş kural":             {"POST", base, create(`,"recurrence":{"rrule":""}`)},
-		"bilinmeyen alan":       {"POST", base, create(`,"status":"cancelled"`)},
-		"organizatör verilemez": {"POST", base, create(`,"created_by":"` + userID + `"`)},
-		"boş düzenleme":         {"PATCH", one, `{}`},
-		"null düzenleme":        {"PATCH", one, `{"title":null}`},
-		"yalnızca seri":         {"PATCH", one, `{"apply_to_series":true}`},
-		"yalnızca başlangıç":    {"PATCH", one, `{"starts_at":"2027-01-02T10:00:00Z"}`},
-		"yer modsuz":            {"PATCH", one, `{"city":"İzmir"}`},
-		"yer bozuk mod":         {"PATCH", one, `{"mode":"x","city":"İzmir"}`},
-		"düzenleme kapasite":    {"PATCH", one, `{"capacity":-5}`},
-		"uzun iptal sebebi":     {"POST", one + "/cancellation", `{"reason":"` + strings.Repeat("a", 501) + `"}`},
-		"iptal gövdesiz":        {"POST", one + "/cancellation", ``},
-		"bekleme listesi rsvp":  {"PUT", one + "/rsvp", `{"status":"waitlist"}`},
-		"boş rsvp":              {"PUT", one + "/rsvp", `{}`},
-		"bozuk katılımcı durum": {"GET", one + "/attendees?status=attended", ""},
-		"bozuk kullanıcı":       {"PUT", one + "/attendees/kim/attendance", ""},
-		"check-in enlem":        {"POST", one + "/check-in", `{"location":{"lat":-91,"lng":0}}`},
-		"check-in bozuk":        {"POST", one + "/check-in", `{"location":{"lat":"kuzey","lng":0}}`},
-		"check-in fazla alan":   {"POST", one + "/check-in", `{"location":{"lat":1,"lng":2,"accuracy":5}}`},
-		"yürüyüş bozuk zaman":   {"POST", one + "/hike-start", `{"started_at":"dün"}`},
-		"malzeme adı yok":       {"POST", one + "/camp-items", `{"name":""}`},
-		"malzeme adedi":         {"POST", one + "/camp-items", `{"name":"Çadır","quantity":1000}`},
-		"malzeme kişisi bozuk":  {"POST", one + "/camp-items", `{"name":"Çadır","assigned_user_id":"x"}`},
-		"bozuk malzeme id":      {"DELETE", one + "/camp-items/x", ""},
-		"atamada bilinmeyen":    {"PATCH", one + "/camp-items/" + itemID, `{"user_id":"` + userID + `"}`},
-		"atamada bozuk kişi":    {"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":"x"}`},
-		"atamada sayı":          {"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":5}`},
-		"atamada bozuk id":      {"PATCH", one + "/camp-items/x", `{"assigned_user_id":null}`},
-		"marka yok":             {"POST", one + "/convoy-vehicles", `{"make":" "}`},
-		"uzun plaka":            {"POST", one + "/convoy-vehicles", `{"make":"Ford","plate":"` + strings.Repeat("A", 17) + `"}`},
-		"bozuk araç id":         {"DELETE", one + "/convoy-vehicles/x", ""},
-		"av türü yok":           {"POST", one + "/fishing-catches", `{"species":"","length_cm":10,"client_request_id":"` + reqID + `"}`},
-		"av boyu sıfır":         {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":0,"client_request_id":"` + reqID + `"}`},
-		"av boyu fazla":         {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":1000.5,"client_request_id":"` + reqID + `"}`},
-		"av görünürlüğü":        {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":10,"visibility":"public","client_request_id":"` + reqID + `"}`},
-		"av konumu":             {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":10,"location":{"lat":0,"lng":200},"client_request_id":"` + reqID + `"}`},
-		"av istek kimliği":      {"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":10}`},
-		"bozuk av id":           {"DELETE", one + "/fishing-catches/x", ""},
-		"albüm yüklemesi yok":   {"POST", one + "/photos", `{"client_request_id":"` + reqID + `"}`},
-		"albüm istek kimliği":   {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `"}`},
-		"albüm uzun açıklama":   {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","caption":"` + strings.Repeat("ş", 201) + `","client_request_id":"` + reqID + `"}`},
-		"albüm bilinmeyen alan": {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","url":"x","client_request_id":"` + reqID + `"}`},
-		"bozuk fotoğraf id":     {"DELETE", one + "/photos/x", ""},
-		"bozuk etkinlik id":     {"GET", base + "/x", ""},
-		"bozuk tayfa id":        {"GET", "/v1/tayfas/x/events", ""},
-		"bozuk sayfa":           {"GET", base + "?page_size=101", ""},
-		"bozuk seri id":         {"GET", "/v1/tayfas/" + tayfaID + "/event-series/x", ""},
-		"bozuk takvim id":       {"GET", base + "/x/calendar", ""},
+		"bozuk tür anahtarı":     {"POST", base, strings.Replace(create(""), "general", "Golf", 1)},
+		"boş tür":                {"POST", base, strings.Replace(create(""), "general", "", 1)},
+		"null alan değeri":       {"POST", base, create(`,"fields":{"game":null}`)},
+		"bozuk alan anahtarı":    {"POST", base, create(`,"fields":{"Game":"x"}`)},
+		"alanlar dizi":           {"POST", base, create(`,"fields":["game"]`)},
+		"dev alan değeri":        {"POST", base, create(`,"fields":{"game":"` + strings.Repeat("a", 9000) + `"}`)},
+		"düzenlemede bozuk alan": {"PATCH", one, `{"fields":{"Game":"x"}}`},
+		"bilinmeyen biçim":       {"POST", base, strings.Replace(create(""), "in_person", "hybrid", 1)},
+		"boş başlık":             {"POST", base, strings.Replace(create(""), `"title":"T"`, `"title":" "`, 1)},
+		"uzun başlık":            {"POST", base, strings.Replace(create(""), `"title":"T"`, `"title":"`+strings.Repeat("ş", 121)+`"`, 1)},
+		"uzun açıklama":          {"POST", base, create(`,"description":"` + strings.Repeat("a", 5001) + `"`)},
+		"başlangıç yok":          {"POST", base, `{"type":"general","mode":"online","title":"T","ends_at":"2027-01-02T12:00:00Z","client_request_id":"` + reqID + `"}`},
+		"istek kimliği yok":      {"POST", base, `{"type":"general","mode":"online","title":"T",` + times + `}`},
+		"enlem dışı":             {"POST", base, create(`,"meeting_point":{"lat":90.5,"lng":0}`)},
+		"boylam dışı":            {"POST", base, create(`,"meeting_point":{"lat":0,"lng":-181}`)},
+		"kapasite":               {"POST", base, create(`,"capacity":10001`)},
+		"eksi kapasite":          {"POST", base, create(`,"capacity":-1`)},
+		"tür ayrıntısı uymuyor":  {"POST", base, create(`,"camp":{}`)},
+		"iki ayrıntı":            {"POST", base, strings.Replace(create(`,"camp":{},"hike":{}`), "general", "camp", 1)},
+		// The Faz 1 hike object is gone too (#242): its data is in fields
+		// and the roll call component.
+		"eski yürüyüş ayrıntısı": {"POST", base, strings.Replace(create(`,"hike":{"difficulty":3}`), "general", "hike", 1)},
+		// The Faz 1 gaming and sports objects are gone (ADR-0041).
+		"eski oyun ayrıntısı": {"POST", base, strings.Replace(create(`,"gaming":{"game":"x","platform":"pc"}`), "general", "gaming", 1)},
+		"eski spor ayrıntısı": {"POST", base, strings.Replace(create(`,"sports":{"sport":"football"}`), "general", "sports", 1)},
+		// The fishing object is gone too (#243): the catches are the log
+		// component's.
+		"eski balık ayrıntısı": {"POST", base, strings.Replace(create(`,"fishing":{"spot_visibility":"participants"}`), "general", "fishing", 1)},
+		// The convoy object is gone too: the route and the vehicles are
+		// components (#239, #240).
+		"eski konvoy rotası":        {"POST", base, strings.Replace(create(`,"convoy":{"route":[{"lat":0,"lng":0},{"lat":1,"lng":0}]}`), "general", "convoy", 1)},
+		"eski konvoy ayrıntısı":     {"POST", base, strings.Replace(create(`,"convoy":{}`), "general", "convoy", 1)},
+		"boş kural":                 {"POST", base, create(`,"recurrence":{"rrule":""}`)},
+		"bilinmeyen alan":           {"POST", base, create(`,"status":"cancelled"`)},
+		"organizatör verilemez":     {"POST", base, create(`,"created_by":"` + userID + `"`)},
+		"boş düzenleme":             {"PATCH", one, `{}`},
+		"null düzenleme":            {"PATCH", one, `{"title":null}`},
+		"yalnızca seri":             {"PATCH", one, `{"apply_to_series":true}`},
+		"yalnızca başlangıç":        {"PATCH", one, `{"starts_at":"2027-01-02T10:00:00Z"}`},
+		"yer modsuz":                {"PATCH", one, `{"city":"İzmir"}`},
+		"yer bozuk mod":             {"PATCH", one, `{"mode":"x","city":"İzmir"}`},
+		"düzenleme kapasite":        {"PATCH", one, `{"capacity":-5}`},
+		"uzun iptal sebebi":         {"POST", one + "/cancellation", `{"reason":"` + strings.Repeat("a", 501) + `"}`},
+		"iptal gövdesiz":            {"POST", one + "/cancellation", ``},
+		"bekleme listesi rsvp":      {"PUT", one + "/rsvp", `{"status":"waitlist"}`},
+		"boş rsvp":                  {"PUT", one + "/rsvp", `{}`},
+		"bozuk katılımcı durum":     {"GET", one + "/attendees?status=attended", ""},
+		"bozuk kullanıcı":           {"PUT", one + "/attendees/kim/attendance", ""},
+		"check-in enlem":            {"POST", one + "/check-in", `{"location":{"lat":-91,"lng":0}}`},
+		"check-in bozuk":            {"POST", one + "/check-in", `{"location":{"lat":"kuzey","lng":0}}`},
+		"check-in fazla alan":       {"POST", one + "/check-in", `{"location":{"lat":1,"lng":2,"accuracy":5}}`},
+		"balık ayrıntısı düzenleme": {"PATCH", one, `{"fishing":{"spot_visibility":"participants"}}`},
+		"albüm yüklemesi yok":       {"POST", one + "/photos", `{"client_request_id":"` + reqID + `"}`},
+		"albüm istek kimliği":       {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `"}`},
+		"albüm uzun açıklama":       {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","caption":"` + strings.Repeat("ş", 201) + `","client_request_id":"` + reqID + `"}`},
+		"albüm bilinmeyen alan":     {"POST", one + "/photos", `{"upload_id":"` + uploadID2 + `","url":"x","client_request_id":"` + reqID + `"}`},
+		"bozuk fotoğraf id":         {"DELETE", one + "/photos/x", ""},
+		"bozuk etkinlik id":         {"GET", base + "/x", ""},
+		"bozuk tayfa id":            {"GET", "/v1/tayfas/x/events", ""},
+		"bozuk sayfa":               {"GET", base + "?page_size=101", ""},
+		"bozuk seri id":             {"GET", "/v1/tayfas/" + tayfaID + "/event-series/x", ""},
+		"bozuk takvim id":           {"GET", base + "/x/calendar", ""},
 	} {
 		w := as(h, tc.method, tc.path, tc.body)
 		if (w.Code != 400 && w.Code != 415) || problemType(t, w) != "invalid-request" {
@@ -469,8 +421,13 @@ func TestUpdateEventMask(t *testing.T) {
 			func(r *corev1.UpdateEventRequest) bool {
 				return r.GetMeetingPoint().GetLat() == 38.4 && r.GetCity() == "İzmir"
 			}},
-		{`{"hike":{"difficulty":3},"apply_to_series":true}`, []string{"details"},
-			func(r *corev1.UpdateEventRequest) bool { return r.GetHike().GetDifficulty() == 3 && r.GetSeries() }},
+		{`{"fields":{"game":"Okey","players":4}}`, []string{"fields"},
+			func(r *corev1.UpdateEventRequest) bool {
+				return len(r.GetFields()) == 2 && r.GetFields()["game"] == `"Okey"` && r.GetFields()["players"] == `4`
+			}},
+		// An empty object removes every value; null leaves them alone.
+		{`{"fields":{}}`, []string{"fields"}, func(r *corev1.UpdateEventRequest) bool { return len(r.GetFields()) == 0 }},
+		{`{"title":"Yeni","fields":null}`, []string{"title"}, nil},
 	} {
 		w := as(h, "PATCH", one, tc.body)
 		got, _, _ := f.last()
@@ -489,10 +446,7 @@ func TestEventWritesNeedClientHeader(t *testing.T) {
 	for _, rt := range []struct{ method, path string }{
 		{"POST", "/v1/tayfas/" + tayfaID + "/events"}, {"PATCH", one}, {"POST", one + "/cancellation"},
 		{"PUT", one + "/rsvp"}, {"PUT", one + "/attendees/" + userID + "/attendance"}, {"DELETE", one + "/attendees/" + userID + "/attendance"},
-		{"POST", one + "/check-in"}, {"POST", one + "/hike-start"}, {"POST", one + "/hike-return"},
-		{"POST", one + "/camp-items"}, {"DELETE", one + "/camp-items/" + itemID}, {"PATCH", one + "/camp-items/" + itemID},
-		{"POST", one + "/convoy-vehicles"}, {"DELETE", one + "/convoy-vehicles/" + vehicleID},
-		{"POST", one + "/fishing-catches"}, {"DELETE", one + "/fishing-catches/" + catchID},
+		{"POST", one + "/check-in"},
 		{"POST", "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID + "/ending"},
 	} {
 		w := do(h, rt.method, rt.path, `{}`, map[string]string{"Authorization": "Bearer T"})
@@ -500,7 +454,7 @@ func TestEventWritesNeedClientHeader(t *testing.T) {
 			t.Errorf("%s %s: %d", rt.method, rt.path, w.Code)
 		}
 	}
-	for _, path := range []string{one, one + "/calendar", one + "/attendees", one + "/fishing-catches"} {
+	for _, path := range []string{one, one + "/calendar", one + "/attendees"} {
 		if w := do(h, "GET", path, "", map[string]string{}); w.Code != http.StatusUnauthorized {
 			t.Errorf("token'sız okuma %s: %d", path, w.Code)
 		}
@@ -511,7 +465,7 @@ func TestEventWritesNeedClientHeader(t *testing.T) {
 }
 
 // TestLocationNeverLogged sends coordinates through every path a check-in
-// or a catch can take (success, core refusals, a core error whose message
+// can take (success, core refusals, a core error whose message
 // carries them, bad bodies, the IP limit) and checks that no log line, from
 // the handlers or the access log, and no problem response contains them.
 func TestLocationNeverLogged(t *testing.T) {
@@ -542,8 +496,6 @@ func TestLocationNeverLogged(t *testing.T) {
 		{"aralık dışı", one + "/check-in", `{"location":{"lat":1` + secretLat + `,"lng":` + secretLng + `}}`, nil},
 		{"bilinmeyen alan", one + "/check-in", `{"location":` + loc + `,"` + secretLat + `":1}`, nil},
 		{"sorguda konum", one + "/check-in" + query, `{}`, leakyErr},
-		{"av", one + "/fishing-catches", `{"species":"Levrek","length_cm":30,"location":` + loc + `,"client_request_id":"` + reqID + `"}`, leakyErr},
-		{"av başarılı", one + "/fishing-catches" + query, `{"species":"Levrek","length_cm":30,"location":` + loc + `,"client_request_id":"` + reqID + `"}`, nil},
 		{"sınır", one + "/check-in", `{"location":` + loc + `}`, nil},
 	} {
 		f.mu.Lock()
@@ -641,11 +593,7 @@ func TestEventProblems(t *testing.T) {
 		{"POST", one + "/check-in", `{}`, "ERROR_REASON_CHECK_IN_CLOSED", 409, "check-in-closed"},
 		{"POST", one + "/check-in", `{}`, "ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED", 429, "check-in-attempts-exhausted"},
 		{"PUT", one + "/attendees/" + userID + "/attendance", "", "ERROR_REASON_CORRECTION_CLOSED", 409, "correction-closed"},
-		{"POST", one + "/hike-return", `{}`, "ERROR_REASON_HIKE_NOT_STARTED", 409, "hike-not-started"},
-		{"POST", one + "/fishing-catches", `{"species":"Levrek","length_cm":10,"client_request_id":"` + reqID + `"}`, "ERROR_REASON_NOT_ATTENDED", 409, "not-attended"},
-		{"POST", one + "/camp-items", `{"name":"Ocak"}`, "ERROR_REASON_EVENT_TYPE_MISMATCH", 409, "event-type-mismatch"},
-		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":null}`, "ERROR_REASON_EVENT_ITEM_TAKEN", 409, "event-item-taken"},
-		{"PATCH", one + "/camp-items/" + itemID, `{"assigned_user_id":"` + userID + `"}`, "ERROR_REASON_EVENT_NOT_GOING", 409, "event-not-going"},
+		{"POST", one + "/check-in", `{}`, "ERROR_REASON_NOT_ATTENDED", 409, "not-attended"},
 		{"POST", "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID + "/ending", "", "ERROR_REASON_EVENT_SERIES_ENDED", 409, "event-series-ended"},
 		{"GET", "/v1/tayfas/" + tayfaID + "/event-series/" + seriesID, "", "ERROR_REASON_EVENT_SERIES_NOT_FOUND", 404, "event-series-not-found"},
 	} {
@@ -687,5 +635,145 @@ func TestTayfaMembersCanCreateEvents(t *testing.T) {
 	w = as(coreRouter(&fakeCore{}), "GET", "/v1/tayfas/"+tayfaID, "")
 	if !strings.Contains(w.Body.String(), `"members_can_create_events":false`) {
 		t.Fatalf("alan yok: %s", w.Body)
+	}
+}
+
+// An event answers with its catalog type, the version it was created with
+// and the values of the type's fields (issue #237).
+func TestEventTypeVersionAndFields(t *testing.T) {
+	ev := testEvent()
+	ev.Type, ev.TypeKey, ev.TypeVersion = corev1.EventType_EVENT_TYPE_UNSPECIFIED, "board_game_night", 3
+	ev.Fields = map[string]string{"game": `"Tavla"`, "players": `4`, "langs": `["tr","en"]`, "rated": `true`, "bozuk": `{"a":`}
+	h := coreRouter(&fakeCore{event: ev})
+	w := as(h, "GET", "/v1/tayfas/"+tayfaID+"/events/"+eventID, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("etkinlik: %d %s", w.Code, w.Body)
+	}
+	v := decodeBody[eventJSON](t, w)
+	if v.Type != "board_game_night" || v.TypeVersion != 3 || len(v.Fields) != 4 ||
+		string(v.Fields["game"]) != `"Tavla"` || string(v.Fields["players"]) != `4` || string(v.Fields["langs"]) != `["tr","en"]` || string(v.Fields["rated"]) != `true` {
+		t.Fatalf("gövde: %s", w.Body)
+	}
+	// Values are JSON in the body, not JSON inside a string.
+	if !strings.Contains(w.Body.String(), `"players":4`) || strings.Contains(w.Body.String(), "bozuk") {
+		t.Fatalf("alan değerleri: %s", w.Body)
+	}
+
+	// A Faz 1 event: the key of its enum, version from core, no fields.
+	w = as(coreRouter(&fakeCore{}), "GET", "/v1/tayfas/"+tayfaID+"/events/"+eventID, "")
+	if v := decodeBody[eventJSON](t, w); v.Type != "convoy" || v.Fields != nil || strings.Contains(w.Body.String(), `"fields"`) {
+		t.Fatalf("Faz 1 etkinliği: %s", w.Body)
+	}
+}
+
+// Şimdi başlat (issue #263, ADR-0038 §1): starts_now goes to core without
+// times; the client's clock never reaches core. With starts_now the times,
+// a recurrence and discoverable are refused here already.
+func TestCreateEventStartsNow(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	base := "/v1/tayfas/" + tayfaID + "/events"
+	body := func(extra string) string {
+		return `{"type":"board_game_night","mode":"in_person","title":"Batak","meeting_point":{"lat":41.17,"lng":28.98},` +
+			`"city":"İstanbul","district":"Kadıköy","starts_now":true,"client_request_id":"` + reqID + `"` + extra + `}`
+	}
+	w := as(h, "POST", base, body(""))
+	got, _, _ := f.last()
+	want := &corev1.CreateEventRequest{
+		TayfaId: tayfaID, TypeKey: "board_game_night", Mode: corev1.EventMode_EVENT_MODE_IN_PERSON, Title: "Batak",
+		MeetingPoint: &corev1.LatLng{Lat: 41.17, Lng: 28.98}, City: "İstanbul", District: "Kadıköy",
+		StartsNow: true, ClientRequestId: reqID,
+	}
+	if w.Code != 201 || !proto.Equal(got, want) {
+		t.Fatalf("şimdi başlat: %d %s; core'a giden %v", w.Code, w.Body, got)
+	}
+	// An instant event starts now the same way.
+	w = as(h, "POST", "/v1/instant-events", `{"event":`+body("")+`}`)
+	got, _, _ = f.last()
+	if ir, ok := got.(*corev1.CreateInstantEventRequest); w.Code != 201 || !ok || !ir.GetEvent().GetStartsNow() || ir.GetEvent().GetStartTime() != nil {
+		t.Fatalf("anlık şimdi başlat: %d %s; core'a giden %v", w.Code, w.Body, got)
+	}
+
+	_, _, before := f.last()
+	for name, extra := range map[string]string{
+		"başlangıç": `,"starts_at":"2027-01-02T10:00:00Z"`,
+		"bitiş":     `,"ends_at":"2027-01-02T12:00:00Z"`,
+		"tekrar":    `,"recurrence":{"rrule":"FREQ=WEEKLY","time_zone":"Europe/Istanbul"}`,
+		"keşfet":    `,"discoverable":true`,
+		"iki zaman": `,"starts_at":"2027-01-02T10:00:00Z","ends_at":"2027-01-02T12:00:00Z"`,
+	} {
+		if w := as(h, "POST", base, body(extra)); w.Code != 400 {
+			t.Errorf("%s: kod %d", name, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != before {
+		t.Error("hatalı istek core'a gitti")
+	}
+}
+
+func TestFinishEventResponse(t *testing.T) {
+	ev := testEvent()
+	ev.OpenEnded = true
+	f := &fakeCore{event: ev}
+	w := as(coreRouter(f), "GET", "/v1/tayfas/"+tayfaID+"/events/"+eventID, "")
+	if w.Code != 200 || !decodeBody[eventJSON](t, w).OpenEnded {
+		t.Fatalf("açık uçlu: %d %s", w.Code, w.Body)
+	}
+	// The field is always written.
+	w = as(coreRouter(&fakeCore{}), "POST", "/v1/tayfas/"+tayfaID+"/events/"+eventID+"/finish", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"open_ended":false`) {
+		t.Fatalf("bitir: %d %s", w.Code, w.Body)
+	}
+}
+
+func TestTayfaNowCreateMinRole(t *testing.T) {
+	tf := testTayfa()
+	tf.NowCreateMinRole = corev1.Role_ROLE_MODERATOR
+	f := &fakeCore{tayfa: tf}
+	h := coreRouter(f)
+	w := as(h, "PATCH", "/v1/tayfas/"+tayfaID, `{"now_create_min_role":"moderator"}`)
+	got, _, _ := f.last()
+	req := got.(*corev1.UpdateTayfaRequest)
+	if w.Code != 200 || !slices.Equal(req.GetUpdateMask().GetPaths(), []string{"now_create_min_role"}) || req.GetNowCreateMinRole() != corev1.Role_ROLE_MODERATOR {
+		t.Fatalf("güncelleme: %d %v", w.Code, req)
+	}
+	if decodeBody[tayfaJSON](t, w).NowCreateMinRole != "moderator" {
+		t.Fatalf("yanıt: %s", w.Body)
+	}
+	_, _, before := f.last()
+	for _, b := range []string{`{"now_create_min_role":"owner"}`, `{"now_create_min_role":""}`, `{"now_create_min_role":1}`} {
+		if w := as(h, "PATCH", "/v1/tayfas/"+tayfaID, b); w.Code != 400 {
+			t.Errorf("%s: kod %d", b, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != before {
+		t.Error("hatalı istek core'a gitti")
+	}
+}
+
+// QR ile katılım (issue #264): the token goes to the client only in the
+// body; a join's result names the IDs and the answer, and a request
+// without a token never reaches core.
+func TestJoinQRResponses(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "POST", "/v1/tayfas/"+tayfaID+"/events/"+eventID+"/join-qr", "")
+	tok := decodeBody[joinQRTokenJSON](t, w)
+	if w.Code != 201 || tok.Token != "QRTOKEN" || !tok.ExpiresAt.Equal(t0) {
+		t.Fatalf("QR token: %d %s", w.Code, w.Body)
+	}
+	w = as(h, "POST", "/v1/join-qr", `{"token":"AbCdEfGhIjKlMnOpQrStUv"}`)
+	r := decodeBody[joinQRResultJSON](t, w)
+	if w.Code != 200 || r.TayfaID != tayfaID || r.EventID != eventID || r.Pending || r.RSVP != "going" || r.Attendance != "attended" {
+		t.Fatalf("QR katılımı: %d %s", w.Code, w.Body)
+	}
+	_, _, before := f.last()
+	for _, b := range []string{`{}`, `{"token":""}`, `{"token":"` + strings.Repeat("a", 65) + `"}`, `{"token":1}`} {
+		if w := as(h, "POST", "/v1/join-qr", b); w.Code != 400 {
+			t.Errorf("%s: kod %d", b, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != before {
+		t.Error("hatalı istek core'a gitti")
 	}
 }

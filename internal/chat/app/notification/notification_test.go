@@ -297,6 +297,60 @@ func TestTayfaPreference(t *testing.T) {
 	}
 }
 
+// A tayfa's now notifications have their own preference (issue #265;
+// ADR-0038 §4): all or none, for active members, beside the tayfa's own.
+func TestTayfaNowPreference(t *testing.T) {
+	e := setup(t)
+	u, other := id.New(), id.New()
+	e.members.active[[2]id.ID{e.tayfa, u}] = true
+
+	_, err := e.svc.SetTayfaPreference(ctx, u, e.tayfa, LevelMentions, time.Time{})
+	must(t, err)
+	p, err := e.svc.SetTayfaNowPreference(ctx, u, e.tayfa, LevelNone, time.Time{})
+	must(t, err)
+	if p.ScopeType != ScopeTayfaNow || p.Level != LevelNone || p.Scope != e.tayfa {
+		t.Fatalf("tercih = %+v", p)
+	}
+	prefs, err := e.svc.Preferences(ctx, u)
+	must(t, err)
+	if len(prefs) != 2 {
+		t.Fatalf("tercihler = %+v", prefs)
+	}
+	if _, err := e.svc.SetTayfaNowPreference(ctx, u, e.tayfa, LevelMentions, time.Time{}); err == nil {
+		t.Fatal("mentions kabul edildi")
+	}
+	if _, err := e.svc.SetTayfaNowPreference(ctx, other, e.tayfa, LevelNone, time.Time{}); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("üye olmayan: %v", err)
+	}
+	// The database refuses mentions too.
+	if _, err := e.pool.Exec(ctx, `INSERT INTO notification_preferences (user_id, scope_type, scope_id, level) VALUES ($1, 'tayfa_now', $2, 'mentions')`, id.New().PG(), id.New().PG()); err == nil {
+		t.Fatal("veritabanı tayfa_now mentions'ı kabul etti")
+	}
+	_, err = e.svc.SetTayfaNowPreference(ctx, u, e.tayfa, LevelAll, time.Time{})
+	must(t, err)
+	if prefs, _ := e.svc.Preferences(ctx, u); len(prefs) != 1 || prefs[0].ScopeType != ScopeTayfa {
+		t.Fatalf("varsayılana dönünce = %+v", prefs)
+	}
+}
+
+// A now notice is about an event of a tayfa and names its organizer.
+func TestNowStartedNoticeRules(t *testing.T) {
+	r := Request{Event: id.New(), Tayfa: id.New(), Actor: id.New(), Type: TypeNowStarted, TargetType: TargetEvent, Target: id.New(), Recipients: []id.ID{id.New()}}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for name, bad := range map[string]Request{
+		"tayfasız":      func() Request { b := r; b.Tayfa = id.ID{}; return b }(),
+		"tayfa hedefli": func() Request { b := r; b.TargetType = TargetTayfa; return b }(),
+		"kendisine":     func() Request { b := r; b.Recipients = []id.ID{r.Actor}; return b }(),
+		"gerekçeli":     func() Request { b := r; b.Reason = ReasonInactive; return b }(),
+	} {
+		if err := bad.Validate(); err == nil {
+			t.Errorf("%s kabul edildi", name)
+		}
+	}
+}
+
 func second[T any](_ T, err error) error { return err }
 
 // A direct conversation is muted like a tayfa, by a party only: another
@@ -454,6 +508,30 @@ func TestDirectNoticeRules(t *testing.T) {
 	}
 }
 
+// A badge notice (issue #258; ADR-0039 §4) has no actor and never names
+// the badge: a personal one targets its earner without a tayfa, a tayfa's
+// one targets the tayfa.
+func TestBadgeNoticeRules(t *testing.T) {
+	u, tf := id.New(), id.New()
+	personal := Request{Event: id.New(), Type: TypeBadgeEarned, TargetType: TargetUser, Target: u, Recipients: []id.ID{u}}
+	team := Request{Event: id.New(), Tayfa: tf, Type: TypeBadgeEarned, TargetType: TargetTayfa, Target: tf, Recipients: []id.ID{id.New()}}
+	for name, r := range map[string]Request{"kişisel": personal, "tayfa": team} {
+		if err := r.Validate(); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, r := range map[string]Request{
+		"kişisel tayfalı":  func() Request { r := personal; r.Tayfa = tf; return r }(),
+		"tayfa tayfasız":   func() Request { r := team; r.Tayfa = id.ID{}; return r }(),
+		"aktörlü":          func() Request { r := personal; r.Actor = id.New(); return r }(),
+		"etkinlik hedefli": func() Request { r := personal; r.TargetType = TargetEvent; return r }(),
+	} {
+		if err := r.Validate(); err == nil {
+			t.Errorf("%s kabul edildi", name)
+		}
+	}
+}
+
 // The list carries a direct message notice's unread count; other types
 // have none (issue #101).
 func TestListCarriesDirectUnreadCount(t *testing.T) {
@@ -553,6 +631,49 @@ func TestListResolutions(t *testing.T) {
 	for _, n := range list {
 		if n.Resolution != "" {
 			t.Fatalf("hata varken durum = %+v", n)
+		}
+	}
+}
+
+// The library's loan step notices (issue #321) are about an item of a
+// tayfa, never to the one who took the step.
+func TestLibraryStepNoticeRules(t *testing.T) {
+	for _, typ := range []string{TypeLibraryLoanRequested, TypeLibraryQueueJoined, TypeLibraryLoanApproved,
+		TypeLibraryLoanDeclined, TypeLibraryLoanHandedOver} {
+		r := Request{Event: id.New(), Tayfa: id.New(), Actor: id.New(), Type: typ, TargetType: TargetLibraryItem, Target: id.New(), Recipients: []id.ID{id.New()}}
+		if err := r.Validate(); err != nil {
+			t.Fatalf("%s: %v", typ, err)
+		}
+		for name, bad := range map[string]Request{
+			"tayfasız":      func() Request { b := r; b.Tayfa = id.ID{}; return b }(),
+			"tayfa hedefli": func() Request { b := r; b.TargetType = TargetTayfa; return b }(),
+			"kendisine":     func() Request { b := r; b.Recipients = []id.ID{r.Actor}; return b }(),
+			"gerekçeli":     func() Request { b := r; b.Reason = ReasonInactive; return b }(),
+		} {
+			if err := bad.Validate(); err == nil {
+				t.Errorf("%s, %s kabul edildi", typ, name)
+			}
+		}
+	}
+	if typ, ok := targetOf(TypeLibraryDue); !ok || typ != TargetTayfa {
+		t.Fatalf("library_due hedefi = %q", typ)
+	}
+}
+
+// The queue turn notice (issue #332) is about a library item of a tayfa
+// and has no actor.
+func TestLibraryQueueTurnNoticeRules(t *testing.T) {
+	r := Request{Event: id.New(), Tayfa: id.New(), Type: TypeLibraryQueueTurn, TargetType: TargetLibraryItem, Target: id.New(), Recipients: []id.ID{id.New()}}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for name, bad := range map[string]Request{
+		"aktörlü":       func() Request { b := r; b.Actor = id.New(); return b }(),
+		"tayfasız":      func() Request { b := r; b.Tayfa = id.ID{}; return b }(),
+		"tayfa hedefli": func() Request { b := r; b.TargetType = TargetTayfa; return b }(),
+	} {
+		if err := bad.Validate(); err == nil {
+			t.Errorf("%s kabul edildi", name)
 		}
 	}
 }

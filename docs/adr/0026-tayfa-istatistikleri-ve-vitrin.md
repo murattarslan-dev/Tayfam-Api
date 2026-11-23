@@ -2,6 +2,15 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Revizyon:** 2026-11-18 ([ADR-0039](0039-rozetler.md)): §6'daki rozetler
+  ayrı ADR'de karara bağlandı.
+- **Revizyon:** 2026-11-18 (platform sahibi, sohbette;
+  [ADR-0037](0037-katalog-ayrintilari-ve-sema-ekleri.md) §7): `log`
+  metrikleri, organizatörün girdiği kişisel ölçümler,
+  `sensitive_attendance` türleri.
+- **Revizyon:** 2026-11-23 (platform sahibi, sohbette; issue #322): tayfa
+  içinde üye katkıları listelenmez; her üye yalnızca kendi katkısını görür.
+  §3 tablosu güncellendi; ayrıntı "Uygulama notları (#322)".
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3)" §5). Bu ADR onların mimariye taşınmasıdır.
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),
@@ -69,7 +78,7 @@ toplam yeniden kurulur.
 
 | Kitle | Ne görür |
 |-------|----------|
-| Tayfa üyesi | Tayfa toplamları (her yıl ve tüm zamanlar), kişisel katkılar (kişisel ölçümlerde kim ne kadar; `sensitive` ölçümler hariç) |
+| Tayfa üyesi | Tayfa toplamları (her yıl ve tüm zamanlar) ve **yalnızca kendi** kişisel katkısı (`sensitive` ölçümler hariç). Başka üyelerin katkısı yönetici ve moderatör dahil kimseye listelenmez (2026-11-23, #322) |
 | Keşfet vitrini (üye olmayan) | Yalnızca vitrine izin verilen ölçüm metrikleri ve ortak metriklerin **tayfa toplamı**; yıl ve tayfanın şehri. Kişi, tarih, saat, gün, ilçe, koordinat yok |
 | Profil (başkası) | Kişinin seçtiği görünürlüğe göre kendi `user_stats`'ı |
 
@@ -121,6 +130,110 @@ Kurallar:
 Rozetler (Faz 3) `tayfa_stats` ve `user_stats`'tan ve `celebration`
 bileşeninden beslenir; kuralları ayrı ADR'de. Bu ADR'deki tablolar rozet
 hesaplaması için yeterli olacak şekilde yıl ve metrik bazındadır.
+
+## Uygulama notları (#266)
+
+Karar değişmedi; issue #266 uygulamasındaki ayrıntılar:
+
+- **Tablolar (core 00057):** `tayfa_stats` ve `user_stats` yıl başına ve
+  **yıl 0 = tüm zamanlar** satırıyla tutulur; tüm zamanlar satırı ayrıca
+  hesaplanır, çünkü farklı değer sayıları (`participants`, günlükte
+  `distinct_<alan>`) yıllar toplanarak bulunamaz. `source` sütunu metriğin
+  türünü verir (`common` / `measure` / `log`). `user_stats` **tayfa
+  başınadır** (tayfa içindeki kişisel katkı); profil toplamı tayfaların
+  toplamıdır. Sözlük tayfanın olduğu için farklı değerler tayfalar arasında
+  birleştirilmez.
+- **Hesaplama birimi tayfadır:** iş, kuyruğa giren tayfanın bütün donmuş
+  etkinliklerini okuyup satırlarını silip yeniden yazar (idempotent).
+  Kuyruğa giren: yeni donan (`event_stat_runs`), istatistikteyken silinen
+  ya da iptal edilen etkinliğin tayfası ve sözlük birleştirme/geri alma
+  olayının (`tayfa.vocabulary_merged` / `_unmerged`) tayfası (outbox
+  tüketicisi `core.stats`). Olay yükündeki yıllar tayfanın bir alt
+  kümesidir. İş 15 dakikada bir çalışır (`stats`).
+- **Metrikler:** ortak metrikler genel ve `<tür>.<metrik>` olarak; ölçümde
+  yalnızca kaydedilmiş değer (öneri sayılmaz), kişisel ölçümün tayfa
+  toplamı kişilerin toplamıdır; günlükte `<tür>.<günlük>.<stat>`
+  (`count`, `distinct_<alan>`, `sum_<alan>`) ve her günlükte kayıt sayısı
+  (`count`) her zaman. Sözlüğe bağlı alanda farklı değer, birleştirme
+  hedefidir. Kapatılmış isteğe bağlı bileşen sayılmaz.
+- **Hassas:** `sensitive` ölçüm hiçbir tabloya yazılmaz (kişinin kendi
+  değeri bileşende kendisine görünür). `sensitive_attendance` türündeki
+  etkinlik yalnızca tayfanın `events` ve `attended` toplamına (ve toplam
+  kapsamlı ölçümüne) girer; `participants`, `duration`, kişisel satır ve
+  günlük katkısı yoktur (ADR-0037 §7).
+- **Rozetler (ADR-0039 §2):** aynı transaction'da; tayfa rozeti hassas
+  katılımlı etkinlikler hariç toplamlardan, kişisel rozet kişinin bütün
+  tayfalardaki toplamından. Rozette günlük metriği `<tür>.<günlük>` kayıt
+  sayısıdır.
+- **Tayfa içi uç:** `GET /v1/tayfas/{tayfa_id}/stats?year=` (her etkin
+  üye): toplamlar ve yalnızca etkin üyelerin ölçüm ve günlük katkıları.
+  Ay/hafta kırılımı henüz yoktur.
+- **KVKK:** kişinin `user_stats` satırları dışa aktarmada
+  (`core/user_stats.json`) gelir ve hesap silinince aynı transaction'da
+  silinir.
+
+## Uygulama notları (#267)
+
+Karar değişmedi; issue #267 uygulamasındaki ayrıntılar:
+
+- **Vitrin yeri:** ayrı vitrin ucu yoktur. Kart Keşfet akışındaki tayfa
+  özetine (`DiscoverTayfa.showcase`) eklenir; böylece akışın bütün kuralları
+  (Keşfet'e açık ve incelenmiş tayfa, üye olmama, iki yönlü engel, önce
+  arkadaş ağı sırası, güvenlik ağı) aynen geçerlidir ve kapalı tayfa hiçbir
+  zaman görünmez.
+- **Bayrak:** `tayfas.stats_showcase` (core 00058, varsayılan `true`);
+  `PUT /v1/tayfas/{tayfa_id}/discover/stats-showcase`, izin
+  `TayfaStatsShowcaseUpdate` (`tayfa.stats_showcase.update`, yalnızca
+  yönetici), denetim kaydı `tayfa.stats_showcase_shown` / `_hidden`.
+  Keşfet bayrağından ve tayfanın Keşfet durumundan bağımsız değiştirilir;
+  `GET/PUT …/discover` yanıtında da döner.
+- **Eşik:** tüm zamanlar `events` toplamı (`tayfa_stats`, yıl 0)
+  `stats.ShowcaseMinEvents` = 3'ün altındaysa alan yoktur (rozetler de).
+- **Kapsam:** yalnızca tüm zamanlar toplamı (yıl kırılımı vitrinde yok).
+  Genel ortak metrikler; `<tür>.<ortak metrik>`; `<tür>.<ölçüm>` yalnızca
+  türün **her sürümünde** `showcase: true` ve hassas değilse. Günlük
+  metrikleri vitrine çıkmaz (§3: "ölçüm metrikleri ve ortak metrikler").
+  Herhangi bir sürümünde `sensitive_attendance` olan türün hiçbir metriği
+  çıkmaz; bu etkinlikler yalnızca genel `events` ve `attended` içinde kalır
+  (ADR-0037 §7). Katalogda olmayan türün metriği çıkmaz.
+- **Rozetler (ADR-0039 §3):** vitrin kartında tayfanın rozetleri; aynı
+  bayrak ve eşik.
+- **Kişisel görünürlük:** identity `users.stats_visibility` (identity
+  00015; `none` varsayılan / `friends` / `friends_and_mutual`), `Account` ve
+  `AccountUpdate`'te; `user.profile_updated` ile core kopyası
+  `user_profiles.stats_visibility`. Profil (`UserProfile.stats`) kişinin
+  bütün tayfalarındaki tüm zamanlar toplamıdır; `badges` aynı kurala
+  bağlıdır. İzin yoksa iki alan da yoktur.
+- **KVKK:** ayar `identity/profile.json` dışa aktarmasında gelir; hesap
+  silinince identity'de ve core'un mezar taşında `none`'a döner.
+
+## Uygulama notları (#322)
+
+Platform sahibinin 2026-11-23 kararı (sohbette): tayfa istatistiğinde üye
+katkıları herkese listelenmez; her üye yalnızca kendi katkısını görür, tayfa
+toplamları herkese açık kalır. Yönetici ve moderatör için istisna yoktur.
+
+- **Uç:** `GET /v1/tayfas/{tayfa_id}/stats` yeni `own_contributions`
+  alanında yalnızca çağıranın ölçüm ve günlük katkısını (`TayfaStat`:
+  `metric_key`, `source`, `value`, `event_count`; kişi kimliği yok) döner.
+  core başka üyenin satırını hiç okumaz: sorgu
+  (`ListOwnTayfaStatContributions`) `user_id`'yi doğrulanmış token'ın
+  kullanıcısıyla sınırlar. "Tutmadığın veri sızmaz" (ADR-0011): yanıt
+  yapısında başkasının kimliğini taşıyacak alan yoktur.
+- **Geriye uyum:** proto'da `GetTayfaStatsResponse.contributions` (4) ve
+  `TayfaStatContribution` silinmedi, `deprecated` işaretlendi ve hiç
+  doldurulmaz; `buf breaking` (FILE) `reserved` olsa da alan silmeye izin
+  vermez (ADR-0018'deki kalıp). REST'te `contributions` her zaman boş
+  dizidir (`deprecated`, `maxItems: 0`); gateway core ne gönderirse
+  göndersin onu boş yazar. Böylece bu değişiklikten önce derlenmiş istemci
+  bozulmaz, yalnızca katkı bölümünü göstermez. Alan istemci (App) yeni
+  alana geçip yayınlandıktan sonra ayrı bir işle kaldırılır.
+- **Tablo ve hesaplama değişmedi:** `user_stats` tayfa başına kişi
+  satırlarını tutmaya devam eder (profil toplamı, rozetler ve KVKK dışa
+  aktarması onu kullanır); yalnızca okuma ucu daraldı. Migration yok.
+- **Testler:** `TestTayfaView` üye, moderatör ve yönetici için yalnızca
+  kendi değerinin döndüğünü ve tayfa toplamının herkesinkini içerdiğini;
+  gRPC ve gateway testleri eski listenin boş kaldığını sabitler.
 
 ## Gerekçe
 

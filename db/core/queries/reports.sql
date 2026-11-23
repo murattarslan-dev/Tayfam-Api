@@ -17,14 +17,16 @@ SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible, (statu
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
+-- Sorunun havuzu modülünü verir: Soru-Cevap (qa) ya da soru havuzu
+-- (question_pool, issue #271).
 -- name: GetReportTargetQuestion :one
-SELECT author_id, (deleted_at IS NULL)::boolean AS visible
+SELECT author_id, (deleted_at IS NULL)::boolean AS visible, pool
 FROM questions
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
 -- Silinmiş sorunun cevabı da görünmez.
 -- name: GetReportTargetAnswer :one
-SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible
+SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible, a.pool
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
 WHERE a.tayfa_id = @tayfa_id AND a.id = @id;
@@ -34,13 +36,51 @@ SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
 FROM polls
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
--- Av kaydı: etkinliği de görünür olmalı; 'self' görünürlüğündeki kaydı
--- yalnızca sahibi görür (app katmanı kontrol eder).
--- name: GetReportTargetCatch :one
-SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible, c.visibility
-FROM fishing_catches c
+-- Günlük kaydı (issue #243): etkinliği de görünür olmalı. Kaydın kendisi
+-- (değerleri) etkinliği gören her üyeye açıktır; konum şikâyete girmez.
+-- name: GetReportTargetLogEntry :one
+SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
+FROM event_log_entries c
 JOIN events e ON e.id = c.event_id
 WHERE e.tayfa_id = @tayfa_id AND c.id = @id;
+
+-- Etkinlik sorusu (`questions` bileşeni, issue #256): etkinliği de görünür
+-- olmalı. anonymous, şikâyette yazarın tayfa yönetiminden gizlenmesi
+-- (subject_hidden) içindir.
+-- name: GetReportTargetEventQuestion :one
+SELECT q.author_id, (q.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible, q.anonymous
+FROM event_questions q
+JOIN events e ON e.id = q.event_id
+WHERE e.tayfa_id = @tayfa_id AND q.id = @id;
+
+-- Günün içeriği (issue #269): yazarı ekleyendir.
+-- name: GetReportTargetDailyItem :one
+SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
+FROM tayfa_daily_items
+WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Ortak kütüphane kalemi (issue #270): yazarı sahibidir.
+-- name: GetReportTargetLibraryItem :one
+SELECT owner_id AS author_id, (status <> 'withdrawn')::boolean AS visible
+FROM library_items
+WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Materyal (issue #261): yazarı konusudur; engelli alan adındaki bağlantı
+-- gizlidir.
+-- name: GetReportTargetMaterial :one
+SELECT author_id, (deleted_at IS NULL AND NOT material_domain_blocked(domain))::boolean AS visible
+FROM materials
+WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Üye garajı aracı (issue #272): sahibi konusudur; sahibi tayfanın üyesi
+-- değilse hedef yoktur. Görünür: silinmemiş, sahibi etkin üye ve garajı bu
+-- tayfada görünür.
+-- name: GetReportTargetGarageVehicle :one
+SELECT g.owner_id AS author_id,
+       (g.deleted_at IS NULL AND m.status = 'active' AND garage_visible_in(g.owner_id, @tayfa_id::uuid))::boolean AS visible
+FROM garage_vehicles g
+JOIN memberships m ON m.tayfa_id = @tayfa_id::uuid AND m.user_id = g.owner_id
+WHERE g.id = @id;
 
 -- Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
 -- name: GetReportTargetEventPhoto :one
@@ -62,13 +102,15 @@ WHERE reporter_id = @reporter_id AND created_at > @since;
 INSERT INTO reports (
   id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text, evidence_upload_id,
   priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at,
-  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name)
+  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name,
+  subject_hidden)
 VALUES (
   @id, sqlc.narg(tayfa_id), @reporter_id, @target_type, @target_id, @subject_user_id, @reason, sqlc.narg(description), sqlc.narg(evidence_text), sqlc.narg(evidence_upload_id),
   @priority, sqlc.narg(minor_involved_at), @platform_only, sqlc.narg(escalated_to_platform_at),
   sqlc.narg(escalation_reason), sqlc.narg(platform_status), @created_at,
   sqlc.narg(channel_id), sqlc.narg(message_kind), sqlc.narg(message_body), sqlc.narg(message_photo_upload_id),
-  sqlc.narg(place_latitude), sqlc.narg(place_longitude), sqlc.narg(place_name))
+  sqlc.narg(place_latitude), sqlc.narg(place_longitude), sqlc.narg(place_name),
+  @subject_hidden)
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING
 RETURNING id;
 
@@ -93,12 +135,14 @@ ORDER BY created_at DESC, id DESC
 LIMIT @page_size;
 
 -- Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
--- kendisi hakkındakiler hariç. minor_involved ve çocuk/genç güvenliği
+-- kendisi hakkındakiler hariç. Yazarı gizli şikâyette (anonim soru, issue
+-- #256) subject_user_id boş döner: yazar yalnızca platform yönetimine
+-- görünür. Kuyruk ve çözüm okumaları aynı kuralı izler. minor_involved ve çocuk/genç güvenliği
 -- şikâyetleri önce, sonra eskiden yeniye (ADR-0012, platform sahibinin
 -- 2026-11-09 kararı; Notion v14). reporter_id
 -- ve yükselme bilgisi seçilmez; yaş ve doğum tarihi core'da hiç yoktur.
 -- name: ListOpenTayfaReports :many
-SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
+SELECT id, tayfa_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status, resolution,
        handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'open' AND NOT platform_only
@@ -112,7 +156,7 @@ LIMIT @page_size;
 
 -- Çözülmüşler, son çözülen önce.
 -- name: ListResolvedTayfaReports :many
-SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
+SELECT id, tayfa_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status, resolution,
        handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND status = 'resolved' AND NOT platform_only
@@ -124,7 +168,7 @@ LIMIT @page_size;
 -- Çözüm için kilitlenir; kuyruğun kuralları aynı (platforma özel ve
 -- izleyicinin kendisi hakkındaki şikâyet bulunamaz).
 -- name: LockTayfaReport :one
-SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
+SELECT id, tayfa_id, reporter_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status,
        resolution, handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = @tayfa_id AND id = @id AND NOT platform_only

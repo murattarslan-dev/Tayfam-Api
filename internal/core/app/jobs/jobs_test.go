@@ -352,7 +352,7 @@ func (e *env) content(t *testing.T, tf id.ID, deletedAt pgtype.Timestamptz) map[
 	t.Helper()
 	ids := map[string]id.ID{
 		"announcements": id.New(), "questions": id.New(), "answers": id.New(),
-		"polls": id.New(), "events": id.New(), "fishing_catches": id.New(),
+		"polls": id.New(), "events": id.New(), "event_log_entries": id.New(),
 		"event_photos": id.New(),
 	}
 	author := id.New()
@@ -382,14 +382,15 @@ func (e *env) content(t *testing.T, tf id.ID, deletedAt pgtype.Timestamptz) map[
 	ex(`INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by, deleted_at)
 	    VALUES ($1, $2, 'general', 'online', 'Toplantı', $3, $4, 'https://example.test/t', $5, $6)`,
 		ids["events"].PG(), tf.PG(), e.base.Add(-60*day), e.base.Add(-60*day+time.Hour), author.PG(), deletedAt)
-	// A live fishing event holds the soft deleted catch.
+	// A live fishing event holds the soft deleted catch (a log entry,
+	// issue #243).
 	fe := id.New()
 	ex(`INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, online_url, created_by)
 	    VALUES ($1, $2, 'fishing', 'online', 'Av', $3, $4, 'https://example.test/f', $5)`,
 		fe.PG(), tf.PG(), e.base.Add(-60*day), e.base.Add(-60*day+time.Hour), author.PG())
-	ex(`INSERT INTO event_fishing (event_id) VALUES ($1)`, fe.PG())
-	ex(`INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, client_request_id, deleted_at) VALUES ($1, $2, $3, 'Levrek', 42, $4, $5)`,
-		ids["fishing_catches"].PG(), fe.PG(), author.PG(), id.New().PG(), deletedAt)
+	ex(`INSERT INTO event_log_entries (id, event_id, component_key, user_id, field_values, client_request_id, deleted_at)
+	    VALUES ($1, $2, 'catches', $3, '{"species": "Levrek", "length_cm": 42}', $4, $5)`,
+		ids["event_log_entries"].PG(), fe.PG(), author.PG(), id.New().PG(), deletedAt)
 	// An album photo of an attendee on the live event (issue #206): added
 	// live (the guard trigger), then soft deleted.
 	upload := id.New()
@@ -409,13 +410,13 @@ func (e *env) content(t *testing.T, tf id.ID, deletedAt pgtype.Timestamptz) map[
 // Fixed queries per table; no SQL is assembled from strings.
 var (
 	existsSQL = map[string]string{
-		"announcements":   `SELECT count(*) FROM announcements WHERE id = $1`,
-		"questions":       `SELECT count(*) FROM questions WHERE id = $1`,
-		"answers":         `SELECT count(*) FROM answers WHERE id = $1`,
-		"polls":           `SELECT count(*) FROM polls WHERE id = $1`,
-		"events":          `SELECT count(*) FROM events WHERE id = $1`,
-		"fishing_catches": `SELECT count(*) FROM fishing_catches WHERE id = $1`,
-		"event_photos":    `SELECT count(*) FROM event_photos WHERE id = $1`,
+		"announcements":     `SELECT count(*) FROM announcements WHERE id = $1`,
+		"questions":         `SELECT count(*) FROM questions WHERE id = $1`,
+		"answers":           `SELECT count(*) FROM answers WHERE id = $1`,
+		"polls":             `SELECT count(*) FROM polls WHERE id = $1`,
+		"events":            `SELECT count(*) FROM events WHERE id = $1`,
+		"event_log_entries": `SELECT count(*) FROM event_log_entries WHERE id = $1`,
+		"event_photos":      `SELECT count(*) FROM event_photos WHERE id = $1`,
 	}
 	byTayfaSQL = map[string]string{
 		"memberships":     `SELECT count(*) FROM memberships WHERE tayfa_id = $1`,
@@ -488,7 +489,7 @@ func TestPurge(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM event_series WHERE id = $1`, series.PG()) +
 		e.count(t, `SELECT count(*) FROM event_rsvps WHERE event_id = $1`, hikeID.PG()) +
-		e.count(t, `SELECT count(*) FROM event_hike_checkins WHERE event_id = $1`, hikeID.PG()); n != 0 {
+		e.count(t, `SELECT count(*) FROM event_roll_call_checkins WHERE event_id = $1`, hikeID.PG()); n != 0 {
 		t.Errorf("seri, katılım ya da yoklama kaldı: %d", n)
 	}
 	// The activity record stays without its event and tayfa (SET NULL).
@@ -532,15 +533,15 @@ func TestPurge(t *testing.T) {
 // ---------------------------------------------------------------------------
 // Yürüyüş alarmı
 
-// hike creates a hike event organized by organizer whose expected return
-// is base + ret (grace 30 minutes).
+// hike creates a hike event organized by organizer whose roll call
+// (hike v1: alarm on, grace 30 minutes) expects the return at base + ret.
 func (e *env) hike(t *testing.T, tf, organizer id.ID, ret time.Duration) id.ID {
 	t.Helper()
 	ev := id.New()
 	e.exec(t, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, meeting_point_name, meeting_lat, meeting_lng, city, district, created_by)
 	    VALUES ($1, $2, 'hike', 'in_person', 'Zirve', $3, $4, 'Otopark', 38.4, 27.1, 'İzmir', 'Bornova', $5)`,
 		ev.PG(), tf.PG(), e.base.Add(-6*time.Hour), e.base.Add(ret), organizer.PG())
-	e.exec(t, `INSERT INTO event_hike (event_id, expected_return_at, return_grace_minutes) VALUES ($1, $2, 30)`, ev.PG(), e.base.Add(ret))
+	e.exec(t, `INSERT INTO event_roll_calls (event_id, component_key, expected_return_at) VALUES ($1, 'roll_call', $2)`, ev.PG(), e.base.Add(ret))
 	return ev
 }
 
@@ -551,14 +552,14 @@ func (e *env) checkin(t *testing.T, ev, user id.ID, returned bool) {
 	if returned {
 		back = pgtype.Timestamptz{Time: e.base.Add(-time.Hour), Valid: true}
 	}
-	e.exec(t, `INSERT INTO event_hike_checkins (event_id, user_id, started_at, started_received_at, returned_at, returned_received_at)
-	    VALUES ($1, $2, $3, $3, $4, $4)`, ev.PG(), user.PG(), start, back)
+	e.exec(t, `INSERT INTO event_roll_call_checkins (event_id, component_key, user_id, started_at, started_received_at, returned_at, returned_received_at)
+	    VALUES ($1, 'roll_call', $2, $3, $3, $4, $4)`, ev.PG(), user.PG(), start, back)
 }
 
 func (e *env) alertSent(t *testing.T, ev, user id.ID) bool {
 	t.Helper()
 	var at pgtype.Timestamptz
-	must(t, e.pool.QueryRow(ctx, `SELECT alert_sent_at FROM event_hike_checkins WHERE event_id = $1 AND user_id = $2`, ev.PG(), user.PG()).Scan(&at))
+	must(t, e.pool.QueryRow(ctx, `SELECT alert_sent_at FROM event_roll_call_checkins WHERE event_id = $1 AND user_id = $2`, ev.PG(), user.PG()).Scan(&at))
 	return at.Valid
 }
 
@@ -579,9 +580,14 @@ func TestAlertOverdueHikes(t *testing.T) {
 	// Expected back 10 minutes ago: still within the grace period.
 	grace := e.hike(t, tf, organizer, -10*time.Minute)
 	e.checkin(t, grace, hiker, false)
+	// Without an expected return (no plan) there is no alarm.
+	noPlan := e.hike(t, tf, organizer, -2*time.Hour)
+	e.exec(t, `DELETE FROM event_roll_calls WHERE event_id = $1`, noPlan.PG())
+	e.checkin(t, noPlan, hiker, false)
 
 	run(t, "alarm", e.at(t, 0).AlertOverdueHikes, 2)
-	if !e.alertSent(t, late, hiker) || !e.alertSent(t, late, modHiker) || e.alertSent(t, late, back) || e.alertSent(t, grace, hiker) {
+	if !e.alertSent(t, late, hiker) || !e.alertSent(t, late, modHiker) || e.alertSent(t, late, back) || e.alertSent(t, grace, hiker) ||
+		e.alertSent(t, noPlan, hiker) {
 		t.Error("alert_sent_at yanlış satırlarda")
 	}
 	got := e.events(t, EventHikeOverdue)
@@ -634,15 +640,14 @@ func (e *env) convoy(t *testing.T, tf id.ID, ended time.Duration) id.ID {
 	e.exec(t, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, meeting_point_name, meeting_lat, meeting_lng, city, district)
 	    VALUES ($1, $2, 'convoy', 'in_person', 'Konvoy', $3, $4, 'Meydan', 38.4, 27.1, 'İzmir', 'Konak')`,
 		ev.PG(), tf.PG(), e.base.Add(ended-3*time.Hour), e.base.Add(ended))
-	e.exec(t, `INSERT INTO event_convoy (event_id) VALUES ($1)`, ev.PG())
-	e.exec(t, `INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, plate) VALUES ($1, $2, $3, 'Murat', '35 ABC 123')`, v.PG(), ev.PG(), id.New().PG())
+	e.exec(t, `INSERT INTO event_vehicles (id, event_id, component_key, user_id, make, plate) VALUES ($1, $2, 'vehicles', $3, 'Murat', '35 ABC 123')`, v.PG(), ev.PG(), id.New().PG())
 	return v
 }
 
 func (e *env) plate(t *testing.T, v id.ID) bool {
 	t.Helper()
 	var p pgtype.Text
-	must(t, e.pool.QueryRow(ctx, `SELECT plate FROM event_convoy_vehicles WHERE id = $1`, v.PG()).Scan(&p))
+	must(t, e.pool.QueryRow(ctx, `SELECT plate FROM event_vehicles WHERE id = $1`, v.PG()).Scan(&p))
 	return p.Valid
 }
 
@@ -657,6 +662,49 @@ func TestClearPlates(t *testing.T) {
 	}
 	run(t, "tekrar", e.at(t, 0).ClearPlates, 0)
 	run(t, "dakika sonra", e.at(t, time.Minute).ClearPlates, 1)
+}
+
+// ---------------------------------------------------------------------------
+// Misafir takma adı (issue #252; ADR-0037 §6)
+
+func (e *env) guestPlayer(t *testing.T, tf id.ID, ended time.Duration) id.ID {
+	t.Helper()
+	ev, g := id.New(), id.New()
+	e.exec(t, `INSERT INTO events (id, tayfa_id, type, mode, title, starts_at, ends_at, meeting_point_name, meeting_lat, meeting_lng, city, district)
+	    VALUES ($1, $2, 'convoy', 'in_person', 'Oyun', $3, $4, 'Meydan', 38.4, 27.1, 'İzmir', 'Konak')`,
+		ev.PG(), tf.PG(), e.base.Add(ended-3*time.Hour), e.base.Add(ended))
+	e.exec(t, `INSERT INTO event_guest_players (id, event_id, nickname, created_by) VALUES ($1, $2, 'Misafir Ali', $3)`, g.PG(), ev.PG(), id.New().PG())
+	return g
+}
+
+func (e *env) guestNickname(t *testing.T, g id.ID) bool {
+	t.Helper()
+	var n pgtype.Text
+	must(t, e.pool.QueryRow(ctx, `SELECT nickname FROM event_guest_players WHERE id = $1`, g.PG()).Scan(&n))
+	return n.Valid
+}
+
+// TestGuestNicknameKeptUntilEventDeleted: the nickname stays as long as the
+// event exists, however long ago it ended, and goes with the event
+// (ADR-0037 §6, decision of 2026-11-23). No job clears it.
+func TestGuestNicknameKeptUntilEventDeleted(t *testing.T) {
+	e := setup(t)
+	tf, _ := e.newTayfa(t)
+	g := e.guestPlayer(t, tf, -365*24*time.Hour)
+	for _, w := range e.at(t, 0).Workers() {
+		if w.Name == "guest-nicknames" {
+			t.Fatalf("takma ad temizleme işi hâlâ kayıtlı")
+		}
+	}
+	if !e.guestNickname(t, g) {
+		t.Fatalf("bir yıl önce biten etkinliğin misafir takma adı silinmiş")
+	}
+	e.exec(t, `DELETE FROM events WHERE id = (SELECT event_id FROM event_guest_players WHERE id = $1)`, g.PG())
+	var n int
+	must(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM event_guest_players WHERE id = $1`, g.PG()).Scan(&n))
+	if n != 0 {
+		t.Errorf("etkinlik silinince misafir satırı kaldı: %d", n)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -759,11 +807,12 @@ func TestWorkersStop(t *testing.T) {
 	now := e.base
 	s, err := New(Config{Pool: e.pool, Log: e.log, Now: func() time.Time { return now },
 		Intervals: Intervals{TayfaCleanup: time.Millisecond, InstantArchive: time.Millisecond, TayfaDeletion: time.Millisecond, Purge: time.Millisecond, HikeAlert: time.Millisecond, Plates: time.Millisecond,
-			ReportEscalation: time.Millisecond, Retention: time.Millisecond, FriendSuggestions: time.Millisecond, SafetyAlert: time.Millisecond}})
+			ReportEscalation: time.Millisecond, Retention: time.Millisecond, FriendSuggestions: time.Millisecond, SafetyAlert: time.Millisecond, ChampionBadges: time.Millisecond, Stats: time.Millisecond,
+			Library: time.Millisecond, CatalogPublish: time.Millisecond}})
 	must(t, err)
 	wctx, cancel := context.WithCancel(ctx)
 	workers := s.Workers()
-	if len(workers) != 10 {
+	if len(workers) != 14 {
 		t.Fatalf("worker sayısı %d", len(workers))
 	}
 	errs := make(chan error, len(workers))

@@ -169,7 +169,6 @@ func TestCreateAndGet(t *testing.T) {
 	in.Title = "  Ege turu  "
 	in.Description = "Satır 1\nSatır 2"
 	in.Capacity = 10
-	in.Details = Details{Convoy: &Convoy{Route: []Point{{38.4, 27.1}, {38.3, 26.3}, {37.9, 27.3}}}}
 	v := e.create(t, tf, admin, in)
 
 	if v.Title != "Ege turu" || v.Type != TypeConvoy || v.Status != StatusScheduled || v.Capacity != 10 ||
@@ -177,10 +176,6 @@ func TestCreateAndGet(t *testing.T) {
 		v.City != "İzmir" || v.District != "Konak" || v.OnlineURL != "" {
 		t.Fatalf("etkinlik = %+v", v)
 	}
-	if v.Details.Convoy == nil || len(v.Details.Convoy.Route) != 3 || v.Details.Convoy.Route[1] != (Point{38.3, 26.3}) {
-		t.Fatalf("detay = %+v", v.Details)
-	}
-
 	// Audit record and event carry IDs and the type only: no title, place
 	// or coordinates.
 	var meta, payload string
@@ -212,50 +207,52 @@ func TestCreateAndGet(t *testing.T) {
 	_, err = e.svc.Create(ctx, admin, other, in)
 	wantField(t, "başka tayfada aynı istek kimliği", err, "client_request_id")
 
-	// Every type is created with its detail row.
+	// Every Faz 1 type is created at the catalog's version (the second for
+	// all but fishing since issue #260); none has a detail table any more
+	// (issue #243).
 	for _, typ := range Types {
 		in := input()
 		in.Type = typ
 		switch typ {
+		case TypeCamp:
+			in.Fields = values("site_name", `"Kazdağları"`, "has_water", `true`, "has_toilet", `false`, "notes", `"Odun getirin"`)
 		case TypeGaming:
-			in.Details.Gaming = &Gaming{Game: "CS2", Platform: "pc"}
+			in.Fields = values("game", `"CS2"`, "platform", `"pc"`)
 		case TypeSports:
-			in.Details.Sports = &Sports{Sport: "football", VenueName: "Halısaha"}
+			in.Fields = values("sport", `"football"`, "venue_name", `"Halısaha"`)
+		case TypeHike:
+			in.Fields = values("difficulty", `3`, "planned_distance", `12.345`, "planned_elevation", `800`)
 		}
 		v := e.create(t, tf, admin, in)
 		got, err := e.svc.Get(ctx, admin, tf, v.ID)
 		must(t, err)
-		want := typ
-		if typ == TypeGeneral {
-			want = "" // general events have no detail row
+		wantVersion := int32(2)
+		if typ == TypeFishing {
+			wantVersion = 1
 		}
-		if got.Details.typ() != want {
-			t.Errorf("%s: detay %+v", typ, got.Details)
+		if got.Type != typ || got.TypeVersion != wantVersion || got.Fields == nil || len(got.Fields) != len(in.Fields) {
+			t.Errorf("%s: tür %q sürüm %d alanlar %v", typ, got.Type, got.TypeVersion, got.Fields)
 		}
 	}
-	got, err := e.svc.Get(ctx, admin, tf, e.create(t, tf, admin, func() Input { i := input(); i.Type = TypeHike; return i }()).ID)
+	// A hike's Faz 1 details are fields (issue #242); the distance keeps
+	// two decimals.
+	hike := input()
+	hike.Type = TypeHike
+	hike.Fields = values("difficulty", `5`, "planned_distance", `12.345`)
+	got, err := e.svc.Get(ctx, admin, tf, e.create(t, tf, admin, hike).ID)
 	must(t, err)
-	if got.Details.Hike.ReturnGraceMinutes != 30 {
-		t.Errorf("varsayılan dönüş payı = %d", got.Details.Hike.ReturnGraceMinutes)
-	}
+	wantValues(t, "yürüyüş alanları", got.Fields, "difficulty", `5`, "planned_distance", `12.35`)
 }
 
 func TestCreateValidation(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
-	route := func(n int) []Point {
-		p := make([]Point, n)
-		for i := range p {
-			p[i] = Point{Lat: 38, Lng: 27}
-		}
-		return p
-	}
 	for _, tc := range []struct {
 		name  string
 		edit  func(*Input)
 		field string
 	}{
-		{"bilinmeyen tür", func(i *Input) { i.Type = "cycling" }, "type"},
+		{"bilinmeyen tür", func(i *Input) { i.Type = "paragliding" }, "type"},
 		{"boş başlık", func(i *Input) { i.Title = "   " }, "title"},
 		{"uzun başlık", func(i *Input) { i.Title = strings.Repeat("ğ", 121) }, "title"},
 		{"kontrol karakteri", func(i *Input) { i.Title = "a\x00b" }, "title"},
@@ -280,25 +277,17 @@ func TestCreateValidation(t *testing.T) {
 		{"boşluklu bağlantı", func(i *Input) { i.Location = Location{Mode: ModeOnline, OnlineURL: "https://example.com/a b"} }, "online_url"},
 		{"negatif kapasite", func(i *Input) { i.Capacity = -1 }, "capacity"},
 		{"büyük kapasite", func(i *Input) { i.Capacity = 10001 }, "capacity"},
-		{"genel türde detay", func(i *Input) { i.Details.Camp = &Camp{} }, "details"},
-		{"yanlış türde detay", func(i *Input) { i.Type = TypeHike; i.Details.Camp = &Camp{} }, "details"},
-		{"iki detay", func(i *Input) { i.Type = TypeCamp; i.Details = Details{Camp: &Camp{}, Hike: &Hike{}} }, "details"},
-		{"detaysız oyun", func(i *Input) { i.Type = TypeGaming }, "details"},
-		{"detaysız spor", func(i *Input) { i.Type = TypeSports }, "details"},
-		{"bilinmeyen platform", func(i *Input) { i.Type = TypeGaming; i.Details.Gaming = &Gaming{Game: "x", Platform: "amiga"} }, "platform"},
-		{"bilinmeyen spor", func(i *Input) { i.Type = TypeSports; i.Details.Sports = &Sports{Sport: "golf"} }, "sport"},
-		{"tek noktalı rota", func(i *Input) { i.Type = TypeConvoy; i.Details.Convoy = &Convoy{Route: route(1)} }, "route"},
-		{"501 noktalı rota", func(i *Input) { i.Type = TypeConvoy; i.Details.Convoy = &Convoy{Route: route(501)} }, "route"},
-		{"aralık dışı rota", func(i *Input) {
-			i.Type = TypeConvoy
-			i.Details.Convoy = &Convoy{Route: []Point{{1, 1}, {1, 200}}}
-		}, "route"},
-		{"zorluk 6", func(i *Input) { i.Type = TypeHike; i.Details.Hike = &Hike{Difficulty: 6} }, "difficulty"},
-		{"başlangıçtan önce dönüş", func(i *Input) {
-			i.Type = TypeHike
-			i.Details.Hike = &Hike{ExpectedReturnAt: i.StartsAt.Add(-time.Minute)}
-		}, "expected_return_time"},
-		{"bilinmeyen mera görünürlüğü", func(i *Input) { i.Type = TypeFishing; i.Details.Fishing = &Fishing{SpotVisibility: "public"} }, "spot_visibility"},
+		{"uzun kamp notu", func(i *Input) { i.Type = TypeCamp; i.Fields = values("notes", `"`+strings.Repeat("n", 1001)+`"`) }, "fields.notes"},
+		{"metin su", func(i *Input) { i.Type = TypeCamp; i.Fields = values("has_water", `"evet"`) }, "fields.has_water"},
+		{"bozuk tür anahtarı", func(i *Input) { i.Type = "Hike Night" }, "type"},
+		{"alansız oyun", func(i *Input) { i.Type = TypeGaming }, "fields.game"},
+		{"alansız spor", func(i *Input) { i.Type = TypeSports }, "fields.sport"},
+		{"bilinmeyen platform", func(i *Input) { i.Type = TypeGaming; i.Fields = values("game", `"x"`, "platform", `"amiga"`) }, "fields.platform"},
+		{"uzun spor dalı", func(i *Input) { i.Type = TypeSports; i.Fields = values("sport", `"`+strings.Repeat("g", 61)+`"`) }, "fields.sport"},
+		{"türde olmayan alan", func(i *Input) { i.Fields = values("stake", `100`) }, "fields"},
+		{"zorluk 6", func(i *Input) { i.Type = TypeHike; i.Fields = values("difficulty", `6`) }, "fields.difficulty"},
+		{"sıfır mesafe", func(i *Input) { i.Type = TypeHike; i.Fields = values("planned_distance", `0`) }, "fields.planned_distance"},
+		{"irtifa 9001", func(i *Input) { i.Type = TypeHike; i.Fields = values("planned_elevation", `9001`) }, "fields.planned_elevation"},
 		{"istek kimliği yok", func(i *Input) { i.ClientRequestID = "" }, "client_request_id"},
 	} {
 		in := input()
@@ -310,9 +299,9 @@ func TestCreateValidation(t *testing.T) {
 		t.Fatalf("%d geçersiz etkinlik yazıldı", n)
 	}
 
-	// 500 points and an online event are fine.
+	// A convoy without details and an online event are fine.
 	in := input()
-	in.Type, in.Details.Convoy = TypeConvoy, &Convoy{Route: route(500)}
+	in.Type = TypeConvoy
 	e.create(t, tf, admin, in)
 	in = input()
 	in.Location = Location{Mode: ModeOnline, OnlineURL: "https://discord.gg/ornek"}
@@ -393,26 +382,22 @@ func TestUpdate(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
 	in := input()
-	in.Type, in.Details.Hike = TypeHike, &Hike{Difficulty: 3}
+	in.Type = TypeFishing
 	ev := e.create(t, tf, admin, in)
 
 	start := time.Now().Add(48 * time.Hour).UTC().Truncate(time.Microsecond)
-	v, err := e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldTime, FieldLocation, FieldDetails, FieldCapacity}, Input{
+	v, err := e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldTime, FieldLocation, FieldCapacity}, Input{
 		StartsAt: start, EndsAt: start.Add(time.Hour), Capacity: 5,
 		Location: Location{Mode: ModeOnline, OnlineURL: "https://example.com/oda"},
-		Details:  Details{Hike: &Hike{Difficulty: 5, DistanceKm: 12.345, ElevationM: 800, ReturnGraceMinutes: 45}},
 		Title:    "maskede yok",
 	})
 	must(t, err)
 	if !v.StartsAt.Equal(start) || v.Mode != ModeOnline || v.MeetingPoint != nil || v.City != "" || v.Capacity != 5 || v.Title != ev.Title {
 		t.Fatalf("güncel = %+v", v)
 	}
-	if h := v.Details.Hike; h.Difficulty != 5 || h.DistanceKm != 12.35 || h.ElevationM != 800 || h.ReturnGraceMinutes != 45 {
-		t.Fatalf("yürüyüş = %+v", h)
-	}
 	var payload string
 	must(t, e.pool.QueryRow(ctx, `SELECT payload::text FROM domain_events WHERE type = 'event.updated'`).Scan(&payload))
-	if !strings.Contains(payload, `"fields": ["time", "location", "capacity", "details"]`) || strings.Contains(payload, "example.com") {
+	if !strings.Contains(payload, `"fields": ["time", "location", "capacity"]`) || strings.Contains(payload, "example.com") {
 		t.Fatalf("olay = %s", payload)
 	}
 
@@ -426,15 +411,13 @@ func TestUpdate(t *testing.T) {
 		{[]string{"status"}, Input{}, "update_mask"},
 		{[]string{FieldTitle}, Input{}, "title"},
 		{[]string{FieldLocation}, Input{Location: Location{Mode: ModeOnline}}, "online_url"},
-		{[]string{FieldDetails}, Input{}, "details"},
-		{[]string{FieldDetails}, Input{Details: Details{Camp: &Camp{}}}, "details"},
+		// No type has Faz 1 details any more (issue #243).
+		{[]string{"details"}, Input{}, "update_mask"},
 	} {
 		_, err := e.svc.Update(ctx, admin, tf, ev.ID, tc.fields, tc.in)
 		wantField(t, fmt.Sprint(tc.fields), err, tc.field)
 	}
 	general := e.create(t, tf, admin, input())
-	_, err = e.svc.Update(ctx, admin, tf, general.ID, []string{FieldDetails}, Input{Details: Details{Hike: &Hike{}}})
-	wantField(t, "genel etkinliğe detay", err, "details")
 
 	// Ended events no longer change.
 	e.exec(t, `UPDATE events SET starts_at = now() - interval '3 hours', ends_at = now() - interval '1 hour' WHERE id = $1`, general.ID.PG())
@@ -648,18 +631,8 @@ func (e *env) callAll(user, tf, ev id.ID) map[string]error {
 	_, _, out["ListUpcoming"] = e.svc.ListUpcoming(ctx, user, tf, 0, "")
 	_, out["SetRSVP"] = e.svc.SetRSVP(ctx, user, tf, ev, RSVPGoing)
 	_, _, out["ListAttendees"] = e.svc.ListAttendees(ctx, user, tf, ev, "", 0, "")
-	_, out["AddCampItem"] = e.svc.AddCampItem(ctx, user, tf, ev, "Çadır", 1, id.ID{})
-	out["RemoveCampItem"] = e.svc.RemoveCampItem(ctx, user, tf, ev, id.New())
-	_, out["AssignCampItem"] = e.svc.AssignCampItem(ctx, user, tf, ev, id.New(), id.ID{})
-	_, out["SetVehicle"] = e.svc.SetVehicle(ctx, user, tf, ev, VehicleInput{Make: "Ford"})
-	out["RemoveVehicle"] = e.svc.RemoveVehicle(ctx, user, tf, ev, id.New())
 	_, out["CheckIn"] = e.svc.CheckIn(ctx, user, tf, ev, izmir)
-	_, out["StartHike"] = e.svc.StartHike(ctx, user, tf, ev, time.Time{})
-	_, out["FinishHike"] = e.svc.FinishHike(ctx, user, tf, ev, time.Time{})
 	out["SetAttendance"] = e.svc.SetAttendance(ctx, user, tf, ev, id.New(), true)
-	_, out["AddCatch"] = e.svc.AddCatch(ctx, user, tf, ev, CatchInput{Species: "Levrek", LengthCm: 40, ClientRequestID: id.New().String()})
-	_, _, out["ListCatches"] = e.svc.ListCatches(ctx, user, tf, ev, 0, "")
-	out["RemoveCatch"] = e.svc.RemoveCatch(ctx, user, tf, ev, id.New())
 	_, out["AddPhoto"] = e.svc.AddPhoto(ctx, user, tf, ev, PhotoInput{UploadID: id.New(), ClientRequestID: id.New().String()})
 	_, _, out["ListPhotos"] = e.svc.ListPhotos(ctx, user, tf, ev, 0, "")
 	out["RemovePhoto"] = e.svc.RemovePhoto(ctx, user, tf, ev, id.New())
@@ -716,372 +689,8 @@ func TestReadOnlyTayfa(t *testing.T) {
 		switch name {
 		case "Get", "ListUpcoming", "ListAttendees", "ListPhotos":
 			must(t, err)
-		case "ListCatches":
-			// A read: it gets past the read-only check to the type check.
-			wantErr(t, name, err, apperr.ErrEventTypeMismatch)
 		default:
 			wantErr(t, name, err, apperr.ErrTayfaReadOnly)
-		}
-	}
-}
-
-func TestConvoyVehiclesAndPlates(t *testing.T) {
-	e := setup(t)
-	tf, admin := e.newTayfa(t)
-	e.allowMembers(t, tf, admin)
-	org := e.seed(t, tf, authz.Member)
-	driver := e.seed(t, tf, authz.Member)
-	rider := e.seed(t, tf, authz.Member)
-	outsider := e.seed(t, tf, authz.Member)
-	in := input()
-	in.Type = TypeConvoy
-	ev := e.create(t, tf, org, in)
-
-	_, err := e.svc.SetVehicle(ctx, driver, tf, ev.ID, VehicleInput{Make: "Ford", Plate: "35 ABC 123"})
-	wantErr(t, "katılmadan araç", err, apperr.ErrEventNotGoing)
-	for _, u := range []id.ID{driver, rider} {
-		_, err := e.svc.SetRSVP(ctx, u, tf, ev.ID, RSVPGoing)
-		must(t, err)
-	}
-	for _, tc := range []struct {
-		in    VehicleInput
-		field string
-	}{
-		{VehicleInput{}, "make"},
-		{VehicleInput{Make: "Ford", ModelYear: 1899}, "model_year"},
-		{VehicleInput{Make: "Ford", ModelYear: int32(time.Now().Year() + 2)}, "model_year"},
-		{VehicleInput{Make: "Ford", Plate: "35-ABC-123"}, "plate"},
-		{VehicleInput{Make: "Ford", Plate: "35 ŞĞÜ 12"}, "plate"},
-		{VehicleInput{Make: "Ford", Plate: "1234567890ABCDEFG"}, "plate"},
-	} {
-		_, err := e.svc.SetVehicle(ctx, driver, tf, ev.ID, tc.in)
-		wantField(t, fmt.Sprintf("%+v", tc.in), err, tc.field)
-	}
-	veh, err := e.svc.SetVehicle(ctx, driver, tf, ev.ID, VehicleInput{Make: "Ford", Model: "Mustang", ModelYear: 1967, Color: "Kırmızı", Plate: " 35  abc 123 "})
-	must(t, err)
-	if veh.Plate != "35 ABC 123" {
-		t.Fatalf("plaka = %q", veh.Plate)
-	}
-	// Setting again replaces the caller's vehicle.
-	veh2, err := e.svc.SetVehicle(ctx, driver, tf, ev.ID, VehicleInput{Make: "Ford", Model: "Mustang", ModelYear: 1967, Plate: "35 ABC 123"})
-	must(t, err)
-	if veh2.ID != veh.ID || e.count(t, `SELECT count(*) FROM event_convoy_vehicles`) != 1 {
-		t.Fatal("ikinci araç eklendi")
-	}
-
-	plate := func(u id.ID) string {
-		t.Helper()
-		v, err := e.svc.Get(ctx, u, tf, ev.ID)
-		must(t, err)
-		if len(v.Details.Convoy.Vehicles) != 1 {
-			t.Fatalf("araçlar = %+v", v.Details.Convoy.Vehicles)
-		}
-		return v.Details.Convoy.Vehicles[0].Plate
-	}
-	for name, tc := range map[string]struct {
-		u    id.ID
-		want string
-	}{
-		"sürücü":      {driver, "35 ABC 123"},
-		"katılımcı":   {rider, "35 ABC 123"},
-		"organizatör": {org, "35 ABC 123"},
-		"katılmayan":  {outsider, ""},
-		// Admins see the vehicle but not the plate unless they take part.
-		"yönetici": {admin, ""},
-	} {
-		if got := plate(tc.u); got != tc.want {
-			t.Errorf("%s: plaka %q, %q bekleniyordu", name, got, tc.want)
-		}
-	}
-	_, err = e.svc.SetRSVP(ctx, outsider, tf, ev.ID, RSVPMaybe)
-	must(t, err)
-	if plate(outsider) != "" {
-		t.Error("belki diyen plakayı gördü")
-	}
-
-	// The plate never reaches audit records or events.
-	var all string
-	must(t, e.pool.QueryRow(ctx, `SELECT coalesce(string_agg(metadata::text, ' '), '') FROM audit_logs`).Scan(&all))
-	var events string
-	must(t, e.pool.QueryRow(ctx, `SELECT coalesce(string_agg(payload::text, ' '), '') FROM domain_events`).Scan(&events))
-	if strings.Contains(all+events, "ABC") || strings.Contains(all+events, "Mustang") {
-		t.Fatal("araç bilgisi kayda girdi")
-	}
-
-	// Removing: not someone else's (unless managing), always one's own.
-	err = e.svc.RemoveVehicle(ctx, rider, tf, ev.ID, veh.ID)
-	wantErr(t, "başkasının aracı", err, apperr.ErrPermissionDenied)
-	err = e.svc.RemoveVehicle(ctx, rider, tf, ev.ID, id.New())
-	wantErr(t, "olmayan araç", err, apperr.ErrEventItemNotFound)
-	must(t, e.svc.RemoveVehicle(ctx, org, tf, ev.ID, veh.ID))
-	_, err = e.svc.SetVehicle(ctx, driver, tf, ev.ID, VehicleInput{Make: "Ford", Plate: "35 ABC 123"})
-	must(t, err)
-
-	// Leaving the convoy takes the vehicle (and plate) with it.
-	_, err = e.svc.SetRSVP(ctx, driver, tf, ev.ID, RSVPNotGoing)
-	must(t, err)
-	if n := e.count(t, `SELECT count(*) FROM event_convoy_vehicles`); n != 0 {
-		t.Fatalf("ayrılan sürücünün aracı kaldı: %d", n)
-	}
-
-	// Vehicles are convoy-only.
-	other := e.create(t, tf, org, input())
-	_, err = e.svc.SetVehicle(ctx, driver, tf, other.ID, VehicleInput{Make: "Ford"})
-	wantErr(t, "genel etkinliğe araç", err, apperr.ErrEventTypeMismatch)
-}
-
-func TestCampItems(t *testing.T) {
-	e := setup(t)
-	tf, admin := e.newTayfa(t)
-	member := e.seed(t, tf, authz.Member)
-	in := input()
-	in.Type = TypeCamp
-	yes := true
-	in.Details.Camp = &Camp{SiteName: "Kazdağları", HasWater: &yes, Notes: "Odun getirin"}
-	ev := e.create(t, tf, admin, in)
-
-	_, err := e.svc.AddCampItem(ctx, member, tf, ev.ID, "Çadır", 1, id.ID{})
-	wantErr(t, "üye listeyi değiştirir", err, apperr.ErrPermissionDenied)
-	_, err = e.svc.AddCampItem(ctx, admin, tf, ev.ID, "", 1, id.ID{})
-	wantField(t, "boş ad", err, "name")
-	_, err = e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Çadır", 1000, id.ID{})
-	wantField(t, "1000 adet", err, "quantity")
-	_, err = e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Çadır", 1, id.New())
-	wantErr(t, "üye olmayana atama", err, apperr.ErrEventNotGoing)
-	_, err = e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Çadır", 1, member)
-	wantErr(t, "gelmeyene atama", err, apperr.ErrEventNotGoing)
-	_, err = e.svc.SetRSVP(ctx, member, tf, ev.ID, RSVPGoing)
-	must(t, err)
-
-	item, err := e.svc.AddCampItem(ctx, admin, tf, ev.ID, " Çadır ", 0, member)
-	must(t, err)
-	if item.Name != "Çadır" || item.Quantity != 1 || item.AssignedUserID != member {
-		t.Fatalf("malzeme = %+v", item)
-	}
-	v, err := e.svc.Get(ctx, member, tf, ev.ID)
-	must(t, err)
-	c := v.Details.Camp
-	if c.SiteName != "Kazdağları" || c.HasWater == nil || !*c.HasWater || c.HasToilet != nil || len(c.Items) != 1 {
-		t.Fatalf("kamp = %+v", c)
-	}
-
-	// Details update keeps the item list.
-	_, err = e.svc.Update(ctx, admin, tf, ev.ID, []string{FieldDetails}, Input{Details: Details{Camp: &Camp{SiteName: "Assos"}}})
-	must(t, err)
-	v, err = e.svc.Get(ctx, member, tf, ev.ID)
-	must(t, err)
-	if v.Details.Camp.SiteName != "Assos" || v.Details.Camp.HasWater != nil || len(v.Details.Camp.Items) != 1 {
-		t.Fatalf("kamp = %+v", v.Details.Camp)
-	}
-
-	must(t, e.svc.RemoveCampItem(ctx, admin, tf, ev.ID, item.ID))
-	err = e.svc.RemoveCampItem(ctx, admin, tf, ev.ID, item.ID)
-	wantErr(t, "ikinci silme", err, apperr.ErrEventItemNotFound)
-
-	// The list has a limit.
-	for range campItemsMax {
-		_, err := e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Su", 1, id.ID{})
-		must(t, err)
-	}
-	_, err = e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Su", 1, id.ID{})
-	wantErr(t, "sınır", err, apperr.ErrEventLimit)
-
-	general := e.create(t, tf, admin, input())
-	_, err = e.svc.AddCampItem(ctx, admin, tf, general.ID, "Çadır", 1, id.ID{})
-	wantErr(t, "genel etkinliğe malzeme", err, apperr.ErrEventTypeMismatch)
-}
-
-// TestAssignCampItem (issue #198): who may take, drop and assign a camp
-// item, for every role and state.
-func TestAssignCampItem(t *testing.T) {
-	e := setup(t)
-	tf, admin := e.newTayfa(t)
-	e.allowMembers(t, tf, admin)
-	org := e.seed(t, tf, authz.Member)
-	in := input()
-	in.Type, in.Details.Camp = TypeCamp, &Camp{SiteName: "Kazdağları"}
-	ev := e.create(t, tf, org, in)
-	a := e.going(t, tf, ev.ID, authz.Member)
-	b := e.going(t, tf, ev.ID, authz.Member)
-	mod := e.seed(t, tf, authz.Moderator)
-	maybe := e.seed(t, tf, authz.Member)
-	_, err := e.svc.SetRSVP(ctx, maybe, tf, ev.ID, RSVPMaybe)
-	must(t, err)
-	muted := e.going(t, tf, ev.ID, authz.Member)
-	e.mute(t, tf, muted)
-	banned := e.going(t, tf, ev.ID, authz.Member)
-	e.exec(t, `UPDATE memberships SET status = 'banned' WHERE tayfa_id = $1 AND user_id = $2`, tf.PG(), banned.PG())
-	none := id.ID{}
-
-	newItem := func(assigned id.ID) id.ID {
-		t.Helper()
-		it, err := e.svc.AddCampItem(ctx, org, tf, ev.ID, "Ocak", 1, assigned)
-		must(t, err)
-		return it.ID
-	}
-	assignee := func(item id.ID) id.ID {
-		t.Helper()
-		v, err := e.svc.Get(ctx, org, tf, ev.ID)
-		must(t, err)
-		for _, it := range v.Details.Camp.Items {
-			if it.ID == item {
-				return it.AssignedUserID
-			}
-		}
-		t.Fatalf("malzeme yok: %s", item)
-		return id.ID{}
-	}
-
-	for name, tc := range map[string]struct {
-		caller, before, to, after id.ID
-		err                       error
-	}{
-		"üye boştakini üstlenir":               {caller: a, before: none, to: a, after: a},
-		"üye kendi atamasından vazgeçer":       {caller: a, before: a, to: none, after: none},
-		"üye kendininkini yeniden alır":        {caller: a, before: a, to: a, after: a},
-		"üye boştakini bırakır (değişmez)":     {caller: a, before: none, to: none, after: none},
-		"üye başkasınınkini alamaz":            {caller: a, before: b, to: a, after: b, err: apperr.ErrEventItemTaken},
-		"üye başkasınınkini bırakamaz":         {caller: a, before: b, to: none, after: b, err: apperr.ErrEventItemTaken},
-		"üye başkasına atayamaz":               {caller: a, before: none, to: b, after: none, err: apperr.ErrPermissionDenied},
-		"belki diyen üstlenemez":               {caller: maybe, before: none, to: maybe, after: none, err: apperr.ErrEventNotGoing},
-		"susturulan üstlenemez":                {caller: muted, before: none, to: muted, after: none, err: apperr.ErrMuted},
-		"organizatör gelene atar":              {caller: org, before: none, to: a, after: a},
-		"organizatör başkasına geçirir":        {caller: org, before: a, to: b, after: b},
-		"organizatör atamayı kaldırır":         {caller: org, before: b, to: none, after: none},
-		"organizatör gelmeyene atayamaz":       {caller: org, before: none, to: maybe, after: none, err: apperr.ErrEventNotGoing},
-		"organizatör uzaklaştırılana atayamaz": {caller: org, before: none, to: banned, after: none, err: apperr.ErrEventNotGoing},
-		"organizatör yabancıya atayamaz":       {caller: org, before: none, to: id.New(), after: none, err: apperr.ErrEventNotGoing},
-		"moderatör atar":                       {caller: mod, before: none, to: a, after: a},
-		"moderatör kaldırır":                   {caller: mod, before: a, to: none, after: none},
-		"yönetici atar":                        {caller: admin, before: b, to: a, after: a},
-	} {
-		t.Run(name, func(t *testing.T) {
-			item := newItem(tc.before)
-			got, err := e.svc.AssignCampItem(ctx, tc.caller, tf, ev.ID, item, tc.to)
-			if tc.err != nil {
-				wantErr(t, name, err, tc.err)
-			} else {
-				must(t, err)
-				if got.ID != item || got.Name != "Ocak" || got.AssignedUserID != tc.after {
-					t.Fatalf("yanıt = %+v", got)
-				}
-			}
-			if g := assignee(item); g != tc.after {
-				t.Fatalf("atanan = %s, beklenen %s", g, tc.after)
-			}
-		})
-	}
-
-	// Unknown items, other events' items and other types.
-	_, err = e.svc.AssignCampItem(ctx, a, tf, ev.ID, id.New(), a)
-	wantErr(t, "bilinmeyen malzeme", err, apperr.ErrEventItemNotFound)
-	in.ClientRequestID = id.New().String()
-	other := e.create(t, tf, org, in)
-	_, err = e.svc.AssignCampItem(ctx, org, tf, other.ID, newItem(none), none)
-	wantErr(t, "başka etkinliğin malzemesi", err, apperr.ErrEventItemNotFound)
-	general := e.create(t, tf, org, input())
-	_, err = e.svc.AssignCampItem(ctx, org, tf, general.ID, id.New(), none)
-	wantErr(t, "genel etkinlik", err, apperr.ErrEventTypeMismatch)
-
-	// A change is audited and announced as a list change; a no-op is not.
-	item := newItem(none)
-	before := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'event.camp_item_assigned'`)
-	_, err = e.svc.AssignCampItem(ctx, a, tf, ev.ID, item, a)
-	must(t, err)
-	_, err = e.svc.AssignCampItem(ctx, a, tf, ev.ID, item, a)
-	must(t, err)
-	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE action = 'event.camp_item_assigned'`); n != before+1 {
-		t.Fatalf("denetim kaydı = %d, beklenen %d", n, before+1)
-	}
-
-	// Cancelled events no longer change.
-	_, err = e.svc.Cancel(ctx, org, tf, ev.ID, "")
-	must(t, err)
-	_, err = e.svc.AssignCampItem(ctx, org, tf, ev.ID, item, none)
-	wantErr(t, "iptal", err, apperr.ErrEventCancelled)
-}
-
-// TestAssignCampItemRace (issue #198): of members taking the same item at
-// once exactly one wins; the others get ErrEventItemTaken.
-func TestAssignCampItemRace(t *testing.T) {
-	e := setup(t)
-	tf, admin := e.newTayfa(t)
-	in := input()
-	in.Type, in.Details.Camp = TypeCamp, &Camp{SiteName: "Kazdağları"}
-	ev := e.create(t, tf, admin, in)
-	it, err := e.svc.AddCampItem(ctx, admin, tf, ev.ID, "Ocak", 1, id.ID{})
-	must(t, err)
-	const n = 6
-	users := make([]id.ID, n)
-	for i := range users {
-		users[i] = e.going(t, tf, ev.ID, authz.Member)
-	}
-	errs := make([]error, n)
-	var wg sync.WaitGroup
-	start := make(chan struct{})
-	for i, u := range users {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			<-start
-			_, errs[i] = e.svc.AssignCampItem(ctx, u, tf, ev.ID, it.ID, u)
-		}()
-	}
-	close(start)
-	wg.Wait()
-	var winner id.ID
-	for i, err := range errs {
-		switch {
-		case err == nil:
-			if winner != (id.ID{}) {
-				t.Fatal("iki kişi aynı malzemeyi üstlendi")
-			}
-			winner = users[i]
-		case errors.Is(err, apperr.ErrEventItemTaken):
-		default:
-			t.Fatalf("beklenmeyen hata: %v", err)
-		}
-	}
-	v, err := e.svc.Get(ctx, admin, tf, ev.ID)
-	must(t, err)
-	if winner == (id.ID{}) || v.Details.Camp.Items[0].AssignedUserID != winner {
-		t.Fatalf("kazanan = %s, kayıt = %+v", winner, v.Details.Camp.Items)
-	}
-}
-
-func TestFishingSpotVisibility(t *testing.T) {
-	e := setup(t)
-	tf, admin := e.newTayfa(t)
-	e.allowMembers(t, tf, admin)
-	org := e.seed(t, tf, authz.Member)
-	mod := e.seed(t, tf, authz.Moderator)
-	angler := e.seed(t, tf, authz.Member)
-	outsider := e.seed(t, tf, authz.Member)
-	in := input()
-	in.Type, in.Details.Fishing = TypeFishing, &Fishing{SpotVisibility: SpotParticipants}
-	ev := e.create(t, tf, org, in)
-	_, err := e.svc.SetRSVP(ctx, angler, tf, ev.ID, RSVPMaybe)
-	must(t, err)
-
-	for name, tc := range map[string]struct {
-		u    id.ID
-		sees bool
-	}{
-		"organizatör": {org, true}, "moderatör": {mod, true}, "yönetici": {admin, true},
-		"belki diyen": {angler, true}, "katılmayan": {outsider, false},
-	} {
-		v, err := e.svc.Get(ctx, tc.u, tf, ev.ID)
-		must(t, err)
-		list, _, err := e.svc.ListUpcoming(ctx, tc.u, tf, 0, "")
-		must(t, err)
-		for _, got := range []Event{v, list[0]} {
-			if (got.MeetingPoint != nil) != tc.sees || (got.MeetingPointName != "") != tc.sees {
-				t.Errorf("%s: mera görünürlüğü %v bekleniyordu: %+v", name, tc.sees, got.Location)
-			}
-			// Il and ilçe stay visible: they are not the spot.
-			if got.City == "" {
-				t.Errorf("%s: il gizlendi", name)
-			}
 		}
 	}
 }
@@ -1106,9 +715,6 @@ func TestListUpcomingPaging(t *testing.T) {
 		must(t, err)
 		for _, v := range list {
 			got = append(got, v.ID)
-			if v.Details.typ() != "" {
-				t.Error("listede detay")
-			}
 		}
 		if next == "" {
 			break

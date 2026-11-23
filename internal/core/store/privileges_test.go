@@ -21,11 +21,7 @@ var wantAppPrivileges = map[string]string{
 	"polls":                 "DELETE,INSERT,SELECT,UPDATE",
 	"events":                "DELETE,INSERT,SELECT,UPDATE",
 	"event_rsvps":           "DELETE,INSERT,SELECT,UPDATE",
-	"event_camp_items":      "DELETE,INSERT,SELECT,UPDATE",
-	"event_convoy_vehicles": "DELETE,INSERT,SELECT,UPDATE",
-	"event_hike_checkins":   "DELETE,INSERT,SELECT,UPDATE",
 	"user_activity_records": "DELETE,INSERT,SELECT,UPDATE",
-	"fishing_catches":       "DELETE,INSERT,SELECT,UPDATE",
 	// Issue #206: a photo never moves to another event, file or uploader.
 	"event_photos": "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
 	"friendships":  "DELETE,INSERT,SELECT,UPDATE",
@@ -33,7 +29,7 @@ var wantAppPrivileges = map[string]string{
 	// a suggestion only gets its dismissal and withdrawal times.
 	"friend_scores":           "DELETE,INSERT,SELECT",
 	"friend_suggestions":      "DELETE,INSERT,SELECT,UPDATE(dismissed_at,withdrawn_at)",
-	"social_settings":         "DELETE,INSERT,SELECT,UPDATE(discover_visible_to_friends,hide_from_suggestions,profiling_enabled,updated_at)",
+	"social_settings":         "DELETE,INSERT,SELECT,UPDATE(discover_visible_to_friends,hide_from_suggestions,now_from_friends,profiling_enabled,updated_at)",
 	"friend_request_outcomes": "DELETE,INSERT,SELECT,UPDATE(outcome,resolved_at)",
 	// Issue #210, ADR-0033: an application is never deleted (it goes with
 	// the tayfa); feedback carries no text; a safety contact row never
@@ -54,12 +50,6 @@ var wantAppPrivileges = map[string]string{
 	"tayfa_modules":         "INSERT,SELECT,UPDATE",
 	"user_profiles":         "INSERT,SELECT,UPDATE",
 	"event_series":          "INSERT,SELECT,UPDATE",
-	"event_camp":            "INSERT,SELECT,UPDATE",
-	"event_convoy":          "INSERT,SELECT,UPDATE",
-	"event_hike":            "INSERT,SELECT,UPDATE",
-	"event_fishing":         "INSERT,SELECT,UPDATE",
-	"event_gaming":          "INSERT,SELECT,UPDATE",
-	"event_sports":          "INSERT,SELECT,UPDATE",
 	"poll_options":          "INSERT,SELECT",
 	"event_consumers":       "INSERT,SELECT,UPDATE",
 	"domain_events":         "INSERT,SELECT,UPDATE(actor_id,tayfa_id)",
@@ -70,6 +60,153 @@ var wantAppPrivileges = map[string]string{
 	"uploads": "DELETE,INSERT,SELECT,UPDATE(attach_confirmed_at,attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
 	// Issue #207: user_id and day never change.
 	"user_availability": "DELETE,INSERT,SELECT,UPDATE(note,slots,updated_at)",
+	// Issue #237, ADR-0025: the catalog changes through migrations and the
+	// platform panel (#262, 00067): keys never change, nothing is deleted,
+	// a type version row is only ever added.
+	"catalog_meta":                "SELECT,UPDATE(catalog_version,updated_at)",
+	"catalog_interests":           "INSERT,SELECT,UPDATE(default_widgets,icon,labels,position,status,updated_at)",
+	"catalog_event_types":         "INSERT,SELECT,UPDATE(definition,icon,interest_keys,labels,modes,position,status,updated_at,version)",
+	"catalog_event_type_versions": "INSERT,SELECT",
+	// Issue #259: the study tag list is catalog data too; a tag's parent
+	// never changes.
+	"catalog_study_tags": "INSERT,SELECT,UPDATE(labels,position,status,updated_at)",
+	// Issue #258: badge definitions are catalog data; an earned badge is
+	// never changed or taken back (ADR-0039 §2), only one's own go with
+	// one's account. Each frozen event is looked at once.
+	"catalog_badges":   "INSERT,SELECT,UPDATE(icon,labels,position,rule,status,updated_at)",
+	"user_badges":      "DELETE,INSERT,SELECT",
+	"tayfa_badges":     "INSERT,SELECT",
+	"event_badge_runs": "INSERT,SELECT",
+	// Issue #266: statistics are derived; a tayfa's rows are deleted and
+	// written again, never updated. A run mark only changes its state.
+	"tayfa_stats":      "DELETE,INSERT,SELECT",
+	"user_stats":       "DELETE,INSERT,SELECT",
+	"event_stat_runs":  "INSERT,SELECT,UPDATE(changed_at,counted)",
+	"tayfa_stat_queue": "DELETE,INSERT,SELECT,UPDATE(queued_at)",
+	// Issue #268: the home page layout is written as a whole list; a row
+	// never moves to another tayfa or widget and is never deleted (it goes
+	// with the tayfa).
+	"tayfa_home_widgets": "INSERT,SELECT,UPDATE(config,enabled,position,updated_at)",
+	// Issue #237: a value never moves to another event or field.
+	"event_field_values": "DELETE,INSERT,SELECT,UPDATE(updated_at,value)",
+	// Issue #238: a selection never moves to another event or component
+	// and goes only with its event; a referee assignment is never changed,
+	// only removed.
+	"event_components": "INSERT,SELECT,UPDATE(enabled,params,updated_at)",
+	"event_referees":   "DELETE,INSERT,SELECT",
+	// Issue #239: a route never moves to another event or component.
+	"event_routes": "DELETE,INSERT,SELECT,UPDATE(points,updated_at)",
+	// Issue #240: a vehicle never moves to another event, component or
+	// person; a seat request is only approved or removed.
+	"event_vehicles":              "DELETE,INSERT,SELECT,UPDATE(color,make,model,model_year,plate,seats,updated_at,vehicle_id)",
+	"event_vehicle_seat_requests": "DELETE,INSERT,SELECT,UPDATE(decided_at,status)",
+	// Issue #245: a measurement never moves to another event, component or
+	// person; only its value changes and account deletion clears its writer.
+	"event_measurements": "DELETE,INSERT,SELECT,UPDATE(entered_by,updated_at,value)",
+	// Issue #246: a target never moves to another event or component; only
+	// its value changes.
+	"event_goals": "DELETE,INSERT,SELECT,UPDATE(target,updated_at)",
+	// Issue #247: a programme item never moves to another event or
+	// component; its values change and it is deleted.
+	"event_schedule_items": "DELETE,INSERT,SELECT,UPDATE(ends_at,note,starts_at,title,updated_at)",
+	// Issue #248: a team never moves to another event or component; only
+	// its name changes when the teams are formed again. A member row never
+	// changes: it is deleted and written again.
+	"event_teams":        "DELETE,INSERT,SELECT,UPDATE(name,updated_at)",
+	"event_team_members": "DELETE,INSERT,SELECT",
+	// Issue #249: a draw is fixed. Rows are only written; account deletion
+	// empties a person's place.
+	"event_draws":        "INSERT,SELECT",
+	"event_draw_entries": "INSERT,SELECT,UPDATE(user_id)",
+	// Issue #250: score presets are catalog data (the platform panel
+	// manages them, #262).
+	// A table, a seat or a score never moves to another event, component or
+	// table; account deletion empties a person's seat.
+	"catalog_score_presets": "INSERT,SELECT,UPDATE(labels,params,position,status,updated_at)",
+	"event_score_tables":    "DELETE,INSERT,SELECT,UPDATE(finished_at,label,status,updated_at)",
+	"event_score_players":   "DELETE,INSERT,SELECT,UPDATE(user_id)",
+	"event_scores":          "DELETE,INSERT,SELECT",
+	// Issue #251: a bracket, a match or a game never moves to another
+	// event, component or match; a correction deletes the game and writes
+	// it again, a reset deletes the bracket.
+	"event_brackets":        "DELETE,INSERT,SELECT",
+	"event_bracket_matches": "DELETE,INSERT,SELECT",
+	"event_bracket_games":   "DELETE,INSERT,SELECT",
+	// Issue #252: a guest never moves to another event; only its nickname
+	// and who added it are cleared (expiry, account deletion).
+	"event_guest_players": "DELETE,INSERT,SELECT,UPDATE(created_by,nickname)",
+	// Issue #253: a ranking entry never moves to another event, component
+	// or person; only its value changes and account deletion clears its
+	// writer.
+	"event_ranking_entries": "DELETE,INSERT,SELECT,UPDATE(entered_by,updated_at,value)",
+	// Issue #255: an announcement never moves to another event or
+	// component and is not deleted; a new announcement touches it and
+	// account deletion clears its announcer. The winners chosen by hand are
+	// replaced, never changed.
+	"event_celebrations":        "INSERT,SELECT,UPDATE(announced_by,updated_at)",
+	"event_celebration_winners": "DELETE,INSERT,SELECT",
+	// Issue #254: an option never moves or changes its label; a vote
+	// changes only its target and time; a closure is never deleted.
+	"event_vote_options":  "DELETE,INSERT,SELECT,UPDATE(created_by)",
+	"event_votes":         "DELETE,INSERT,SELECT,UPDATE(candidate_user_id,event_vehicle_id,option_id,photo_id,updated_at)",
+	"event_vote_closures": "INSERT,SELECT,UPDATE(closed_by)",
+	// Issue #256: a question never moves to another event, component or
+	// author, and its text and anonymity do not change; only the answered
+	// mark and the soft delete are written. A vote is added or deleted.
+	"event_questions":      "DELETE,INSERT,SELECT,UPDATE(answered_at,answered_by,deleted_at,deleted_by)",
+	"event_question_votes": "DELETE,INSERT,SELECT",
+	// Issue #269: a daily item never moves to another tayfa and its
+	// request ID never changes; the text, place and pin are edited, the
+	// soft delete is written and undone, account deletion clears who added
+	// and deleted it. The rotation state only moves.
+	"tayfa_daily_items": "DELETE,INSERT,SELECT,UPDATE(attribution,body,created_by,deleted_at,deleted_by,pin_day,pin_month,pin_year,position,updated_at)",
+	"tayfa_daily_state": "INSERT,SELECT,UPDATE(next_position,shown_item_id,shown_on,updated_at)",
+	// Issue #270: a library item never moves to another tayfa and its
+	// kind and request ID never change; a loan never moves to another
+	// item or tayfa (only its state, times and, on account deletion, the
+	// borrower change); a queue place is added and deleted.
+	"library_items": "DELETE,INSERT,SELECT,UPDATE(name,note,owner_id,photo_upload_id,status,updated_at,vocabulary_id,vocabulary_namespace,withdrawn_at,withdrawn_by)",
+	"library_loans": "DELETE,INSERT,SELECT,UPDATE(approved_at,borrower_id,due_at,ended_at,handed_over_at,orphaned_at,reminded_at,state)",
+	"library_queue": "DELETE,INSERT,SELECT",
+	// Issue #261: a material never moves to another tayfa and its kind
+	// and request ID never change; the blocked domain list is managed on
+	// the platform panel (#262): entries are added and removed; account
+	// deletion clears who added one (#334).
+	"materials":       "DELETE,INSERT,SELECT,UPDATE(author_id,deleted_at,deleted_by,domain,photo1_upload_id,photo2_upload_id,photo3_upload_id,subject_key,title,topic_key,updated_at,url)",
+	"blocked_domains": "DELETE,INSERT,SELECT,UPDATE(created_by)",
+	// Issue #272: a garage vehicle never moves to another person and its
+	// request ID never changes; a visibility row never moves.
+	"garage_vehicles":         "DELETE,INSERT,SELECT,UPDATE(color,deleted_at,deleted_by,make,model,model_year,note,photo1_upload_id,photo2_upload_id,photo3_upload_id,updated_at)",
+	"garage_tayfa_visibility": "DELETE,INSERT,SELECT,UPDATE(updated_at,visible)",
+	// Issue #271: the pool_link list is replaced as a whole (deleted and
+	// written again); a link never moves.
+	"event_pool_links": "DELETE,INSERT,SELECT",
+	// Issue #241: an item never moves to another event or list, and its
+	// name and quantity do not change; only the assignee changes and
+	// account deletion clears the people on it.
+	"event_checklist_items": "DELETE,INSERT,SELECT,UPDATE(assigned_user_id,created_by,updated_at)",
+	// Issue #242: a plan or a roll call record never moves to another
+	// event, component or person; a record's start never changes, only its
+	// return and alarm are written.
+	"event_roll_calls":         "DELETE,INSERT,SELECT,UPDATE(expected_return_at,updated_at)",
+	"event_roll_call_checkins": "DELETE,INSERT,SELECT,UPDATE(alert_sent_at,returned_at,returned_received_at,updated_at)",
+	// Issue #243: a log entry never moves to another event, component or
+	// person, and its values, location and photo do not change; it is only
+	// soft deleted (account deletion clears who deleted it).
+	"event_log_entries": "DELETE,INSERT,SELECT,UPDATE(deleted_at,deleted_by)",
+	// Issue #244: a vocabulary value is never deleted and its spelling never
+	// changes; only a merge and account deletion write to it. A log entry's
+	// link never changes; it goes with the entry (cascade).
+	"tayfa_vocabulary":           "INSERT,SELECT,UPDATE(created_by,merged_into)",
+	"event_log_entry_vocabulary": "INSERT,SELECT",
+	// Issue #264, ADR-0038 §3: a join QR token is written once and deleted
+	// (a day later, or with its creator's account); the per-event QR join
+	// counter only grows.
+	"event_join_qr_tokens": "DELETE,INSERT,SELECT",
+	"event_join_qr_counts": "INSERT,SELECT,UPDATE(joins)",
+	// Issue #265, ADR-0038 §4–§5: a now notification counter only grows;
+	// it is deleted after two days or with its user's account.
+	"now_notification_counters": "DELETE,INSERT,SELECT,UPDATE(sent)",
 }
 
 func TestAppRolePrivileges(t *testing.T) {

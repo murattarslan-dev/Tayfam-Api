@@ -17,12 +17,23 @@ const specPath = "../../../../api/openapi/gateway.yaml"
 var pathParams = strings.NewReplacer(
 	"{tayfa_id}", tayfaID, "{user_id}", userID, "{invite_id}", inviteID, "{module}", "events",
 	"{announcement_id}", annID, "{event_id}", eventID, "{item_id}", itemID,
-	"{vehicle_id}", vehicleID, "{catch_id}", catchID, "{series_id}", seriesID,
+	"{vehicle_id}", vehicleID, "{entry_id}", entryID, "{series_id}", seriesID,
 	"{question_id}", questionID, "{answer_id}", answerID, "{tag_id}", tagID,
 	"{poll_id}", pollID, "{option_id}", optionID, "{notification_id}", notificationID,
 	"{session_id}", sessionID, "{channel_id}", channelID, "{message_id}", messageID,
 	"{conversation_id}", conversationID, "{link_request_id}", linkRequestID,
 	"{upload_id}", uploadID, "{data_export_id}", dataExportID, "{date}", "2026-11-20",
+	"{key}", "hike", "{version}", "1",
+	"{component_key}", "draw", "{referee_id}", refereeID,
+	"{namespace}", "fish_species", "{vocabulary_id}", itemID,
+	"{table_id}", itemID, "{round}", "1",
+	"{match_id}", itemID, "{game}", "1",
+	"{guest_id}", itemID,
+	"{widget_key}", "stats",
+	"{daily_item_id}", itemID,
+	"{library_item_id}", itemID, "{library_loan_id}", itemID,
+	"{material_id}", itemID,
+	"{garage_vehicle_id}", itemID,
 )
 
 // TestRoutesMatchContract keeps the router and api/openapi/gateway.yaml in

@@ -22,6 +22,64 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// StatsVisibility is who sees a user's personal statistics and personal
+// badges on their profile (identity's users.stats_visibility). The user
+// always sees their own.
+type StatsVisibility int32
+
+const (
+	StatsVisibility_STATS_VISIBILITY_UNSPECIFIED StatsVisibility = 0
+	// Nobody but the user. The default.
+	StatsVisibility_STATS_VISIBILITY_NONE StatsVisibility = 1
+	// Friends.
+	StatsVisibility_STATS_VISIBILITY_FRIENDS StatsVisibility = 2
+	// Friends, and members of a tayfa the viewer shares with the user.
+	StatsVisibility_STATS_VISIBILITY_FRIENDS_AND_MUTUAL StatsVisibility = 3
+)
+
+// Enum value maps for StatsVisibility.
+var (
+	StatsVisibility_name = map[int32]string{
+		0: "STATS_VISIBILITY_UNSPECIFIED",
+		1: "STATS_VISIBILITY_NONE",
+		2: "STATS_VISIBILITY_FRIENDS",
+		3: "STATS_VISIBILITY_FRIENDS_AND_MUTUAL",
+	}
+	StatsVisibility_value = map[string]int32{
+		"STATS_VISIBILITY_UNSPECIFIED":        0,
+		"STATS_VISIBILITY_NONE":               1,
+		"STATS_VISIBILITY_FRIENDS":            2,
+		"STATS_VISIBILITY_FRIENDS_AND_MUTUAL": 3,
+	}
+)
+
+func (x StatsVisibility) Enum() *StatsVisibility {
+	p := new(StatsVisibility)
+	*p = x
+	return p
+}
+
+func (x StatsVisibility) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StatsVisibility) Descriptor() protoreflect.EnumDescriptor {
+	return file_tayfam_core_v1_user_events_proto_enumTypes[0].Descriptor()
+}
+
+func (StatsVisibility) Type() protoreflect.EnumType {
+	return &file_tayfam_core_v1_user_events_proto_enumTypes[0]
+}
+
+func (x StatsVisibility) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use StatsVisibility.Descriptor instead.
+func (StatsVisibility) EnumDescriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{0}
+}
+
 // ActivityVisibility is who sees a user's attendance history (identity's
 // users.activity_visibility).
 type ActivityVisibility int32
@@ -64,11 +122,11 @@ func (x ActivityVisibility) String() string {
 }
 
 func (ActivityVisibility) Descriptor() protoreflect.EnumDescriptor {
-	return file_tayfam_core_v1_user_events_proto_enumTypes[0].Descriptor()
+	return file_tayfam_core_v1_user_events_proto_enumTypes[1].Descriptor()
 }
 
 func (ActivityVisibility) Type() protoreflect.EnumType {
-	return &file_tayfam_core_v1_user_events_proto_enumTypes[0]
+	return &file_tayfam_core_v1_user_events_proto_enumTypes[1]
 }
 
 func (x ActivityVisibility) Number() protoreflect.EnumNumber {
@@ -77,7 +135,7 @@ func (x ActivityVisibility) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ActivityVisibility.Descriptor instead.
 func (ActivityVisibility) EnumDescriptor() ([]byte, []int) {
-	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{0}
+	return file_tayfam_core_v1_user_events_proto_rawDescGZIP(), []int{1}
 }
 
 type ApplyUserEventRequest struct {
@@ -232,8 +290,12 @@ type UserProfileUpdated struct {
 	// UNSPECIFIED in events written before the field existed: core keeps the
 	// copy's current setting (default TAYFA).
 	ActivityVisibility ActivityVisibility `protobuf:"varint,3,opt,name=activity_visibility,json=activityVisibility,proto3,enum=tayfam.core.v1.ActivityVisibility" json:"activity_visibility,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Who sees the personal statistics and badges on the profile (issue
+	// #267, ADR-0026 §4). UNSPECIFIED in events written before the field
+	// existed: core keeps the copy's current setting (default NONE).
+	StatsVisibility StatsVisibility `protobuf:"varint,4,opt,name=stats_visibility,json=statsVisibility,proto3,enum=tayfam.core.v1.StatsVisibility" json:"stats_visibility,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UserProfileUpdated) Reset() {
@@ -285,6 +347,13 @@ func (x *UserProfileUpdated) GetActivityVisibility() ActivityVisibility {
 		return x.ActivityVisibility
 	}
 	return ActivityVisibility_ACTIVITY_VISIBILITY_UNSPECIFIED
+}
+
+func (x *UserProfileUpdated) GetStatsVisibility() StatsVisibility {
+	if x != nil {
+		return x.StatsVisibility
+	}
+	return StatsVisibility_STATS_VISIBILITY_UNSPECIFIED
 }
 
 // UserDeleted carries nothing but the fact.
@@ -452,16 +521,22 @@ const file_tayfam_core_v1_user_events_proto_rawDesc = "" +
 	"\adeleted\x18\v \x01(\v2\x1b.tayfam.core.v1.UserDeletedH\x00R\adeleted\x124\n" +
 	"\x06banned\x18\f \x01(\v2\x1a.tayfam.core.v1.UserBannedH\x00R\x06banned\x12:\n" +
 	"\bunbanned\x18\r \x01(\v2\x1c.tayfam.core.v1.UserUnbannedH\x00R\bunbannedB\a\n" +
-	"\x05event\"\xb6\x01\n" +
+	"\x05event\"\x82\x02\n" +
 	"\x12UserProfileUpdated\x12!\n" +
 	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12(\n" +
 	"\x10avatar_upload_id\x18\x02 \x01(\tR\x0eavatarUploadId\x12S\n" +
-	"\x13activity_visibility\x18\x03 \x01(\x0e2\".tayfam.core.v1.ActivityVisibilityR\x12activityVisibility\"\r\n" +
+	"\x13activity_visibility\x18\x03 \x01(\x0e2\".tayfam.core.v1.ActivityVisibilityR\x12activityVisibility\x12J\n" +
+	"\x10stats_visibility\x18\x04 \x01(\x0e2\x1f.tayfam.core.v1.StatsVisibilityR\x0fstatsVisibility\"\r\n" +
 	"\vUserDeleted\"\f\n" +
 	"\n" +
 	"UserBanned\"\x0e\n" +
 	"\fUserUnbanned\"\x18\n" +
-	"\x16ApplyUserEventResponse*\x99\x01\n" +
+	"\x16ApplyUserEventResponse*\x95\x01\n" +
+	"\x0fStatsVisibility\x12 \n" +
+	"\x1cSTATS_VISIBILITY_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15STATS_VISIBILITY_NONE\x10\x01\x12\x1c\n" +
+	"\x18STATS_VISIBILITY_FRIENDS\x10\x02\x12'\n" +
+	"#STATS_VISIBILITY_FRIENDS_AND_MUTUAL\x10\x03*\x99\x01\n" +
 	"\x12ActivityVisibility\x12#\n" +
 	"\x1fACTIVITY_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bACTIVITY_VISIBILITY_PRIVATE\x10\x01\x12\x1d\n" +
@@ -483,32 +558,34 @@ func file_tayfam_core_v1_user_events_proto_rawDescGZIP() []byte {
 	return file_tayfam_core_v1_user_events_proto_rawDescData
 }
 
-var file_tayfam_core_v1_user_events_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_tayfam_core_v1_user_events_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_tayfam_core_v1_user_events_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_tayfam_core_v1_user_events_proto_goTypes = []any{
-	(ActivityVisibility)(0),        // 0: tayfam.core.v1.ActivityVisibility
-	(*ApplyUserEventRequest)(nil),  // 1: tayfam.core.v1.ApplyUserEventRequest
-	(*UserProfileUpdated)(nil),     // 2: tayfam.core.v1.UserProfileUpdated
-	(*UserDeleted)(nil),            // 3: tayfam.core.v1.UserDeleted
-	(*UserBanned)(nil),             // 4: tayfam.core.v1.UserBanned
-	(*UserUnbanned)(nil),           // 5: tayfam.core.v1.UserUnbanned
-	(*ApplyUserEventResponse)(nil), // 6: tayfam.core.v1.ApplyUserEventResponse
-	(*timestamppb.Timestamp)(nil),  // 7: google.protobuf.Timestamp
+	(StatsVisibility)(0),           // 0: tayfam.core.v1.StatsVisibility
+	(ActivityVisibility)(0),        // 1: tayfam.core.v1.ActivityVisibility
+	(*ApplyUserEventRequest)(nil),  // 2: tayfam.core.v1.ApplyUserEventRequest
+	(*UserProfileUpdated)(nil),     // 3: tayfam.core.v1.UserProfileUpdated
+	(*UserDeleted)(nil),            // 4: tayfam.core.v1.UserDeleted
+	(*UserBanned)(nil),             // 5: tayfam.core.v1.UserBanned
+	(*UserUnbanned)(nil),           // 6: tayfam.core.v1.UserUnbanned
+	(*ApplyUserEventResponse)(nil), // 7: tayfam.core.v1.ApplyUserEventResponse
+	(*timestamppb.Timestamp)(nil),  // 8: google.protobuf.Timestamp
 }
 var file_tayfam_core_v1_user_events_proto_depIdxs = []int32{
-	7, // 0: tayfam.core.v1.ApplyUserEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
-	2, // 1: tayfam.core.v1.ApplyUserEventRequest.profile_updated:type_name -> tayfam.core.v1.UserProfileUpdated
-	3, // 2: tayfam.core.v1.ApplyUserEventRequest.deleted:type_name -> tayfam.core.v1.UserDeleted
-	4, // 3: tayfam.core.v1.ApplyUserEventRequest.banned:type_name -> tayfam.core.v1.UserBanned
-	5, // 4: tayfam.core.v1.ApplyUserEventRequest.unbanned:type_name -> tayfam.core.v1.UserUnbanned
-	0, // 5: tayfam.core.v1.UserProfileUpdated.activity_visibility:type_name -> tayfam.core.v1.ActivityVisibility
-	1, // 6: tayfam.core.v1.UserEventService.ApplyUserEvent:input_type -> tayfam.core.v1.ApplyUserEventRequest
-	6, // 7: tayfam.core.v1.UserEventService.ApplyUserEvent:output_type -> tayfam.core.v1.ApplyUserEventResponse
-	7, // [7:8] is the sub-list for method output_type
-	6, // [6:7] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	8, // 0: tayfam.core.v1.ApplyUserEventRequest.occurred_at:type_name -> google.protobuf.Timestamp
+	3, // 1: tayfam.core.v1.ApplyUserEventRequest.profile_updated:type_name -> tayfam.core.v1.UserProfileUpdated
+	4, // 2: tayfam.core.v1.ApplyUserEventRequest.deleted:type_name -> tayfam.core.v1.UserDeleted
+	5, // 3: tayfam.core.v1.ApplyUserEventRequest.banned:type_name -> tayfam.core.v1.UserBanned
+	6, // 4: tayfam.core.v1.ApplyUserEventRequest.unbanned:type_name -> tayfam.core.v1.UserUnbanned
+	1, // 5: tayfam.core.v1.UserProfileUpdated.activity_visibility:type_name -> tayfam.core.v1.ActivityVisibility
+	0, // 6: tayfam.core.v1.UserProfileUpdated.stats_visibility:type_name -> tayfam.core.v1.StatsVisibility
+	2, // 7: tayfam.core.v1.UserEventService.ApplyUserEvent:input_type -> tayfam.core.v1.ApplyUserEventRequest
+	7, // 8: tayfam.core.v1.UserEventService.ApplyUserEvent:output_type -> tayfam.core.v1.ApplyUserEventResponse
+	8, // [8:9] is the sub-list for method output_type
+	7, // [7:8] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_user_events_proto_init() }
@@ -527,7 +604,7 @@ func file_tayfam_core_v1_user_events_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_user_events_proto_rawDesc), len(file_tayfam_core_v1_user_events_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,

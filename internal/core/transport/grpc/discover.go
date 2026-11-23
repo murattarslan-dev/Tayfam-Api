@@ -9,6 +9,7 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/discover"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/stats"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
@@ -18,6 +19,7 @@ type Discovers interface {
 	Feed(ctx context.Context, viewer id.ID) ([]discover.Item, error)
 	GetTayfa(ctx context.Context, caller, tayfa id.ID) (discover.TayfaState, error)
 	SetTayfa(ctx context.Context, caller, tayfa id.ID, enabled bool) (discover.TayfaState, error)
+	SetStatsShowcase(ctx context.Context, caller, tayfa id.ID, enabled bool) (discover.TayfaState, error)
 	GetFeedback(ctx context.Context, caller, tayfa, event id.ID) (discover.Feedback, error)
 	SetFeedback(ctx context.Context, caller, tayfa, event id.ID, answer string) (discover.Feedback, error)
 	GetSafetyContact(ctx context.Context, caller, tayfa, event id.ID) (discover.SafetyContact, error)
@@ -82,13 +84,14 @@ func (s *DiscoverServer) ListDiscoverFeed(ctx context.Context, _ *corev1.ListDis
 	for _, it := range items {
 		pb := &corev1.DiscoverItem{
 			Event: &corev1.DiscoverEvent{
-				EventId: it.EventID.String(), Type: interestToProto(it.Type), Title: it.Title,
+				EventId: it.EventID.String(), TypeKey: it.Type, Title: it.Title,
 				StartTime: timestamppb.New(it.StartsAt), EndTime: timestamppb.New(it.EndsAt),
 				City: it.City, District: it.District,
 			},
 			Tayfa: &corev1.DiscoverTayfa{
 				TayfaId: it.TayfaID.String(), Name: it.TayfaName, Description: it.TayfaDescription, City: it.TayfaCity,
 				CreateTime: timestamppb.New(it.TayfaCreatedAt), EventCount: it.EventCount, AttendanceCount: it.AttendanceCount,
+				Showcase: showcasePB(it.Showcase),
 			},
 			FriendCount: it.FriendCount,
 		}
@@ -131,7 +134,7 @@ func (s *DiscoverServer) GetTayfaDiscover(ctx context.Context, req *corev1.GetTa
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	return &corev1.GetTayfaDiscoverResponse{State: tayfaDiscoverStates[st.State], Enabled: st.Enabled}, nil
+	return &corev1.GetTayfaDiscoverResponse{State: tayfaDiscoverStates[st.State], Enabled: st.Enabled, StatsShowcase: st.StatsShowcase}, nil
 }
 
 // SetTayfaDiscover implements corev1.DiscoverServiceServer.
@@ -148,7 +151,36 @@ func (s *DiscoverServer) SetTayfaDiscover(ctx context.Context, req *corev1.SetTa
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	return &corev1.SetTayfaDiscoverResponse{State: tayfaDiscoverStates[st.State], Enabled: st.Enabled}, nil
+	return &corev1.SetTayfaDiscoverResponse{State: tayfaDiscoverStates[st.State], Enabled: st.Enabled, StatsShowcase: st.StatsShowcase}, nil
+}
+
+// SetTayfaStatsShowcase implements corev1.DiscoverServiceServer.
+func (s *DiscoverServer) SetTayfaStatsShowcase(ctx context.Context, req *corev1.SetTayfaStatsShowcaseRequest) (*corev1.SetTayfaStatsShowcaseResponse, error) {
+	u, err := callerID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	t, err := tayfaID(req.GetTayfaId())
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.app.SetStatsShowcase(ctx, u, t, req.GetStatsShowcase())
+	if err != nil {
+		return nil, errorStatus(ctx, s.log, err)
+	}
+	return &corev1.SetTayfaStatsShowcaseResponse{State: tayfaDiscoverStates[st.State], Enabled: st.Enabled, StatsShowcase: st.StatsShowcase}, nil
+}
+
+// showcasePB converts a tayfa's showcase; nil stays unset.
+func showcasePB(sc *stats.Showcase) *corev1.TayfaShowcase {
+	if sc == nil {
+		return nil
+	}
+	out := &corev1.TayfaShowcase{Stats: make([]*corev1.TayfaStat, 0, len(sc.Stats)), Badges: earnedBadgesPB(sc.Badges)}
+	for _, st := range sc.Stats {
+		out.Stats = append(out.Stats, &corev1.TayfaStat{MetricKey: st.Metric, Source: st.Source, Value: st.Value, EventCount: st.Events})
+	}
+	return out
 }
 
 // eventArgs reads the caller and the tayfa_id and event_id fields.

@@ -3,6 +3,9 @@ package grpc
 import (
 	"context"
 	"errors"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -69,6 +72,34 @@ func TestExportServer(t *testing.T) {
 	for _, s := range export.Sections() {
 		if exportSections[s] == corev1.CoreExportSection_CORE_EXPORT_SECTION_UNSPECIFIED {
 			t.Errorf("%s bölümünün proto karşılığı yok", s)
+		}
+	}
+}
+
+// The archive file of every core section (identity names it after the proto
+// value: CORE_EXPORT_SECTION_SCORES is core/scores.json) is described in
+// docs/data-export-format.md, and the document names no file that is not
+// written (issue #275).
+func TestExportSectionsDocumented(t *testing.T) {
+	doc, err := os.ReadFile("../../../../docs/data-export-format.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	documented := map[string]bool{}
+	for _, m := range regexp.MustCompile("`(core/[a-z0-9_]+\\.json)`").FindAllStringSubmatch(string(doc), -1) {
+		documented[m[1]] = true
+	}
+	written := map[string]bool{}
+	for _, v := range exportSections {
+		f := "core/" + strings.ToLower(strings.TrimPrefix(v.String(), "CORE_EXPORT_SECTION_")) + ".json"
+		written[f] = true
+		if !documented[f] {
+			t.Errorf("%s dışa aktarma biçim belgesinde yok", f)
+		}
+	}
+	for f := range documented {
+		if !written[f] {
+			t.Errorf("belgedeki %s yazılmıyor", f)
 		}
 	}
 }

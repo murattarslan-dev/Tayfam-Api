@@ -94,21 +94,20 @@ func (q *Queries) AdminDeleteAnswer(ctx context.Context, arg AdminDeleteAnswerPa
 	return result.RowsAffected(), nil
 }
 
-const adminDeleteCatch = `-- name: AdminDeleteCatch :execrows
-UPDATE fishing_catches c SET deleted_at = $1, deleted_by = $2
-FROM events e
-WHERE c.id = $3 AND e.id = c.event_id AND e.tayfa_id = $4 AND c.deleted_at IS NULL
+const adminDeleteDailyItem = `-- name: AdminDeleteDailyItem :execrows
+UPDATE tayfa_daily_items SET deleted_at = $1, deleted_by = $2
+WHERE id = $3 AND tayfa_id = $4 AND deleted_at IS NULL
 `
 
-type AdminDeleteCatchParams struct {
+type AdminDeleteDailyItemParams struct {
 	At      pgtype.Timestamptz
 	By      pgtype.UUID
 	ID      pgtype.UUID
 	TayfaID pgtype.UUID
 }
 
-func (q *Queries) AdminDeleteCatch(ctx context.Context, arg AdminDeleteCatchParams) (int64, error) {
-	result, err := q.db.Exec(ctx, adminDeleteCatch,
+func (q *Queries) AdminDeleteDailyItem(ctx context.Context, arg AdminDeleteDailyItemParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteDailyItem,
 		arg.At,
 		arg.By,
 		arg.ID,
@@ -159,6 +158,109 @@ type AdminDeleteEventPhotoParams struct {
 
 func (q *Queries) AdminDeleteEventPhoto(ctx context.Context, arg AdminDeleteEventPhotoParams) (int64, error) {
 	result, err := q.db.Exec(ctx, adminDeleteEventPhoto,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminDeleteEventQuestion = `-- name: AdminDeleteEventQuestion :execrows
+UPDATE event_questions q SET deleted_at = $1, deleted_by = $2
+FROM events e
+WHERE q.id = $3 AND e.id = q.event_id AND e.tayfa_id = $4 AND q.deleted_at IS NULL
+`
+
+type AdminDeleteEventQuestionParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteEventQuestion(ctx context.Context, arg AdminDeleteEventQuestionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteEventQuestion,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminDeleteGarageVehicle = `-- name: AdminDeleteGarageVehicle :execrows
+UPDATE garage_vehicles g SET deleted_at = $1::timestamptz, deleted_by = $2::uuid
+WHERE g.id = $3::uuid AND g.deleted_at IS NULL
+  AND EXISTS (SELECT 1 FROM memberships m WHERE m.tayfa_id = $4::uuid AND m.user_id = g.owner_id)
+`
+
+type AdminDeleteGarageVehicleParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteGarageVehicle(ctx context.Context, arg AdminDeleteGarageVehicleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteGarageVehicle,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminDeleteLogEntry = `-- name: AdminDeleteLogEntry :execrows
+UPDATE event_log_entries l SET deleted_at = $1, deleted_by = $2
+FROM events e
+WHERE l.id = $3 AND e.id = l.event_id AND e.tayfa_id = $4 AND l.deleted_at IS NULL
+`
+
+type AdminDeleteLogEntryParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteLogEntry(ctx context.Context, arg AdminDeleteLogEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteLogEntry,
+		arg.At,
+		arg.By,
+		arg.ID,
+		arg.TayfaID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const adminDeleteMaterial = `-- name: AdminDeleteMaterial :execrows
+UPDATE materials SET deleted_at = $1, deleted_by = $2
+WHERE id = $3 AND tayfa_id = $4 AND deleted_at IS NULL
+`
+
+type AdminDeleteMaterialParams struct {
+	At      pgtype.Timestamptz
+	By      pgtype.UUID
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+func (q *Queries) AdminDeleteMaterial(ctx context.Context, arg AdminDeleteMaterialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, adminDeleteMaterial,
 		arg.At,
 		arg.By,
 		arg.ID,
@@ -298,30 +400,33 @@ func (q *Queries) AdminGetAnswer(ctx context.Context, arg AdminGetAnswerParams) 
 	return i, err
 }
 
-const adminGetCatch = `-- name: AdminGetCatch :one
-SELECT c.user_id, c.species, c.created_at, c.deleted_at
-FROM fishing_catches c JOIN events e ON e.id = c.event_id
-WHERE c.id = $1 AND e.tayfa_id = $2
+const adminGetDailyItem = `-- name: AdminGetDailyItem :one
+SELECT created_by, body, attribution, created_at, deleted_at
+FROM tayfa_daily_items
+WHERE id = $1 AND tayfa_id = $2
 `
 
-type AdminGetCatchParams struct {
+type AdminGetDailyItemParams struct {
 	ID      pgtype.UUID
 	TayfaID pgtype.UUID
 }
 
-type AdminGetCatchRow struct {
-	UserID    pgtype.UUID
-	Species   string
-	CreatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
+type AdminGetDailyItemRow struct {
+	CreatedBy   pgtype.UUID
+	Body        string
+	Attribution pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	DeletedAt   pgtype.Timestamptz
 }
 
-func (q *Queries) AdminGetCatch(ctx context.Context, arg AdminGetCatchParams) (AdminGetCatchRow, error) {
-	row := q.db.QueryRow(ctx, adminGetCatch, arg.ID, arg.TayfaID)
-	var i AdminGetCatchRow
+// Günün içeriği (issue #269).
+func (q *Queries) AdminGetDailyItem(ctx context.Context, arg AdminGetDailyItemParams) (AdminGetDailyItemRow, error) {
+	row := q.db.QueryRow(ctx, adminGetDailyItem, arg.ID, arg.TayfaID)
+	var i AdminGetDailyItemRow
 	err := row.Scan(
-		&i.UserID,
-		&i.Species,
+		&i.CreatedBy,
+		&i.Body,
+		&i.Attribution,
 		&i.CreatedAt,
 		&i.DeletedAt,
 	)
@@ -386,6 +491,179 @@ func (q *Queries) AdminGetEventPhoto(ctx context.Context, arg AdminGetEventPhoto
 		&i.CreatedAt,
 		&i.DeletedAt,
 		&i.UploadID,
+	)
+	return i, err
+}
+
+const adminGetEventQuestion = `-- name: AdminGetEventQuestion :one
+SELECT q.author_id, q.component_key, q.body, q.created_at, q.deleted_at
+FROM event_questions q JOIN events e ON e.id = q.event_id
+WHERE q.id = $1 AND e.tayfa_id = $2
+`
+
+type AdminGetEventQuestionParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetEventQuestionRow struct {
+	AuthorID     pgtype.UUID
+	ComponentKey string
+	Body         string
+	CreatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+}
+
+// Etkinlik sorusu (issue #256): anonim sorunun yazarı yalnızca burada,
+// platform panelinde görünür (ADR-0025 §5).
+func (q *Queries) AdminGetEventQuestion(ctx context.Context, arg AdminGetEventQuestionParams) (AdminGetEventQuestionRow, error) {
+	row := q.db.QueryRow(ctx, adminGetEventQuestion, arg.ID, arg.TayfaID)
+	var i AdminGetEventQuestionRow
+	err := row.Scan(
+		&i.AuthorID,
+		&i.ComponentKey,
+		&i.Body,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const adminGetGarageVehicle = `-- name: AdminGetGarageVehicle :one
+SELECT g.owner_id, g.make, COALESCE(g.model, '')::text AS model, COALESCE(g.note, '')::text AS note,
+       g.created_at, g.deleted_at
+FROM garage_vehicles g
+WHERE g.id = $1 AND EXISTS (SELECT 1 FROM memberships m WHERE m.tayfa_id = $2::uuid AND m.user_id = g.owner_id)
+`
+
+type AdminGetGarageVehicleParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetGarageVehicleRow struct {
+	OwnerID   pgtype.UUID
+	Make      string
+	Model     string
+	Note      string
+	CreatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+}
+
+// Üye garajı (issue #272): aracın sahibi o tayfanın üyesi olmalı.
+func (q *Queries) AdminGetGarageVehicle(ctx context.Context, arg AdminGetGarageVehicleParams) (AdminGetGarageVehicleRow, error) {
+	row := q.db.QueryRow(ctx, adminGetGarageVehicle, arg.ID, arg.TayfaID)
+	var i AdminGetGarageVehicleRow
+	err := row.Scan(
+		&i.OwnerID,
+		&i.Make,
+		&i.Model,
+		&i.Note,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const adminGetLibraryItem = `-- name: AdminGetLibraryItem :one
+SELECT owner_id, kind, name, note, created_at, withdrawn_at
+FROM library_items
+WHERE id = $1 AND tayfa_id = $2
+`
+
+type AdminGetLibraryItemParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetLibraryItemRow struct {
+	OwnerID     pgtype.UUID
+	Kind        string
+	Name        string
+	Note        pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	WithdrawnAt pgtype.Timestamptz
+}
+
+// Ortak kütüphane (issue #270).
+func (q *Queries) AdminGetLibraryItem(ctx context.Context, arg AdminGetLibraryItemParams) (AdminGetLibraryItemRow, error) {
+	row := q.db.QueryRow(ctx, adminGetLibraryItem, arg.ID, arg.TayfaID)
+	var i AdminGetLibraryItemRow
+	err := row.Scan(
+		&i.OwnerID,
+		&i.Kind,
+		&i.Name,
+		&i.Note,
+		&i.CreatedAt,
+		&i.WithdrawnAt,
+	)
+	return i, err
+}
+
+const adminGetLogEntry = `-- name: AdminGetLogEntry :one
+SELECT l.user_id, l.component_key, l.field_values, l.created_at, l.deleted_at
+FROM event_log_entries l JOIN events e ON e.id = l.event_id
+WHERE l.id = $1 AND e.tayfa_id = $2
+`
+
+type AdminGetLogEntryParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetLogEntryRow struct {
+	UserID       pgtype.UUID
+	ComponentKey string
+	FieldValues  []byte
+	CreatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+}
+
+// Günlük kaydı (issue #243): panel kaydın değerlerini gösterir; konumu
+// göstermez.
+func (q *Queries) AdminGetLogEntry(ctx context.Context, arg AdminGetLogEntryParams) (AdminGetLogEntryRow, error) {
+	row := q.db.QueryRow(ctx, adminGetLogEntry, arg.ID, arg.TayfaID)
+	var i AdminGetLogEntryRow
+	err := row.Scan(
+		&i.UserID,
+		&i.ComponentKey,
+		&i.FieldValues,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const adminGetMaterial = `-- name: AdminGetMaterial :one
+SELECT author_id, title, COALESCE(url, '')::text AS link, created_at, deleted_at
+FROM materials
+WHERE id = $1 AND tayfa_id = $2
+`
+
+type AdminGetMaterialParams struct {
+	ID      pgtype.UUID
+	TayfaID pgtype.UUID
+}
+
+type AdminGetMaterialRow struct {
+	AuthorID  pgtype.UUID
+	Title     string
+	Link      string
+	CreatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+}
+
+// Materyal kütüphanesi (issue #261): panel bağlantıyı açmaz, adresi metin
+// olarak gösterir.
+func (q *Queries) AdminGetMaterial(ctx context.Context, arg AdminGetMaterialParams) (AdminGetMaterialRow, error) {
+	row := q.db.QueryRow(ctx, adminGetMaterial, arg.ID, arg.TayfaID)
+	var i AdminGetMaterialRow
+	err := row.Scan(
+		&i.AuthorID,
+		&i.Title,
+		&i.Link,
+		&i.CreatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

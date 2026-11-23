@@ -65,8 +65,291 @@ var (
 	ErrEventItemNotFound = errors.New("kayıt bulunamadı")
 	ErrEventLimit        = errors.New("liste dolu")
 	ErrEventTypeMismatch = errors.New("etkinlik türü uymuyor")
-	// ErrEventItemTaken: a camp item someone else took (issue #198).
+	// ErrEventItemTaken: a list item someone else took (issues #198, #241).
 	ErrEventItemTaken = errors.New("malzeme başkasında")
+)
+
+// CatalogService errors (issue #237, ADR-0025).
+var (
+	// ErrCatalogTypeNotFound: the catalog has no event type with this key
+	// and version.
+	ErrCatalogTypeNotFound = errors.New("katalogda tür sürümü yok")
+)
+
+// Event component errors (issue #238; ADR-0025 §4–§6, ADR-0037 §2). They
+// belong to the component framework (package component) and are shared by
+// every component.
+var (
+	// ErrComponentNotFound: the event's type version has no component with
+	// this key, or the component is of another kind than the endpoint.
+	ErrComponentNotFound = errors.New("bileşen bulunamadı")
+	// ErrComponentDisabled: the organizer turned the optional component
+	// off for this event (or left it off); reads are refused too.
+	ErrComponentDisabled = errors.New("bileşen kapalı")
+	// ErrComponentLocked: the organizer's selections cannot change once
+	// the event has started.
+	ErrComponentLocked = errors.New("bileşen seçimleri kilitli")
+	// ErrComponentFrozen: component data cannot change from seven days
+	// after the event's end (ADR-0025 §5).
+	ErrComponentFrozen = errors.New("bileşen verisi donmuş")
+)
+
+// Vehicles component errors (issue #240; ADR-0037 §3).
+var (
+	// ErrVehicleFull: the vehicle has no free seat (or offers none).
+	ErrVehicleFull = errors.New("araçta boş koltuk yok")
+	// ErrVehicleSeatsTaken: fewer seats than the riders already approved.
+	ErrVehicleSeatsTaken = errors.New("koltuk sayısı onaylanan yolculardan az")
+	// ErrSeatRequestDriver: someone with a vehicle of their own in the
+	// component asked for a seat.
+	ErrSeatRequestDriver = errors.New("aracı olan koltuk isteyemez")
+)
+
+// Tayfa vocabulary errors (issue #244; ADR-0037 §4).
+var (
+	// ErrVocabularyNotFound: no such value in the tayfa's namespace.
+	ErrVocabularyNotFound = errors.New("sözlük değeri bulunamadı")
+	// ErrVocabularyMerged: the value or the merge target is already
+	// merged.
+	ErrVocabularyMerged = errors.New("sözlük değeri birleştirilmiş")
+	// ErrVocabularyNotMerged: undoing a merge of a value that is not merged.
+	ErrVocabularyNotMerged = errors.New("sözlük değeri birleştirilmemiş")
+)
+
+// Measure component errors (issue #245; ADR-0025 §4, §5).
+var (
+	// ErrMeasurementNotStarted: a measurement before the event's start.
+	ErrMeasurementNotStarted = errors.New("etkinlik başlamadan ölçüm girilmez")
+	// ErrMeasurementNotParticipant: a value for someone who is not a
+	// participant of the event.
+	ErrMeasurementNotParticipant = errors.New("kişi etkinliğin katılımcısı değil")
+	// ErrMeasurementScope: a total for a personal measure or a person's
+	// value for a total one.
+	ErrMeasurementScope = errors.New("ölçümün kapsamı farklı")
+)
+
+// Teams component errors (issue #248; ADR-0025 §4, §5).
+var (
+	// ErrTeamsManual: generating teams when the component's mode is manual.
+	ErrTeamsManual = errors.New("takımlar elle kurulur")
+	// ErrTeamsTooFew: too few participants for the teams.
+	ErrTeamsTooFew = errors.New("takımlar için katılımcı az")
+	// ErrTeamsNotParticipant: a person put in a team is not a participant
+	// of the event.
+	ErrTeamsNotParticipant = errors.New("kişi etkinliğin katılımcısı değil")
+)
+
+// Draw component errors (issue #249; ADR-0025 §4, §5).
+var (
+	// ErrDrawAlreadyMade: the component's draw was made; its result is
+	// fixed.
+	ErrDrawAlreadyMade = errors.New("kura çekildi")
+	// ErrDrawTooFew: fewer than two participants (or teams) to draw.
+	ErrDrawTooFew = errors.New("kura için katılımcı az")
+)
+
+// Scoreboard component errors (issue #250; ADR-0025 §4, §5, ADR-0037 §5).
+var (
+	// ErrScorePresetUnavailable: the preset is not one the component
+	// offers, is retired, or the component offers presets and none was
+	// named.
+	ErrScorePresetUnavailable = errors.New("ön ayar seçilemez")
+	// ErrScoreTableNotFound: no such table in the component.
+	ErrScoreTableNotFound = errors.New("masa bulunamadı")
+	// ErrScoreTableFinished: the table is finished; a manager reopens it
+	// before a new round.
+	ErrScoreTableFinished = errors.New("masa bitti")
+	// ErrScoreTableStarted: the table has scores; its players no longer
+	// change.
+	ErrScoreTableStarted = errors.New("masada skor var")
+	// ErrScorePlayerNotParticipant: a player is not a participant of the
+	// event, or a team is not one of the named teams component's teams.
+	ErrScorePlayerNotParticipant = errors.New("oyuncu katılımcı değil")
+	// ErrScoreNotStarted: scores are entered once the event has started.
+	ErrScoreNotStarted = errors.New("etkinlik başlamadan skor girilmez")
+)
+
+// Bracket component errors (issue #251; ADR-0025 §4, §5, ADR-0037 §3).
+var (
+	// ErrBracketDrawRequired: the bracket seeds from the type's draw
+	// component, and its draw was not made (or the type has none).
+	ErrBracketDrawRequired = errors.New("eşleşme için kura çekilmeli")
+	// ErrBracketStarted: the bracket was started; a manager resets it
+	// before starting again.
+	ErrBracketStarted = errors.New("eşleşme ağacı başladı")
+	// ErrBracketNotStarted: the bracket has not been started.
+	ErrBracketNotStarted = errors.New("eşleşme ağacı başlamadı")
+	// ErrBracketTooFew: fewer than two entrants in the draw.
+	ErrBracketTooFew = errors.New("eşleşme için katılımcı az")
+	// ErrBracketMatchNotFound: no such match in the bracket.
+	ErrBracketMatchNotFound = errors.New("maç bulunamadı")
+	// ErrBracketGameNotFound: no such game in the match, or not its last
+	// game (only the last one is deleted).
+	ErrBracketGameNotFound = errors.New("oyun bulunamadı")
+	// ErrBracketMatchDecided: the match is decided (or a bye); no more
+	// games.
+	ErrBracketMatchDecided = errors.New("maç sonuçlandı")
+	// ErrBracketRoundOpen: a match of the current round is not decided
+	// yet.
+	ErrBracketRoundOpen = errors.New("turda sonuçlanmamış maç var")
+	// ErrBracketRoundClosed: a later round was paired from this match's
+	// round; its games no longer change.
+	ErrBracketRoundClosed = errors.New("sonraki tur başladı")
+	// ErrBracketFinished: the bracket has no next round.
+	ErrBracketFinished = errors.New("eşleşme ağacı bitti")
+)
+
+// Guest player errors (issue #252; ADR-0037 §6). None of them carries a
+// nickname.
+var (
+	// ErrGuestPlayersDisabled: the scoreboard component does not take
+	// guest players (its `guests` parameter is off).
+	ErrGuestPlayersDisabled = errors.New("bileşen misafir oyuncu almıyor")
+	// ErrGuestPlayerNotFound: no such guest player in the event.
+	ErrGuestPlayerNotFound = errors.New("misafir oyuncu bulunamadı")
+	// ErrGuestPlayerInUse: the guest has a seat at a table or a place in a
+	// draw; it is not removed.
+	ErrGuestPlayerInUse = errors.New("misafir oyuncu masada ya da kurada")
+)
+
+// Ranking component errors (issue #253; ADR-0037 §3).
+var (
+	// ErrRankingNotStarted: a ranking before the event's start.
+	ErrRankingNotStarted = errors.New("etkinlik başlamadan derece girilmez")
+	// ErrRankingNotParticipant: a ranking for someone who is not a
+	// participant of the event.
+	ErrRankingNotParticipant = errors.New("kişi etkinliğin katılımcısı değil")
+	// ErrRankingFromMeasure: a value for a ranking computed from a measure;
+	// the measure is entered instead.
+	ErrRankingFromMeasure = errors.New("derece ölçümden hesaplanır")
+)
+
+// Vote component errors (issue #254; ADR-0025 §4, ADR-0037 §3).
+var (
+	// ErrVoteClosed: a vote or an option change after the organizer closed
+	// the vote.
+	ErrVoteClosed = errors.New("oylama kapandı")
+	// ErrVoteOwnOption: a vote for oneself, one's own vehicle or one's own
+	// photo.
+	ErrVoteOwnOption = errors.New("kendine oy verilmez")
+	// ErrVoteOptionsFixed: an option change in a vote whose options come
+	// from its source.
+	ErrVoteOptionsFixed = errors.New("oylamanın seçenekleri kaynağından gelir")
+	// ErrVoteOptionExists: a free option with the same label.
+	ErrVoteOptionExists = errors.New("aynı seçenek var")
+)
+
+// Celebration component errors (issue #255; ADR-0025 §4).
+var (
+	// ErrCelebrationNotStarted: an announcement before the event's start.
+	ErrCelebrationNotStarted = errors.New("etkinlik başlamadan kazanan ilan edilmez")
+	// ErrCelebrationNoWinner: the source has no winner to announce yet (an
+	// open table, an unfinished bracket, an empty or hidden ranking).
+	ErrCelebrationNoWinner = errors.New("ilan edilecek kazanan yok")
+	// ErrCelebrationNotParticipant: a winner chosen by hand who is not a
+	// participant of the event.
+	ErrCelebrationNotParticipant = errors.New("kazanan etkinliğin katılımcısı değil")
+)
+
+// Type flag errors (issue #257; ADR-0037 §1).
+var (
+	// ErrAttendeesHidden: the attendee list of an event whose type's
+	// attendance is sensitive (sensitive_attendance) asked by someone other
+	// than the organizer, a moderator or an admin; the counts stay on the
+	// event.
+	ErrAttendeesHidden = errors.New("katılımcı listesi yalnızca organizatöre açık")
+	// ErrAlbumConsentRequired: an album photo of a type with album_notice
+	// sent without the uploader's consent acknowledgement (consent_ack).
+	ErrAlbumConsentRequired = errors.New("albüm için izin onayı gerekli")
+)
+
+// Şimdi başlat errors (issue #263; ADR-0038 §1, §2).
+var (
+	// ErrNowLimitReached: the caller already organizes an open now event
+	// (at most one at a time, in tayfas and instant events together).
+	ErrNowLimitReached = errors.New("açık şimdi etkinliği sınırı")
+	// ErrEventNotOpenEnded: "Bitir" on an event that was not started now.
+	ErrEventNotOpenEnded = errors.New("etkinlik açık uçlu değil")
+	// ErrNowBroadcastLimit: the caller already sent today's now broadcasts
+	// to friends (issue #265; ADR-0038 §4).
+	ErrNowBroadcastLimit = errors.New("şimdi yayını sınırı")
+)
+
+// QR join errors (issue #264; ADR-0038 §3). Neither carries the token.
+var (
+	// ErrInvalidJoinQR: every refused QR join (unknown or expired token,
+	// event or tayfa not open to it, a caller who may not join), alike on
+	// purpose.
+	ErrInvalidJoinQR = errors.New("geçersiz katılım QR'ı")
+	// ErrJoinQRLimit: the event already had its 30 joins by QR.
+	ErrJoinQRLimit = errors.New("QR katılım sınırı")
+)
+
+// Home page errors (issue #268; ADR-0027 §3–§4).
+var (
+	// ErrHomeWidgetNotFound: a home widget's data was asked for a widget
+	// the tayfa's home page does not show (unknown, switched off, its
+	// module off, a countdown past its date) or one whose data is not read
+	// here.
+	ErrHomeWidgetNotFound = errors.New("ana sayfa bileşeni yok")
+)
+
+// Daily content errors (issue #269; ADR-0027 §5).
+var (
+	// ErrDailyItemNotFound: an item that is not in the tayfa's pool (never
+	// there, deleted, or deleted too long ago to restore).
+	ErrDailyItemNotFound = errors.New("günün içeriği yok")
+	// ErrDailyItemLimit: the pool is full (daily.MaxItems).
+	ErrDailyItemLimit = errors.New("günün içeriği sınırı")
+)
+
+// Library errors (issue #270; ADR-0040 §1).
+var (
+	// ErrLibraryItemNotFound: an item that is not in the tayfa's library
+	// (never there or withdrawn), or one the caller may not act on as its
+	// owner.
+	ErrLibraryItemNotFound = errors.New("kütüphane kalemi yok")
+	// ErrLibraryLoanNotFound: a loan of the tayfa's library that is not
+	// the caller's to act on (or not there).
+	ErrLibraryLoanNotFound = errors.New("ödünç kaydı yok")
+	// ErrLibraryOwnItem: the caller asked for their own item.
+	ErrLibraryOwnItem = errors.New("kendi kalemi")
+	// ErrLibraryLoanState: the loan is not in a state the step can follow
+	// (approving a handed-over loan, taking back one never handed over…).
+	ErrLibraryLoanState = errors.New("ödünç durumu uygun değil")
+	// ErrLibraryItemOnLoan: the owner cannot withdraw an item that is
+	// handed over; it must be taken back first.
+	ErrLibraryItemOnLoan = errors.New("kalem ödünçte")
+	// ErrLibraryItemLimit: the owner already has library.MaxItemsPerOwner
+	// items in the tayfa.
+	ErrLibraryItemLimit = errors.New("kütüphane kalem sınırı")
+	// ErrLibraryQueueFull: library.MaxQueue members already wait for the
+	// item.
+	ErrLibraryQueueFull = errors.New("bekleme sırası dolu")
+)
+
+// Material library errors (issue #261; ADR-0040 §3).
+var (
+	// ErrMaterialNotFound: a material that is not visible in the tayfa's
+	// material library (never there, deleted, or linking to a blocked
+	// domain), or one the caller may not act on as its author.
+	ErrMaterialNotFound = errors.New("materyal yok")
+	// ErrBlockedLink: the link's domain, or a domain above it, is on the
+	// platform's blocked domain list.
+	ErrBlockedLink = errors.New("engelli bağlantı")
+	// ErrMaterialLimit: the author already has material.MaxPerAuthor
+	// materials in the tayfa.
+	ErrMaterialLimit = errors.New("materyal sınırı")
+)
+
+// Member garage errors (issue #272; ADR-0040 §4).
+var (
+	// ErrGarageVehicleNotFound: a vehicle that is not in the caller's garage
+	// (an owner's step, the vehicles component), or that does not show in
+	// the tayfa (a moderator's removal).
+	ErrGarageVehicleNotFound = errors.New("garaj aracı yok")
+	// ErrGarageLimit: the owner already has garage.MaxVehicles vehicles.
+	ErrGarageLimit = errors.New("garaj sınırı")
 )
 
 // Attendance errors (issue #50). None of them carries the location that was
@@ -87,7 +370,7 @@ var (
 	// ErrHikeNotStarted: a hike return without a start.
 	ErrHikeNotStarted = errors.New("yürüyüş başlamamış")
 	// ErrNotAttended: the action needs the caller's verified attendance
-	// (logging a fishing catch, adding an album photo).
+	// (adding a log entry, adding an album photo).
 	ErrNotAttended = errors.New("katılım doğrulanmamış")
 	// ErrAlbumClosed: the event's album takes no photos now (before the
 	// start, or from seven days after the end; issue #206).

@@ -2666,6 +2666,1395 @@ func (*RejectDiscoverResponse) Descriptor() ([]byte, []int) {
 	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{40}
 }
 
+// AdminCatalogEventType is the current version of an event type, with what
+// only the panel needs.
+type AdminCatalogEventType struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The definition is the full current definition (compact JSON).
+	Type *CatalogEventType `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// Listing order, ascending.
+	Position int32 `protobuf:"varint,2,opt,name=position,proto3" json:"position,omitempty"`
+	// The lowest client version that knows every component of the current
+	// version (ADR-0025 §7).
+	MinClientVersion string `protobuf:"bytes,3,opt,name=min_client_version,json=minClientVersion,proto3" json:"min_client_version,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *AdminCatalogEventType) Reset() {
+	*x = AdminCatalogEventType{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminCatalogEventType) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminCatalogEventType) ProtoMessage() {}
+
+func (x *AdminCatalogEventType) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminCatalogEventType.ProtoReflect.Descriptor instead.
+func (*AdminCatalogEventType) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *AdminCatalogEventType) GetType() *CatalogEventType {
+	if x != nil {
+		return x.Type
+	}
+	return nil
+}
+
+func (x *AdminCatalogEventType) GetPosition() int32 {
+	if x != nil {
+		return x.Position
+	}
+	return 0
+}
+
+func (x *AdminCatalogEventType) GetMinClientVersion() string {
+	if x != nil {
+		return x.MinClientVersion
+	}
+	return ""
+}
+
+// AdminCatalogScorePreset is a scoreboard's game rule preset (ADR-0037 §5).
+type AdminCatalogScorePreset struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Immutable; ^[a-z][a-z0-9_]{1,39}$.
+	Key string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// Listing order, ascending; 0–9999.
+	Position int32 `protobuf:"varint,2,opt,name=position,proto3" json:"position,omitempty"`
+	// Language to name; "tr" is required. No brand names.
+	Labels map[string]string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// The rules as a JSON object: players_min, players_max, side, rounds,
+	// target, winner, result, best_of; a rule left out comes from the
+	// component's parameters.
+	Params        string        `protobuf:"bytes,4,opt,name=params,proto3" json:"params,omitempty"`
+	Status        CatalogStatus `protobuf:"varint,5,opt,name=status,proto3,enum=tayfam.core.v1.CatalogStatus" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminCatalogScorePreset) Reset() {
+	*x = AdminCatalogScorePreset{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminCatalogScorePreset) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminCatalogScorePreset) ProtoMessage() {}
+
+func (x *AdminCatalogScorePreset) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminCatalogScorePreset.ProtoReflect.Descriptor instead.
+func (*AdminCatalogScorePreset) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *AdminCatalogScorePreset) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *AdminCatalogScorePreset) GetPosition() int32 {
+	if x != nil {
+		return x.Position
+	}
+	return 0
+}
+
+func (x *AdminCatalogScorePreset) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *AdminCatalogScorePreset) GetParams() string {
+	if x != nil {
+		return x.Params
+	}
+	return ""
+}
+
+func (x *AdminCatalogScorePreset) GetStatus() CatalogStatus {
+	if x != nil {
+		return x.Status
+	}
+	return CatalogStatus_CATALOG_STATUS_UNSPECIFIED
+}
+
+// AdminBlockedDomain is an entry of the blocked domain list.
+type AdminBlockedDomain struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Lower case, without a trailing dot.
+	Domain     string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// True for the entries the list started with (migration), false for
+	// those added on the panel.
+	Initial       bool `protobuf:"varint,3,opt,name=initial,proto3" json:"initial,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminBlockedDomain) Reset() {
+	*x = AdminBlockedDomain{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminBlockedDomain) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminBlockedDomain) ProtoMessage() {}
+
+func (x *AdminBlockedDomain) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminBlockedDomain.ProtoReflect.Descriptor instead.
+func (*AdminBlockedDomain) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *AdminBlockedDomain) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *AdminBlockedDomain) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *AdminBlockedDomain) GetInitial() bool {
+	if x != nil {
+		return x.Initial
+	}
+	return false
+}
+
+// CatalogPreviewField is a field of the checked definition.
+type CatalogPreviewField struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// text, long_text, integer, decimal, choice, multi_choice, boolean, date,
+	// duration or study_tags (ADR-0043).
+	Kind          string            `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Required      bool              `protobuf:"varint,3,opt,name=required,proto3" json:"required,omitempty"`
+	Labels        map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogPreviewField) Reset() {
+	*x = CatalogPreviewField{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogPreviewField) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogPreviewField) ProtoMessage() {}
+
+func (x *CatalogPreviewField) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogPreviewField.ProtoReflect.Descriptor instead.
+func (*CatalogPreviewField) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *CatalogPreviewField) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CatalogPreviewField) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *CatalogPreviewField) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
+}
+
+func (x *CatalogPreviewField) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+// CatalogPreviewComponent is a component of the checked definition.
+type CatalogPreviewComponent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The component's key within the type (its kind when none is given).
+	Key    string            `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Labels map[string]string `protobuf:"bytes,3,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// An optional component the organizer switches on or off; default_on is
+	// its default.
+	Optional  bool `protobuf:"varint,4,opt,name=optional,proto3" json:"optional,omitempty"`
+	DefaultOn bool `protobuf:"varint,5,opt,name=default_on,json=defaultOn,proto3" json:"default_on,omitempty"`
+	// The lowest client version that knows the kind.
+	MinClientVersion string `protobuf:"bytes,6,opt,name=min_client_version,json=minClientVersion,proto3" json:"min_client_version,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CatalogPreviewComponent) Reset() {
+	*x = CatalogPreviewComponent{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogPreviewComponent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogPreviewComponent) ProtoMessage() {}
+
+func (x *CatalogPreviewComponent) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogPreviewComponent.ProtoReflect.Descriptor instead.
+func (*CatalogPreviewComponent) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *CatalogPreviewComponent) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *CatalogPreviewComponent) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *CatalogPreviewComponent) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *CatalogPreviewComponent) GetOptional() bool {
+	if x != nil {
+		return x.Optional
+	}
+	return false
+}
+
+func (x *CatalogPreviewComponent) GetDefaultOn() bool {
+	if x != nil {
+		return x.DefaultOn
+	}
+	return false
+}
+
+func (x *CatalogPreviewComponent) GetMinClientVersion() string {
+	if x != nil {
+		return x.MinClientVersion
+	}
+	return ""
+}
+
+// CatalogCheck is the result of checking an entry before it is saved.
+type CatalogCheck struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty when the entry passed every check; otherwise the first problem
+	// found: a Turkish sentence that names the place, never a value.
+	Problem string `protobuf:"bytes,1,opt,name=problem,proto3" json:"problem,omitempty"`
+	// The field the problem is about (key, labels, definition, rule …);
+	// empty when there is no problem.
+	Field string `protobuf:"bytes,2,opt,name=field,proto3" json:"field,omitempty"`
+	// Event types only, when the definition parses.
+	Fields     []*CatalogPreviewField     `protobuf:"bytes,3,rep,name=fields,proto3" json:"fields,omitempty"`
+	Components []*CatalogPreviewComponent `protobuf:"bytes,4,rep,name=components,proto3" json:"components,omitempty"`
+	// Event types only: the lowest client version that knows every
+	// component. The panel compares it with the supported versions.
+	MinClientVersion string `protobuf:"bytes,5,opt,name=min_client_version,json=minClientVersion,proto3" json:"min_client_version,omitempty"`
+	// Event types only: the version the save makes (or made) current; the
+	// version it was made on when nothing versioned changes.
+	Version int32 `protobuf:"varint,6,opt,name=version,proto3" json:"version,omitempty"`
+	// Event types only: whether the save makes a new version.
+	NewVersion    bool `protobuf:"varint,7,opt,name=new_version,json=newVersion,proto3" json:"new_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CatalogCheck) Reset() {
+	*x = CatalogCheck{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CatalogCheck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CatalogCheck) ProtoMessage() {}
+
+func (x *CatalogCheck) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CatalogCheck.ProtoReflect.Descriptor instead.
+func (*CatalogCheck) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *CatalogCheck) GetProblem() string {
+	if x != nil {
+		return x.Problem
+	}
+	return ""
+}
+
+func (x *CatalogCheck) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *CatalogCheck) GetFields() []*CatalogPreviewField {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *CatalogCheck) GetComponents() []*CatalogPreviewComponent {
+	if x != nil {
+		return x.Components
+	}
+	return nil
+}
+
+func (x *CatalogCheck) GetMinClientVersion() string {
+	if x != nil {
+		return x.MinClientVersion
+	}
+	return ""
+}
+
+func (x *CatalogCheck) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *CatalogCheck) GetNewVersion() bool {
+	if x != nil {
+		return x.NewVersion
+	}
+	return false
+}
+
+type GetCatalogAdminRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetCatalogAdminRequest) Reset() {
+	*x = GetCatalogAdminRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCatalogAdminRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCatalogAdminRequest) ProtoMessage() {}
+
+func (x *GetCatalogAdminRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCatalogAdminRequest.ProtoReflect.Descriptor instead.
+func (*GetCatalogAdminRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{47}
+}
+
+type GetCatalogAdminResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	CatalogVersion int64                  `protobuf:"varint,1,opt,name=catalog_version,json=catalogVersion,proto3" json:"catalog_version,omitempty"`
+	// Every interest, retired ones included, by position.
+	Interests []*CatalogInterest `protobuf:"bytes,2,rep,name=interests,proto3" json:"interests,omitempty"`
+	// Every event type, retired ones included, by position.
+	EventTypes   []*AdminCatalogEventType   `protobuf:"bytes,3,rep,name=event_types,json=eventTypes,proto3" json:"event_types,omitempty"`
+	Badges       []*CatalogBadge            `protobuf:"bytes,4,rep,name=badges,proto3" json:"badges,omitempty"`
+	StudyTags    []*CatalogStudyTag         `protobuf:"bytes,5,rep,name=study_tags,json=studyTags,proto3" json:"study_tags,omitempty"`
+	ScorePresets []*AdminCatalogScorePreset `protobuf:"bytes,6,rep,name=score_presets,json=scorePresets,proto3" json:"score_presets,omitempty"`
+	// By domain.
+	BlockedDomains []*AdminBlockedDomain `protobuf:"bytes,7,rep,name=blocked_domains,json=blockedDomains,proto3" json:"blocked_domains,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetCatalogAdminResponse) Reset() {
+	*x = GetCatalogAdminResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetCatalogAdminResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetCatalogAdminResponse) ProtoMessage() {}
+
+func (x *GetCatalogAdminResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetCatalogAdminResponse.ProtoReflect.Descriptor instead.
+func (*GetCatalogAdminResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *GetCatalogAdminResponse) GetCatalogVersion() int64 {
+	if x != nil {
+		return x.CatalogVersion
+	}
+	return 0
+}
+
+func (x *GetCatalogAdminResponse) GetInterests() []*CatalogInterest {
+	if x != nil {
+		return x.Interests
+	}
+	return nil
+}
+
+func (x *GetCatalogAdminResponse) GetEventTypes() []*AdminCatalogEventType {
+	if x != nil {
+		return x.EventTypes
+	}
+	return nil
+}
+
+func (x *GetCatalogAdminResponse) GetBadges() []*CatalogBadge {
+	if x != nil {
+		return x.Badges
+	}
+	return nil
+}
+
+func (x *GetCatalogAdminResponse) GetStudyTags() []*CatalogStudyTag {
+	if x != nil {
+		return x.StudyTags
+	}
+	return nil
+}
+
+func (x *GetCatalogAdminResponse) GetScorePresets() []*AdminCatalogScorePreset {
+	if x != nil {
+		return x.ScorePresets
+	}
+	return nil
+}
+
+func (x *GetCatalogAdminResponse) GetBlockedDomains() []*AdminBlockedDomain {
+	if x != nil {
+		return x.BlockedDomains
+	}
+	return nil
+}
+
+type SaveCatalogInterestRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Interest *CatalogInterest       `protobuf:"bytes,1,opt,name=interest,proto3" json:"interest,omitempty"`
+	// True to create a new interest, false to change an existing one.
+	Create       bool `protobuf:"varint,2,opt,name=create,proto3" json:"create,omitempty"`
+	ValidateOnly bool `protobuf:"varint,3,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
+	// 10–1000 characters; not needed with validate_only.
+	Reason        string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveCatalogInterestRequest) Reset() {
+	*x = SaveCatalogInterestRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogInterestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogInterestRequest) ProtoMessage() {}
+
+func (x *SaveCatalogInterestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogInterestRequest.ProtoReflect.Descriptor instead.
+func (*SaveCatalogInterestRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *SaveCatalogInterestRequest) GetInterest() *CatalogInterest {
+	if x != nil {
+		return x.Interest
+	}
+	return nil
+}
+
+func (x *SaveCatalogInterestRequest) GetCreate() bool {
+	if x != nil {
+		return x.Create
+	}
+	return false
+}
+
+func (x *SaveCatalogInterestRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+func (x *SaveCatalogInterestRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SaveCatalogInterestResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Check *CatalogCheck          `protobuf:"bytes,1,opt,name=check,proto3" json:"check,omitempty"`
+	// The catalog's version after the save (unchanged with validate_only).
+	CatalogVersion int64 `protobuf:"varint,2,opt,name=catalog_version,json=catalogVersion,proto3" json:"catalog_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SaveCatalogInterestResponse) Reset() {
+	*x = SaveCatalogInterestResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogInterestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogInterestResponse) ProtoMessage() {}
+
+func (x *SaveCatalogInterestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogInterestResponse.ProtoReflect.Descriptor instead.
+func (*SaveCatalogInterestResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *SaveCatalogInterestResponse) GetCheck() *CatalogCheck {
+	if x != nil {
+		return x.Check
+	}
+	return nil
+}
+
+func (x *SaveCatalogInterestResponse) GetCatalogVersion() int64 {
+	if x != nil {
+		return x.CatalogVersion
+	}
+	return 0
+}
+
+type SaveCatalogEventTypeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// version is the version the change was made on; 0 creates the type.
+	// definition is the definition as JSON (at most 16 KiB).
+	Type          *CatalogEventType `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Position      int32             `protobuf:"varint,2,opt,name=position,proto3" json:"position,omitempty"`
+	ValidateOnly  bool              `protobuf:"varint,3,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
+	Reason        string            `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveCatalogEventTypeRequest) Reset() {
+	*x = SaveCatalogEventTypeRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogEventTypeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogEventTypeRequest) ProtoMessage() {}
+
+func (x *SaveCatalogEventTypeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogEventTypeRequest.ProtoReflect.Descriptor instead.
+func (*SaveCatalogEventTypeRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *SaveCatalogEventTypeRequest) GetType() *CatalogEventType {
+	if x != nil {
+		return x.Type
+	}
+	return nil
+}
+
+func (x *SaveCatalogEventTypeRequest) GetPosition() int32 {
+	if x != nil {
+		return x.Position
+	}
+	return 0
+}
+
+func (x *SaveCatalogEventTypeRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+func (x *SaveCatalogEventTypeRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SaveCatalogEventTypeResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Check          *CatalogCheck          `protobuf:"bytes,1,opt,name=check,proto3" json:"check,omitempty"`
+	CatalogVersion int64                  `protobuf:"varint,2,opt,name=catalog_version,json=catalogVersion,proto3" json:"catalog_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SaveCatalogEventTypeResponse) Reset() {
+	*x = SaveCatalogEventTypeResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogEventTypeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogEventTypeResponse) ProtoMessage() {}
+
+func (x *SaveCatalogEventTypeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogEventTypeResponse.ProtoReflect.Descriptor instead.
+func (*SaveCatalogEventTypeResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *SaveCatalogEventTypeResponse) GetCheck() *CatalogCheck {
+	if x != nil {
+		return x.Check
+	}
+	return nil
+}
+
+func (x *SaveCatalogEventTypeResponse) GetCatalogVersion() int64 {
+	if x != nil {
+		return x.CatalogVersion
+	}
+	return 0
+}
+
+type SaveCatalogBadgeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Badge         *CatalogBadge          `protobuf:"bytes,1,opt,name=badge,proto3" json:"badge,omitempty"`
+	Create        bool                   `protobuf:"varint,2,opt,name=create,proto3" json:"create,omitempty"`
+	ValidateOnly  bool                   `protobuf:"varint,3,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveCatalogBadgeRequest) Reset() {
+	*x = SaveCatalogBadgeRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogBadgeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogBadgeRequest) ProtoMessage() {}
+
+func (x *SaveCatalogBadgeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogBadgeRequest.ProtoReflect.Descriptor instead.
+func (*SaveCatalogBadgeRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *SaveCatalogBadgeRequest) GetBadge() *CatalogBadge {
+	if x != nil {
+		return x.Badge
+	}
+	return nil
+}
+
+func (x *SaveCatalogBadgeRequest) GetCreate() bool {
+	if x != nil {
+		return x.Create
+	}
+	return false
+}
+
+func (x *SaveCatalogBadgeRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+func (x *SaveCatalogBadgeRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SaveCatalogBadgeResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Check          *CatalogCheck          `protobuf:"bytes,1,opt,name=check,proto3" json:"check,omitempty"`
+	CatalogVersion int64                  `protobuf:"varint,2,opt,name=catalog_version,json=catalogVersion,proto3" json:"catalog_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SaveCatalogBadgeResponse) Reset() {
+	*x = SaveCatalogBadgeResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogBadgeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogBadgeResponse) ProtoMessage() {}
+
+func (x *SaveCatalogBadgeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogBadgeResponse.ProtoReflect.Descriptor instead.
+func (*SaveCatalogBadgeResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *SaveCatalogBadgeResponse) GetCheck() *CatalogCheck {
+	if x != nil {
+		return x.Check
+	}
+	return nil
+}
+
+func (x *SaveCatalogBadgeResponse) GetCatalogVersion() int64 {
+	if x != nil {
+		return x.CatalogVersion
+	}
+	return 0
+}
+
+type SaveCatalogStudyTagRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Tag           *CatalogStudyTag       `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
+	Create        bool                   `protobuf:"varint,2,opt,name=create,proto3" json:"create,omitempty"`
+	ValidateOnly  bool                   `protobuf:"varint,3,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveCatalogStudyTagRequest) Reset() {
+	*x = SaveCatalogStudyTagRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogStudyTagRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogStudyTagRequest) ProtoMessage() {}
+
+func (x *SaveCatalogStudyTagRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogStudyTagRequest.ProtoReflect.Descriptor instead.
+func (*SaveCatalogStudyTagRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *SaveCatalogStudyTagRequest) GetTag() *CatalogStudyTag {
+	if x != nil {
+		return x.Tag
+	}
+	return nil
+}
+
+func (x *SaveCatalogStudyTagRequest) GetCreate() bool {
+	if x != nil {
+		return x.Create
+	}
+	return false
+}
+
+func (x *SaveCatalogStudyTagRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+func (x *SaveCatalogStudyTagRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SaveCatalogStudyTagResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Check          *CatalogCheck          `protobuf:"bytes,1,opt,name=check,proto3" json:"check,omitempty"`
+	CatalogVersion int64                  `protobuf:"varint,2,opt,name=catalog_version,json=catalogVersion,proto3" json:"catalog_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SaveCatalogStudyTagResponse) Reset() {
+	*x = SaveCatalogStudyTagResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogStudyTagResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogStudyTagResponse) ProtoMessage() {}
+
+func (x *SaveCatalogStudyTagResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogStudyTagResponse.ProtoReflect.Descriptor instead.
+func (*SaveCatalogStudyTagResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *SaveCatalogStudyTagResponse) GetCheck() *CatalogCheck {
+	if x != nil {
+		return x.Check
+	}
+	return nil
+}
+
+func (x *SaveCatalogStudyTagResponse) GetCatalogVersion() int64 {
+	if x != nil {
+		return x.CatalogVersion
+	}
+	return 0
+}
+
+type SaveCatalogScorePresetRequest struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Preset        *AdminCatalogScorePreset `protobuf:"bytes,1,opt,name=preset,proto3" json:"preset,omitempty"`
+	Create        bool                     `protobuf:"varint,2,opt,name=create,proto3" json:"create,omitempty"`
+	ValidateOnly  bool                     `protobuf:"varint,3,opt,name=validate_only,json=validateOnly,proto3" json:"validate_only,omitempty"`
+	Reason        string                   `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveCatalogScorePresetRequest) Reset() {
+	*x = SaveCatalogScorePresetRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogScorePresetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogScorePresetRequest) ProtoMessage() {}
+
+func (x *SaveCatalogScorePresetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogScorePresetRequest.ProtoReflect.Descriptor instead.
+func (*SaveCatalogScorePresetRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *SaveCatalogScorePresetRequest) GetPreset() *AdminCatalogScorePreset {
+	if x != nil {
+		return x.Preset
+	}
+	return nil
+}
+
+func (x *SaveCatalogScorePresetRequest) GetCreate() bool {
+	if x != nil {
+		return x.Create
+	}
+	return false
+}
+
+func (x *SaveCatalogScorePresetRequest) GetValidateOnly() bool {
+	if x != nil {
+		return x.ValidateOnly
+	}
+	return false
+}
+
+func (x *SaveCatalogScorePresetRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SaveCatalogScorePresetResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Check          *CatalogCheck          `protobuf:"bytes,1,opt,name=check,proto3" json:"check,omitempty"`
+	CatalogVersion int64                  `protobuf:"varint,2,opt,name=catalog_version,json=catalogVersion,proto3" json:"catalog_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SaveCatalogScorePresetResponse) Reset() {
+	*x = SaveCatalogScorePresetResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveCatalogScorePresetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveCatalogScorePresetResponse) ProtoMessage() {}
+
+func (x *SaveCatalogScorePresetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveCatalogScorePresetResponse.ProtoReflect.Descriptor instead.
+func (*SaveCatalogScorePresetResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *SaveCatalogScorePresetResponse) GetCheck() *CatalogCheck {
+	if x != nil {
+		return x.Check
+	}
+	return nil
+}
+
+func (x *SaveCatalogScorePresetResponse) GetCatalogVersion() int64 {
+	if x != nil {
+		return x.CatalogVersion
+	}
+	return 0
+}
+
+type BlockDomainRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A host name; it is stored lower case without a trailing dot.
+	Domain        string `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockDomainRequest) Reset() {
+	*x = BlockDomainRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockDomainRequest) ProtoMessage() {}
+
+func (x *BlockDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockDomainRequest.ProtoReflect.Descriptor instead.
+func (*BlockDomainRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *BlockDomainRequest) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *BlockDomainRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type BlockDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockDomainResponse) Reset() {
+	*x = BlockDomainResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockDomainResponse) ProtoMessage() {}
+
+func (x *BlockDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockDomainResponse.ProtoReflect.Descriptor instead.
+func (*BlockDomainResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{60}
+}
+
+type UnblockDomainRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        string                 `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnblockDomainRequest) Reset() {
+	*x = UnblockDomainRequest{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnblockDomainRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnblockDomainRequest) ProtoMessage() {}
+
+func (x *UnblockDomainRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnblockDomainRequest.ProtoReflect.Descriptor instead.
+func (*UnblockDomainRequest) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *UnblockDomainRequest) GetDomain() string {
+	if x != nil {
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *UnblockDomainRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type UnblockDomainResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnblockDomainResponse) Reset() {
+	*x = UnblockDomainResponse{}
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnblockDomainResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnblockDomainResponse) ProtoMessage() {}
+
+func (x *UnblockDomainResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnblockDomainResponse.ProtoReflect.Descriptor instead.
+func (*UnblockDomainResponse) Descriptor() ([]byte, []int) {
+	return file_tayfam_core_v1_admin_proto_rawDescGZIP(), []int{62}
+}
+
 type ListUserTayfasResponse_Entry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tayfa         *AdminTayfaSummary     `protobuf:"bytes,1,opt,name=tayfa,proto3" json:"tayfa,omitempty"`
@@ -2676,7 +4065,7 @@ type ListUserTayfasResponse_Entry struct {
 
 func (x *ListUserTayfasResponse_Entry) Reset() {
 	*x = ListUserTayfasResponse_Entry{}
-	mi := &file_tayfam_core_v1_admin_proto_msgTypes[41]
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2688,7 +4077,7 @@ func (x *ListUserTayfasResponse_Entry) String() string {
 func (*ListUserTayfasResponse_Entry) ProtoMessage() {}
 
 func (x *ListUserTayfasResponse_Entry) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_core_v1_admin_proto_msgTypes[41]
+	mi := &file_tayfam_core_v1_admin_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2722,7 +4111,7 @@ var File_tayfam_core_v1_admin_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\n" +
-	"\x1atayfam/core/v1/admin.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1ftayfam/core/v1/membership.proto\x1a\x1btayfam/core/v1/report.proto\x1a\x1atayfam/core/v1/tayfa.proto\"\xbf\x03\n" +
+	"\x1atayfam/core/v1/admin.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1ctayfam/core/v1/catalog.proto\x1a\x1ftayfam/core/v1/membership.proto\x1a\x1btayfam/core/v1/report.proto\x1a\x1atayfam/core/v1/tayfa.proto\"\xbf\x03\n" +
 	"\x11AdminTayfaSummary\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x123\n" +
@@ -2901,7 +4290,114 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\x15RejectDiscoverRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x18\n" +
-	"\x16RejectDiscoverResponse*\xe5\x01\n" +
+	"\x16RejectDiscoverResponse\"\x97\x01\n" +
+	"\x15AdminCatalogEventType\x124\n" +
+	"\x04type\x18\x01 \x01(\v2 .tayfam.core.v1.CatalogEventTypeR\x04type\x12\x1a\n" +
+	"\bposition\x18\x02 \x01(\x05R\bposition\x12,\n" +
+	"\x12min_client_version\x18\x03 \x01(\tR\x10minClientVersion\"\x9e\x02\n" +
+	"\x17AdminCatalogScorePreset\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1a\n" +
+	"\bposition\x18\x02 \x01(\x05R\bposition\x12K\n" +
+	"\x06labels\x18\x03 \x03(\v23.tayfam.core.v1.AdminCatalogScorePreset.LabelsEntryR\x06labels\x12\x16\n" +
+	"\x06params\x18\x04 \x01(\tR\x06params\x125\n" +
+	"\x06status\x18\x05 \x01(\x0e2\x1d.tayfam.core.v1.CatalogStatusR\x06status\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x83\x01\n" +
+	"\x12AdminBlockedDomain\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x12;\n" +
+	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12\x18\n" +
+	"\ainitial\x18\x03 \x01(\bR\ainitial\"\xdb\x01\n" +
+	"\x13CatalogPreviewField\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1a\n" +
+	"\brequired\x18\x03 \x01(\bR\brequired\x12G\n" +
+	"\x06labels\x18\x04 \x03(\v2/.tayfam.core.v1.CatalogPreviewField.LabelsEntryR\x06labels\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb0\x02\n" +
+	"\x17CatalogPreviewComponent\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12K\n" +
+	"\x06labels\x18\x03 \x03(\v23.tayfam.core.v1.CatalogPreviewComponent.LabelsEntryR\x06labels\x12\x1a\n" +
+	"\boptional\x18\x04 \x01(\bR\boptional\x12\x1d\n" +
+	"\n" +
+	"default_on\x18\x05 \x01(\bR\tdefaultOn\x12,\n" +
+	"\x12min_client_version\x18\x06 \x01(\tR\x10minClientVersion\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xad\x02\n" +
+	"\fCatalogCheck\x12\x18\n" +
+	"\aproblem\x18\x01 \x01(\tR\aproblem\x12\x14\n" +
+	"\x05field\x18\x02 \x01(\tR\x05field\x12;\n" +
+	"\x06fields\x18\x03 \x03(\v2#.tayfam.core.v1.CatalogPreviewFieldR\x06fields\x12G\n" +
+	"\n" +
+	"components\x18\x04 \x03(\v2'.tayfam.core.v1.CatalogPreviewComponentR\n" +
+	"components\x12,\n" +
+	"\x12min_client_version\x18\x05 \x01(\tR\x10minClientVersion\x12\x18\n" +
+	"\aversion\x18\x06 \x01(\x05R\aversion\x12\x1f\n" +
+	"\vnew_version\x18\a \x01(\bR\n" +
+	"newVersion\"\x18\n" +
+	"\x16GetCatalogAdminRequest\"\xda\x03\n" +
+	"\x17GetCatalogAdminResponse\x12'\n" +
+	"\x0fcatalog_version\x18\x01 \x01(\x03R\x0ecatalogVersion\x12=\n" +
+	"\tinterests\x18\x02 \x03(\v2\x1f.tayfam.core.v1.CatalogInterestR\tinterests\x12F\n" +
+	"\vevent_types\x18\x03 \x03(\v2%.tayfam.core.v1.AdminCatalogEventTypeR\n" +
+	"eventTypes\x124\n" +
+	"\x06badges\x18\x04 \x03(\v2\x1c.tayfam.core.v1.CatalogBadgeR\x06badges\x12>\n" +
+	"\n" +
+	"study_tags\x18\x05 \x03(\v2\x1f.tayfam.core.v1.CatalogStudyTagR\tstudyTags\x12L\n" +
+	"\rscore_presets\x18\x06 \x03(\v2'.tayfam.core.v1.AdminCatalogScorePresetR\fscorePresets\x12K\n" +
+	"\x0fblocked_domains\x18\a \x03(\v2\".tayfam.core.v1.AdminBlockedDomainR\x0eblockedDomains\"\xae\x01\n" +
+	"\x1aSaveCatalogInterestRequest\x12;\n" +
+	"\binterest\x18\x01 \x01(\v2\x1f.tayfam.core.v1.CatalogInterestR\binterest\x12\x16\n" +
+	"\x06create\x18\x02 \x01(\bR\x06create\x12#\n" +
+	"\rvalidate_only\x18\x03 \x01(\bR\fvalidateOnly\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"z\n" +
+	"\x1bSaveCatalogInterestResponse\x122\n" +
+	"\x05check\x18\x01 \x01(\v2\x1c.tayfam.core.v1.CatalogCheckR\x05check\x12'\n" +
+	"\x0fcatalog_version\x18\x02 \x01(\x03R\x0ecatalogVersion\"\xac\x01\n" +
+	"\x1bSaveCatalogEventTypeRequest\x124\n" +
+	"\x04type\x18\x01 \x01(\v2 .tayfam.core.v1.CatalogEventTypeR\x04type\x12\x1a\n" +
+	"\bposition\x18\x02 \x01(\x05R\bposition\x12#\n" +
+	"\rvalidate_only\x18\x03 \x01(\bR\fvalidateOnly\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"{\n" +
+	"\x1cSaveCatalogEventTypeResponse\x122\n" +
+	"\x05check\x18\x01 \x01(\v2\x1c.tayfam.core.v1.CatalogCheckR\x05check\x12'\n" +
+	"\x0fcatalog_version\x18\x02 \x01(\x03R\x0ecatalogVersion\"\xa2\x01\n" +
+	"\x17SaveCatalogBadgeRequest\x122\n" +
+	"\x05badge\x18\x01 \x01(\v2\x1c.tayfam.core.v1.CatalogBadgeR\x05badge\x12\x16\n" +
+	"\x06create\x18\x02 \x01(\bR\x06create\x12#\n" +
+	"\rvalidate_only\x18\x03 \x01(\bR\fvalidateOnly\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"w\n" +
+	"\x18SaveCatalogBadgeResponse\x122\n" +
+	"\x05check\x18\x01 \x01(\v2\x1c.tayfam.core.v1.CatalogCheckR\x05check\x12'\n" +
+	"\x0fcatalog_version\x18\x02 \x01(\x03R\x0ecatalogVersion\"\xa4\x01\n" +
+	"\x1aSaveCatalogStudyTagRequest\x121\n" +
+	"\x03tag\x18\x01 \x01(\v2\x1f.tayfam.core.v1.CatalogStudyTagR\x03tag\x12\x16\n" +
+	"\x06create\x18\x02 \x01(\bR\x06create\x12#\n" +
+	"\rvalidate_only\x18\x03 \x01(\bR\fvalidateOnly\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"z\n" +
+	"\x1bSaveCatalogStudyTagResponse\x122\n" +
+	"\x05check\x18\x01 \x01(\v2\x1c.tayfam.core.v1.CatalogCheckR\x05check\x12'\n" +
+	"\x0fcatalog_version\x18\x02 \x01(\x03R\x0ecatalogVersion\"\xb5\x01\n" +
+	"\x1dSaveCatalogScorePresetRequest\x12?\n" +
+	"\x06preset\x18\x01 \x01(\v2'.tayfam.core.v1.AdminCatalogScorePresetR\x06preset\x12\x16\n" +
+	"\x06create\x18\x02 \x01(\bR\x06create\x12#\n" +
+	"\rvalidate_only\x18\x03 \x01(\bR\fvalidateOnly\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"}\n" +
+	"\x1eSaveCatalogScorePresetResponse\x122\n" +
+	"\x05check\x18\x01 \x01(\v2\x1c.tayfam.core.v1.CatalogCheckR\x05check\x12'\n" +
+	"\x0fcatalog_version\x18\x02 \x01(\x03R\x0ecatalogVersion\"D\n" +
+	"\x12BlockDomainRequest\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x15\n" +
+	"\x13BlockDomainResponse\"F\n" +
+	"\x14UnblockDomainRequest\x12\x16\n" +
+	"\x06domain\x18\x01 \x01(\tR\x06domain\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x17\n" +
+	"\x15UnblockDomainResponse*\xe5\x01\n" +
 	"\x10PlatformDecision\x12!\n" +
 	"\x1dPLATFORM_DECISION_UNSPECIFIED\x10\x00\x12%\n" +
 	"!PLATFORM_DECISION_CONTENT_REMOVED\x10\x01\x12\x1c\n" +
@@ -2919,7 +4415,7 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	" DISCOVER_DROP_REASON_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"DISCOVER_DROP_REASON_MEMBER_REPORT\x10\x01\x12*\n" +
 	"&DISCOVER_DROP_REASON_NEGATIVE_FEEDBACK\x10\x02\x12'\n" +
-	"#DISCOVER_DROP_REASON_MEMBER_REMOVED\x10\x032\xd8\r\n" +
+	"#DISCOVER_DROP_REASON_MEMBER_REMOVED\x10\x032\xa5\x14\n" +
 	"\fAdminService\x12Y\n" +
 	"\fSearchTayfas\x12#.tayfam.core.v1.SearchTayfasRequest\x1a$.tayfam.core.v1.SearchTayfasResponse\x12e\n" +
 	"\bGetTayfa\x12+.tayfam.core.v1.AdminServiceGetTayfaRequest\x1a,.tayfam.core.v1.AdminServiceGetTayfaResponse\x12e\n" +
@@ -2937,7 +4433,15 @@ const file_tayfam_core_v1_admin_proto_rawDesc = "" +
 	"\bGetStats\x12\x1f.tayfam.core.v1.GetStatsRequest\x1a .tayfam.core.v1.GetStatsResponse\x12h\n" +
 	"\x11ListDiscoverQueue\x12(.tayfam.core.v1.ListDiscoverQueueRequest\x1a).tayfam.core.v1.ListDiscoverQueueResponse\x12b\n" +
 	"\x0fApproveDiscover\x12&.tayfam.core.v1.ApproveDiscoverRequest\x1a'.tayfam.core.v1.ApproveDiscoverResponse\x12_\n" +
-	"\x0eRejectDiscover\x12%.tayfam.core.v1.RejectDiscoverRequest\x1a&.tayfam.core.v1.RejectDiscoverResponseB\xbc\x01\n" +
+	"\x0eRejectDiscover\x12%.tayfam.core.v1.RejectDiscoverRequest\x1a&.tayfam.core.v1.RejectDiscoverResponse\x12b\n" +
+	"\x0fGetCatalogAdmin\x12&.tayfam.core.v1.GetCatalogAdminRequest\x1a'.tayfam.core.v1.GetCatalogAdminResponse\x12n\n" +
+	"\x13SaveCatalogInterest\x12*.tayfam.core.v1.SaveCatalogInterestRequest\x1a+.tayfam.core.v1.SaveCatalogInterestResponse\x12q\n" +
+	"\x14SaveCatalogEventType\x12+.tayfam.core.v1.SaveCatalogEventTypeRequest\x1a,.tayfam.core.v1.SaveCatalogEventTypeResponse\x12e\n" +
+	"\x10SaveCatalogBadge\x12'.tayfam.core.v1.SaveCatalogBadgeRequest\x1a(.tayfam.core.v1.SaveCatalogBadgeResponse\x12n\n" +
+	"\x13SaveCatalogStudyTag\x12*.tayfam.core.v1.SaveCatalogStudyTagRequest\x1a+.tayfam.core.v1.SaveCatalogStudyTagResponse\x12w\n" +
+	"\x16SaveCatalogScorePreset\x12-.tayfam.core.v1.SaveCatalogScorePresetRequest\x1a..tayfam.core.v1.SaveCatalogScorePresetResponse\x12V\n" +
+	"\vBlockDomain\x12\".tayfam.core.v1.BlockDomainRequest\x1a#.tayfam.core.v1.BlockDomainResponse\x12\\\n" +
+	"\rUnblockDomain\x12$.tayfam.core.v1.UnblockDomainRequest\x1a%.tayfam.core.v1.UnblockDomainResponseB\xbc\x01\n" +
 	"\x12com.tayfam.core.v1B\n" +
 	"AdminProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
@@ -2954,7 +4458,7 @@ func file_tayfam_core_v1_admin_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_core_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_tayfam_core_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
+var file_tayfam_core_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
 var file_tayfam_core_v1_admin_proto_goTypes = []any{
 	(PlatformDecision)(0),                      // 0: tayfam.core.v1.PlatformDecision
 	(DiscoverReviewStatus)(0),                  // 1: tayfam.core.v1.DiscoverReviewStatus
@@ -3000,99 +4504,169 @@ var file_tayfam_core_v1_admin_proto_goTypes = []any{
 	(*ApproveDiscoverResponse)(nil),            // 41: tayfam.core.v1.ApproveDiscoverResponse
 	(*RejectDiscoverRequest)(nil),              // 42: tayfam.core.v1.RejectDiscoverRequest
 	(*RejectDiscoverResponse)(nil),             // 43: tayfam.core.v1.RejectDiscoverResponse
-	(*ListUserTayfasResponse_Entry)(nil),       // 44: tayfam.core.v1.ListUserTayfasResponse.Entry
-	(TayfaStatus)(0),                           // 45: tayfam.core.v1.TayfaStatus
-	(*timestamppb.Timestamp)(nil),              // 46: google.protobuf.Timestamp
-	(Role)(0),                                  // 47: tayfam.core.v1.Role
-	(MembershipStatus)(0),                      // 48: tayfam.core.v1.MembershipStatus
-	(ReportReason)(0),                          // 49: tayfam.core.v1.ReportReason
-	(ReportTargetType)(0),                      // 50: tayfam.core.v1.ReportTargetType
-	(ReportPriority)(0),                        // 51: tayfam.core.v1.ReportPriority
+	(*AdminCatalogEventType)(nil),              // 44: tayfam.core.v1.AdminCatalogEventType
+	(*AdminCatalogScorePreset)(nil),            // 45: tayfam.core.v1.AdminCatalogScorePreset
+	(*AdminBlockedDomain)(nil),                 // 46: tayfam.core.v1.AdminBlockedDomain
+	(*CatalogPreviewField)(nil),                // 47: tayfam.core.v1.CatalogPreviewField
+	(*CatalogPreviewComponent)(nil),            // 48: tayfam.core.v1.CatalogPreviewComponent
+	(*CatalogCheck)(nil),                       // 49: tayfam.core.v1.CatalogCheck
+	(*GetCatalogAdminRequest)(nil),             // 50: tayfam.core.v1.GetCatalogAdminRequest
+	(*GetCatalogAdminResponse)(nil),            // 51: tayfam.core.v1.GetCatalogAdminResponse
+	(*SaveCatalogInterestRequest)(nil),         // 52: tayfam.core.v1.SaveCatalogInterestRequest
+	(*SaveCatalogInterestResponse)(nil),        // 53: tayfam.core.v1.SaveCatalogInterestResponse
+	(*SaveCatalogEventTypeRequest)(nil),        // 54: tayfam.core.v1.SaveCatalogEventTypeRequest
+	(*SaveCatalogEventTypeResponse)(nil),       // 55: tayfam.core.v1.SaveCatalogEventTypeResponse
+	(*SaveCatalogBadgeRequest)(nil),            // 56: tayfam.core.v1.SaveCatalogBadgeRequest
+	(*SaveCatalogBadgeResponse)(nil),           // 57: tayfam.core.v1.SaveCatalogBadgeResponse
+	(*SaveCatalogStudyTagRequest)(nil),         // 58: tayfam.core.v1.SaveCatalogStudyTagRequest
+	(*SaveCatalogStudyTagResponse)(nil),        // 59: tayfam.core.v1.SaveCatalogStudyTagResponse
+	(*SaveCatalogScorePresetRequest)(nil),      // 60: tayfam.core.v1.SaveCatalogScorePresetRequest
+	(*SaveCatalogScorePresetResponse)(nil),     // 61: tayfam.core.v1.SaveCatalogScorePresetResponse
+	(*BlockDomainRequest)(nil),                 // 62: tayfam.core.v1.BlockDomainRequest
+	(*BlockDomainResponse)(nil),                // 63: tayfam.core.v1.BlockDomainResponse
+	(*UnblockDomainRequest)(nil),               // 64: tayfam.core.v1.UnblockDomainRequest
+	(*UnblockDomainResponse)(nil),              // 65: tayfam.core.v1.UnblockDomainResponse
+	(*ListUserTayfasResponse_Entry)(nil),       // 66: tayfam.core.v1.ListUserTayfasResponse.Entry
+	nil,                                        // 67: tayfam.core.v1.AdminCatalogScorePreset.LabelsEntry
+	nil,                                        // 68: tayfam.core.v1.CatalogPreviewField.LabelsEntry
+	nil,                                        // 69: tayfam.core.v1.CatalogPreviewComponent.LabelsEntry
+	(TayfaStatus)(0),                           // 70: tayfam.core.v1.TayfaStatus
+	(*timestamppb.Timestamp)(nil),              // 71: google.protobuf.Timestamp
+	(Role)(0),                                  // 72: tayfam.core.v1.Role
+	(MembershipStatus)(0),                      // 73: tayfam.core.v1.MembershipStatus
+	(ReportReason)(0),                          // 74: tayfam.core.v1.ReportReason
+	(ReportTargetType)(0),                      // 75: tayfam.core.v1.ReportTargetType
+	(ReportPriority)(0),                        // 76: tayfam.core.v1.ReportPriority
+	(*CatalogEventType)(nil),                   // 77: tayfam.core.v1.CatalogEventType
+	(CatalogStatus)(0),                         // 78: tayfam.core.v1.CatalogStatus
+	(*CatalogInterest)(nil),                    // 79: tayfam.core.v1.CatalogInterest
+	(*CatalogBadge)(nil),                       // 80: tayfam.core.v1.CatalogBadge
+	(*CatalogStudyTag)(nil),                    // 81: tayfam.core.v1.CatalogStudyTag
 }
 var file_tayfam_core_v1_admin_proto_depIdxs = []int32{
-	45, // 0: tayfam.core.v1.AdminTayfaSummary.status:type_name -> tayfam.core.v1.TayfaStatus
-	46, // 1: tayfam.core.v1.AdminTayfaSummary.create_time:type_name -> google.protobuf.Timestamp
-	46, // 2: tayfam.core.v1.AdminTayfaSummary.suspend_time:type_name -> google.protobuf.Timestamp
-	46, // 3: tayfam.core.v1.AdminTayfaSummary.delete_time:type_name -> google.protobuf.Timestamp
-	46, // 4: tayfam.core.v1.AdminTayfaSummary.deletion_scheduled_time:type_name -> google.protobuf.Timestamp
+	70, // 0: tayfam.core.v1.AdminTayfaSummary.status:type_name -> tayfam.core.v1.TayfaStatus
+	71, // 1: tayfam.core.v1.AdminTayfaSummary.create_time:type_name -> google.protobuf.Timestamp
+	71, // 2: tayfam.core.v1.AdminTayfaSummary.suspend_time:type_name -> google.protobuf.Timestamp
+	71, // 3: tayfam.core.v1.AdminTayfaSummary.delete_time:type_name -> google.protobuf.Timestamp
+	71, // 4: tayfam.core.v1.AdminTayfaSummary.deletion_scheduled_time:type_name -> google.protobuf.Timestamp
 	3,  // 5: tayfam.core.v1.SearchTayfasResponse.tayfas:type_name -> tayfam.core.v1.AdminTayfaSummary
-	47, // 6: tayfam.core.v1.AdminMember.role:type_name -> tayfam.core.v1.Role
-	48, // 7: tayfam.core.v1.AdminMember.status:type_name -> tayfam.core.v1.MembershipStatus
-	46, // 8: tayfam.core.v1.AdminMember.join_time:type_name -> google.protobuf.Timestamp
-	49, // 9: tayfam.core.v1.AdminMember.ban_reason:type_name -> tayfam.core.v1.ReportReason
+	72, // 6: tayfam.core.v1.AdminMember.role:type_name -> tayfam.core.v1.Role
+	73, // 7: tayfam.core.v1.AdminMember.status:type_name -> tayfam.core.v1.MembershipStatus
+	71, // 8: tayfam.core.v1.AdminMember.join_time:type_name -> google.protobuf.Timestamp
+	74, // 9: tayfam.core.v1.AdminMember.ban_reason:type_name -> tayfam.core.v1.ReportReason
 	3,  // 10: tayfam.core.v1.AdminServiceGetTayfaResponse.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
 	7,  // 11: tayfam.core.v1.AdminServiceGetTayfaResponse.staff:type_name -> tayfam.core.v1.AdminMember
 	7,  // 12: tayfam.core.v1.ListTayfaMembersResponse.members:type_name -> tayfam.core.v1.AdminMember
-	44, // 13: tayfam.core.v1.ListUserTayfasResponse.tayfas:type_name -> tayfam.core.v1.ListUserTayfasResponse.Entry
-	47, // 14: tayfam.core.v1.SetMemberRoleRequest.role:type_name -> tayfam.core.v1.Role
-	50, // 15: tayfam.core.v1.PlatformReport.target_type:type_name -> tayfam.core.v1.ReportTargetType
-	49, // 16: tayfam.core.v1.PlatformReport.reason:type_name -> tayfam.core.v1.ReportReason
-	51, // 17: tayfam.core.v1.PlatformReport.priority:type_name -> tayfam.core.v1.ReportPriority
-	46, // 18: tayfam.core.v1.PlatformReport.create_time:type_name -> google.protobuf.Timestamp
-	46, // 19: tayfam.core.v1.PlatformReport.escalate_time:type_name -> google.protobuf.Timestamp
+	66, // 13: tayfam.core.v1.ListUserTayfasResponse.tayfas:type_name -> tayfam.core.v1.ListUserTayfasResponse.Entry
+	72, // 14: tayfam.core.v1.SetMemberRoleRequest.role:type_name -> tayfam.core.v1.Role
+	75, // 15: tayfam.core.v1.PlatformReport.target_type:type_name -> tayfam.core.v1.ReportTargetType
+	74, // 16: tayfam.core.v1.PlatformReport.reason:type_name -> tayfam.core.v1.ReportReason
+	76, // 17: tayfam.core.v1.PlatformReport.priority:type_name -> tayfam.core.v1.ReportPriority
+	71, // 18: tayfam.core.v1.PlatformReport.create_time:type_name -> google.protobuf.Timestamp
+	71, // 19: tayfam.core.v1.PlatformReport.escalate_time:type_name -> google.protobuf.Timestamp
 	0,  // 20: tayfam.core.v1.PlatformReport.decision:type_name -> tayfam.core.v1.PlatformDecision
-	46, // 21: tayfam.core.v1.PlatformReport.decide_time:type_name -> google.protobuf.Timestamp
+	71, // 21: tayfam.core.v1.PlatformReport.decide_time:type_name -> google.protobuf.Timestamp
 	22, // 22: tayfam.core.v1.ListPlatformReportsResponse.reports:type_name -> tayfam.core.v1.PlatformReport
-	50, // 23: tayfam.core.v1.ReportedItem.target_type:type_name -> tayfam.core.v1.ReportTargetType
-	46, // 24: tayfam.core.v1.ReportedItem.create_time:type_name -> google.protobuf.Timestamp
-	46, // 25: tayfam.core.v1.ReportedItem.delete_time:type_name -> google.protobuf.Timestamp
-	46, // 26: tayfam.core.v1.ReportedItem.media_expire_time:type_name -> google.protobuf.Timestamp
+	75, // 23: tayfam.core.v1.ReportedItem.target_type:type_name -> tayfam.core.v1.ReportTargetType
+	71, // 24: tayfam.core.v1.ReportedItem.create_time:type_name -> google.protobuf.Timestamp
+	71, // 25: tayfam.core.v1.ReportedItem.delete_time:type_name -> google.protobuf.Timestamp
+	71, // 26: tayfam.core.v1.ReportedItem.media_expire_time:type_name -> google.protobuf.Timestamp
 	26, // 27: tayfam.core.v1.ReportedItem.place:type_name -> tayfam.core.v1.ReportedPlace
-	46, // 28: tayfam.core.v1.GetReportedMessagePhotoUrlResponse.expire_time:type_name -> google.protobuf.Timestamp
-	46, // 29: tayfam.core.v1.GetReportEvidencePhotoUrlResponse.expire_time:type_name -> google.protobuf.Timestamp
+	71, // 28: tayfam.core.v1.GetReportedMessagePhotoUrlResponse.expire_time:type_name -> google.protobuf.Timestamp
+	71, // 29: tayfam.core.v1.GetReportEvidencePhotoUrlResponse.expire_time:type_name -> google.protobuf.Timestamp
 	22, // 30: tayfam.core.v1.GetReportedItemResponse.report:type_name -> tayfam.core.v1.PlatformReport
 	25, // 31: tayfam.core.v1.GetReportedItemResponse.item:type_name -> tayfam.core.v1.ReportedItem
 	0,  // 32: tayfam.core.v1.DecideReportRequest.decision:type_name -> tayfam.core.v1.PlatformDecision
 	36, // 33: tayfam.core.v1.GetStatsResponse.job_runs:type_name -> tayfam.core.v1.JobRun
-	46, // 34: tayfam.core.v1.JobRun.finish_time:type_name -> google.protobuf.Timestamp
-	46, // 35: tayfam.core.v1.JobRun.last_success_time:type_name -> google.protobuf.Timestamp
-	46, // 36: tayfam.core.v1.DiscoverQueueEntry.create_time:type_name -> google.protobuf.Timestamp
+	71, // 34: tayfam.core.v1.JobRun.finish_time:type_name -> google.protobuf.Timestamp
+	71, // 35: tayfam.core.v1.JobRun.last_success_time:type_name -> google.protobuf.Timestamp
+	71, // 36: tayfam.core.v1.DiscoverQueueEntry.create_time:type_name -> google.protobuf.Timestamp
 	1,  // 37: tayfam.core.v1.DiscoverQueueEntry.status:type_name -> tayfam.core.v1.DiscoverReviewStatus
 	2,  // 38: tayfam.core.v1.DiscoverQueueEntry.drop_reason:type_name -> tayfam.core.v1.DiscoverDropReason
-	46, // 39: tayfam.core.v1.DiscoverQueueEntry.request_time:type_name -> google.protobuf.Timestamp
-	46, // 40: tayfam.core.v1.DiscoverQueueEntry.status_change_time:type_name -> google.protobuf.Timestamp
+	71, // 39: tayfam.core.v1.DiscoverQueueEntry.request_time:type_name -> google.protobuf.Timestamp
+	71, // 40: tayfam.core.v1.DiscoverQueueEntry.status_change_time:type_name -> google.protobuf.Timestamp
 	37, // 41: tayfam.core.v1.ListDiscoverQueueResponse.entries:type_name -> tayfam.core.v1.DiscoverQueueEntry
-	3,  // 42: tayfam.core.v1.ListUserTayfasResponse.Entry.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
-	47, // 43: tayfam.core.v1.ListUserTayfasResponse.Entry.role:type_name -> tayfam.core.v1.Role
-	4,  // 44: tayfam.core.v1.AdminService.SearchTayfas:input_type -> tayfam.core.v1.SearchTayfasRequest
-	6,  // 45: tayfam.core.v1.AdminService.GetTayfa:input_type -> tayfam.core.v1.AdminServiceGetTayfaRequest
-	9,  // 46: tayfam.core.v1.AdminService.ListTayfaMembers:input_type -> tayfam.core.v1.ListTayfaMembersRequest
-	11, // 47: tayfam.core.v1.AdminService.ListUserTayfas:input_type -> tayfam.core.v1.ListUserTayfasRequest
-	13, // 48: tayfam.core.v1.AdminService.SuspendTayfa:input_type -> tayfam.core.v1.SuspendTayfaRequest
-	15, // 49: tayfam.core.v1.AdminService.UnsuspendTayfa:input_type -> tayfam.core.v1.UnsuspendTayfaRequest
-	17, // 50: tayfam.core.v1.AdminService.DeleteTayfa:input_type -> tayfam.core.v1.AdminServiceDeleteTayfaRequest
-	19, // 51: tayfam.core.v1.AdminService.SetMemberRole:input_type -> tayfam.core.v1.SetMemberRoleRequest
-	21, // 52: tayfam.core.v1.AdminService.ListPlatformReports:input_type -> tayfam.core.v1.ListPlatformReportsRequest
-	24, // 53: tayfam.core.v1.AdminService.GetReportedItem:input_type -> tayfam.core.v1.GetReportedItemRequest
-	29, // 54: tayfam.core.v1.AdminService.GetReportEvidencePhotoUrl:input_type -> tayfam.core.v1.GetReportEvidencePhotoUrlRequest
-	27, // 55: tayfam.core.v1.AdminService.GetReportedMessagePhotoUrl:input_type -> tayfam.core.v1.GetReportedMessagePhotoUrlRequest
-	32, // 56: tayfam.core.v1.AdminService.DecideReport:input_type -> tayfam.core.v1.DecideReportRequest
-	34, // 57: tayfam.core.v1.AdminService.GetStats:input_type -> tayfam.core.v1.GetStatsRequest
-	38, // 58: tayfam.core.v1.AdminService.ListDiscoverQueue:input_type -> tayfam.core.v1.ListDiscoverQueueRequest
-	40, // 59: tayfam.core.v1.AdminService.ApproveDiscover:input_type -> tayfam.core.v1.ApproveDiscoverRequest
-	42, // 60: tayfam.core.v1.AdminService.RejectDiscover:input_type -> tayfam.core.v1.RejectDiscoverRequest
-	5,  // 61: tayfam.core.v1.AdminService.SearchTayfas:output_type -> tayfam.core.v1.SearchTayfasResponse
-	8,  // 62: tayfam.core.v1.AdminService.GetTayfa:output_type -> tayfam.core.v1.AdminServiceGetTayfaResponse
-	10, // 63: tayfam.core.v1.AdminService.ListTayfaMembers:output_type -> tayfam.core.v1.ListTayfaMembersResponse
-	12, // 64: tayfam.core.v1.AdminService.ListUserTayfas:output_type -> tayfam.core.v1.ListUserTayfasResponse
-	14, // 65: tayfam.core.v1.AdminService.SuspendTayfa:output_type -> tayfam.core.v1.SuspendTayfaResponse
-	16, // 66: tayfam.core.v1.AdminService.UnsuspendTayfa:output_type -> tayfam.core.v1.UnsuspendTayfaResponse
-	18, // 67: tayfam.core.v1.AdminService.DeleteTayfa:output_type -> tayfam.core.v1.AdminServiceDeleteTayfaResponse
-	20, // 68: tayfam.core.v1.AdminService.SetMemberRole:output_type -> tayfam.core.v1.SetMemberRoleResponse
-	23, // 69: tayfam.core.v1.AdminService.ListPlatformReports:output_type -> tayfam.core.v1.ListPlatformReportsResponse
-	31, // 70: tayfam.core.v1.AdminService.GetReportedItem:output_type -> tayfam.core.v1.GetReportedItemResponse
-	30, // 71: tayfam.core.v1.AdminService.GetReportEvidencePhotoUrl:output_type -> tayfam.core.v1.GetReportEvidencePhotoUrlResponse
-	28, // 72: tayfam.core.v1.AdminService.GetReportedMessagePhotoUrl:output_type -> tayfam.core.v1.GetReportedMessagePhotoUrlResponse
-	33, // 73: tayfam.core.v1.AdminService.DecideReport:output_type -> tayfam.core.v1.DecideReportResponse
-	35, // 74: tayfam.core.v1.AdminService.GetStats:output_type -> tayfam.core.v1.GetStatsResponse
-	39, // 75: tayfam.core.v1.AdminService.ListDiscoverQueue:output_type -> tayfam.core.v1.ListDiscoverQueueResponse
-	41, // 76: tayfam.core.v1.AdminService.ApproveDiscover:output_type -> tayfam.core.v1.ApproveDiscoverResponse
-	43, // 77: tayfam.core.v1.AdminService.RejectDiscover:output_type -> tayfam.core.v1.RejectDiscoverResponse
-	61, // [61:78] is the sub-list for method output_type
-	44, // [44:61] is the sub-list for method input_type
-	44, // [44:44] is the sub-list for extension type_name
-	44, // [44:44] is the sub-list for extension extendee
-	0,  // [0:44] is the sub-list for field type_name
+	77, // 42: tayfam.core.v1.AdminCatalogEventType.type:type_name -> tayfam.core.v1.CatalogEventType
+	67, // 43: tayfam.core.v1.AdminCatalogScorePreset.labels:type_name -> tayfam.core.v1.AdminCatalogScorePreset.LabelsEntry
+	78, // 44: tayfam.core.v1.AdminCatalogScorePreset.status:type_name -> tayfam.core.v1.CatalogStatus
+	71, // 45: tayfam.core.v1.AdminBlockedDomain.create_time:type_name -> google.protobuf.Timestamp
+	68, // 46: tayfam.core.v1.CatalogPreviewField.labels:type_name -> tayfam.core.v1.CatalogPreviewField.LabelsEntry
+	69, // 47: tayfam.core.v1.CatalogPreviewComponent.labels:type_name -> tayfam.core.v1.CatalogPreviewComponent.LabelsEntry
+	47, // 48: tayfam.core.v1.CatalogCheck.fields:type_name -> tayfam.core.v1.CatalogPreviewField
+	48, // 49: tayfam.core.v1.CatalogCheck.components:type_name -> tayfam.core.v1.CatalogPreviewComponent
+	79, // 50: tayfam.core.v1.GetCatalogAdminResponse.interests:type_name -> tayfam.core.v1.CatalogInterest
+	44, // 51: tayfam.core.v1.GetCatalogAdminResponse.event_types:type_name -> tayfam.core.v1.AdminCatalogEventType
+	80, // 52: tayfam.core.v1.GetCatalogAdminResponse.badges:type_name -> tayfam.core.v1.CatalogBadge
+	81, // 53: tayfam.core.v1.GetCatalogAdminResponse.study_tags:type_name -> tayfam.core.v1.CatalogStudyTag
+	45, // 54: tayfam.core.v1.GetCatalogAdminResponse.score_presets:type_name -> tayfam.core.v1.AdminCatalogScorePreset
+	46, // 55: tayfam.core.v1.GetCatalogAdminResponse.blocked_domains:type_name -> tayfam.core.v1.AdminBlockedDomain
+	79, // 56: tayfam.core.v1.SaveCatalogInterestRequest.interest:type_name -> tayfam.core.v1.CatalogInterest
+	49, // 57: tayfam.core.v1.SaveCatalogInterestResponse.check:type_name -> tayfam.core.v1.CatalogCheck
+	77, // 58: tayfam.core.v1.SaveCatalogEventTypeRequest.type:type_name -> tayfam.core.v1.CatalogEventType
+	49, // 59: tayfam.core.v1.SaveCatalogEventTypeResponse.check:type_name -> tayfam.core.v1.CatalogCheck
+	80, // 60: tayfam.core.v1.SaveCatalogBadgeRequest.badge:type_name -> tayfam.core.v1.CatalogBadge
+	49, // 61: tayfam.core.v1.SaveCatalogBadgeResponse.check:type_name -> tayfam.core.v1.CatalogCheck
+	81, // 62: tayfam.core.v1.SaveCatalogStudyTagRequest.tag:type_name -> tayfam.core.v1.CatalogStudyTag
+	49, // 63: tayfam.core.v1.SaveCatalogStudyTagResponse.check:type_name -> tayfam.core.v1.CatalogCheck
+	45, // 64: tayfam.core.v1.SaveCatalogScorePresetRequest.preset:type_name -> tayfam.core.v1.AdminCatalogScorePreset
+	49, // 65: tayfam.core.v1.SaveCatalogScorePresetResponse.check:type_name -> tayfam.core.v1.CatalogCheck
+	3,  // 66: tayfam.core.v1.ListUserTayfasResponse.Entry.tayfa:type_name -> tayfam.core.v1.AdminTayfaSummary
+	72, // 67: tayfam.core.v1.ListUserTayfasResponse.Entry.role:type_name -> tayfam.core.v1.Role
+	4,  // 68: tayfam.core.v1.AdminService.SearchTayfas:input_type -> tayfam.core.v1.SearchTayfasRequest
+	6,  // 69: tayfam.core.v1.AdminService.GetTayfa:input_type -> tayfam.core.v1.AdminServiceGetTayfaRequest
+	9,  // 70: tayfam.core.v1.AdminService.ListTayfaMembers:input_type -> tayfam.core.v1.ListTayfaMembersRequest
+	11, // 71: tayfam.core.v1.AdminService.ListUserTayfas:input_type -> tayfam.core.v1.ListUserTayfasRequest
+	13, // 72: tayfam.core.v1.AdminService.SuspendTayfa:input_type -> tayfam.core.v1.SuspendTayfaRequest
+	15, // 73: tayfam.core.v1.AdminService.UnsuspendTayfa:input_type -> tayfam.core.v1.UnsuspendTayfaRequest
+	17, // 74: tayfam.core.v1.AdminService.DeleteTayfa:input_type -> tayfam.core.v1.AdminServiceDeleteTayfaRequest
+	19, // 75: tayfam.core.v1.AdminService.SetMemberRole:input_type -> tayfam.core.v1.SetMemberRoleRequest
+	21, // 76: tayfam.core.v1.AdminService.ListPlatformReports:input_type -> tayfam.core.v1.ListPlatformReportsRequest
+	24, // 77: tayfam.core.v1.AdminService.GetReportedItem:input_type -> tayfam.core.v1.GetReportedItemRequest
+	29, // 78: tayfam.core.v1.AdminService.GetReportEvidencePhotoUrl:input_type -> tayfam.core.v1.GetReportEvidencePhotoUrlRequest
+	27, // 79: tayfam.core.v1.AdminService.GetReportedMessagePhotoUrl:input_type -> tayfam.core.v1.GetReportedMessagePhotoUrlRequest
+	32, // 80: tayfam.core.v1.AdminService.DecideReport:input_type -> tayfam.core.v1.DecideReportRequest
+	34, // 81: tayfam.core.v1.AdminService.GetStats:input_type -> tayfam.core.v1.GetStatsRequest
+	38, // 82: tayfam.core.v1.AdminService.ListDiscoverQueue:input_type -> tayfam.core.v1.ListDiscoverQueueRequest
+	40, // 83: tayfam.core.v1.AdminService.ApproveDiscover:input_type -> tayfam.core.v1.ApproveDiscoverRequest
+	42, // 84: tayfam.core.v1.AdminService.RejectDiscover:input_type -> tayfam.core.v1.RejectDiscoverRequest
+	50, // 85: tayfam.core.v1.AdminService.GetCatalogAdmin:input_type -> tayfam.core.v1.GetCatalogAdminRequest
+	52, // 86: tayfam.core.v1.AdminService.SaveCatalogInterest:input_type -> tayfam.core.v1.SaveCatalogInterestRequest
+	54, // 87: tayfam.core.v1.AdminService.SaveCatalogEventType:input_type -> tayfam.core.v1.SaveCatalogEventTypeRequest
+	56, // 88: tayfam.core.v1.AdminService.SaveCatalogBadge:input_type -> tayfam.core.v1.SaveCatalogBadgeRequest
+	58, // 89: tayfam.core.v1.AdminService.SaveCatalogStudyTag:input_type -> tayfam.core.v1.SaveCatalogStudyTagRequest
+	60, // 90: tayfam.core.v1.AdminService.SaveCatalogScorePreset:input_type -> tayfam.core.v1.SaveCatalogScorePresetRequest
+	62, // 91: tayfam.core.v1.AdminService.BlockDomain:input_type -> tayfam.core.v1.BlockDomainRequest
+	64, // 92: tayfam.core.v1.AdminService.UnblockDomain:input_type -> tayfam.core.v1.UnblockDomainRequest
+	5,  // 93: tayfam.core.v1.AdminService.SearchTayfas:output_type -> tayfam.core.v1.SearchTayfasResponse
+	8,  // 94: tayfam.core.v1.AdminService.GetTayfa:output_type -> tayfam.core.v1.AdminServiceGetTayfaResponse
+	10, // 95: tayfam.core.v1.AdminService.ListTayfaMembers:output_type -> tayfam.core.v1.ListTayfaMembersResponse
+	12, // 96: tayfam.core.v1.AdminService.ListUserTayfas:output_type -> tayfam.core.v1.ListUserTayfasResponse
+	14, // 97: tayfam.core.v1.AdminService.SuspendTayfa:output_type -> tayfam.core.v1.SuspendTayfaResponse
+	16, // 98: tayfam.core.v1.AdminService.UnsuspendTayfa:output_type -> tayfam.core.v1.UnsuspendTayfaResponse
+	18, // 99: tayfam.core.v1.AdminService.DeleteTayfa:output_type -> tayfam.core.v1.AdminServiceDeleteTayfaResponse
+	20, // 100: tayfam.core.v1.AdminService.SetMemberRole:output_type -> tayfam.core.v1.SetMemberRoleResponse
+	23, // 101: tayfam.core.v1.AdminService.ListPlatformReports:output_type -> tayfam.core.v1.ListPlatformReportsResponse
+	31, // 102: tayfam.core.v1.AdminService.GetReportedItem:output_type -> tayfam.core.v1.GetReportedItemResponse
+	30, // 103: tayfam.core.v1.AdminService.GetReportEvidencePhotoUrl:output_type -> tayfam.core.v1.GetReportEvidencePhotoUrlResponse
+	28, // 104: tayfam.core.v1.AdminService.GetReportedMessagePhotoUrl:output_type -> tayfam.core.v1.GetReportedMessagePhotoUrlResponse
+	33, // 105: tayfam.core.v1.AdminService.DecideReport:output_type -> tayfam.core.v1.DecideReportResponse
+	35, // 106: tayfam.core.v1.AdminService.GetStats:output_type -> tayfam.core.v1.GetStatsResponse
+	39, // 107: tayfam.core.v1.AdminService.ListDiscoverQueue:output_type -> tayfam.core.v1.ListDiscoverQueueResponse
+	41, // 108: tayfam.core.v1.AdminService.ApproveDiscover:output_type -> tayfam.core.v1.ApproveDiscoverResponse
+	43, // 109: tayfam.core.v1.AdminService.RejectDiscover:output_type -> tayfam.core.v1.RejectDiscoverResponse
+	51, // 110: tayfam.core.v1.AdminService.GetCatalogAdmin:output_type -> tayfam.core.v1.GetCatalogAdminResponse
+	53, // 111: tayfam.core.v1.AdminService.SaveCatalogInterest:output_type -> tayfam.core.v1.SaveCatalogInterestResponse
+	55, // 112: tayfam.core.v1.AdminService.SaveCatalogEventType:output_type -> tayfam.core.v1.SaveCatalogEventTypeResponse
+	57, // 113: tayfam.core.v1.AdminService.SaveCatalogBadge:output_type -> tayfam.core.v1.SaveCatalogBadgeResponse
+	59, // 114: tayfam.core.v1.AdminService.SaveCatalogStudyTag:output_type -> tayfam.core.v1.SaveCatalogStudyTagResponse
+	61, // 115: tayfam.core.v1.AdminService.SaveCatalogScorePreset:output_type -> tayfam.core.v1.SaveCatalogScorePresetResponse
+	63, // 116: tayfam.core.v1.AdminService.BlockDomain:output_type -> tayfam.core.v1.BlockDomainResponse
+	65, // 117: tayfam.core.v1.AdminService.UnblockDomain:output_type -> tayfam.core.v1.UnblockDomainResponse
+	93, // [93:118] is the sub-list for method output_type
+	68, // [68:93] is the sub-list for method input_type
+	68, // [68:68] is the sub-list for extension type_name
+	68, // [68:68] is the sub-list for extension extendee
+	0,  // [0:68] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_admin_proto_init() }
@@ -3100,6 +4674,7 @@ func file_tayfam_core_v1_admin_proto_init() {
 	if File_tayfam_core_v1_admin_proto != nil {
 		return
 	}
+	file_tayfam_core_v1_catalog_proto_init()
 	file_tayfam_core_v1_membership_proto_init()
 	file_tayfam_core_v1_report_proto_init()
 	file_tayfam_core_v1_tayfa_proto_init()
@@ -3109,7 +4684,7 @@ func file_tayfam_core_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_core_v1_admin_proto_rawDesc), len(file_tayfam_core_v1_admin_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   42,
+			NumMessages:   67,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

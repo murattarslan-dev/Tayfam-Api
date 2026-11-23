@@ -53,13 +53,15 @@ const createReport = `-- name: CreateReport :one
 INSERT INTO reports (
   id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, evidence_text, evidence_upload_id,
   priority, minor_involved_at, platform_only, escalated_to_platform_at, escalation_reason, platform_status, created_at,
-  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name)
+  channel_id, message_kind, message_body, message_photo_upload_id, place_latitude, place_longitude, place_name,
+  subject_hidden)
 VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
   $11, $12, $13, $14,
   $15, $16, $17,
   $18, $19, $20, $21,
-  $22, $23, $24)
+  $22, $23, $24,
+  $25)
 ON CONFLICT (reporter_id, target_type, target_id) DO NOTHING
 RETURNING id
 `
@@ -89,6 +91,7 @@ type CreateReportParams struct {
 	PlaceLatitude         pgtype.Float8
 	PlaceLongitude        pgtype.Float8
 	PlaceName             pgtype.Text
+	SubjectHidden         bool
 }
 
 // Aynı hedefe ikinci şikâyet mevcut kaydı döndürür. tayfa_id ve
@@ -120,6 +123,7 @@ func (q *Queries) CreateReport(ctx context.Context, arg CreateReportParams) (pgt
 		arg.PlaceLatitude,
 		arg.PlaceLongitude,
 		arg.PlaceName,
+		arg.SubjectHidden,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -348,7 +352,7 @@ func (q *Queries) GetReportTargetAnnouncement(ctx context.Context, arg GetReport
 }
 
 const getReportTargetAnswer = `-- name: GetReportTargetAnswer :one
-SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible
+SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible, a.pool
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
 WHERE a.tayfa_id = $1 AND a.id = $2
@@ -362,40 +366,38 @@ type GetReportTargetAnswerParams struct {
 type GetReportTargetAnswerRow struct {
 	AuthorID pgtype.UUID
 	Visible  bool
+	Pool     string
 }
 
 // Silinmiş sorunun cevabı da görünmez.
 func (q *Queries) GetReportTargetAnswer(ctx context.Context, arg GetReportTargetAnswerParams) (GetReportTargetAnswerRow, error) {
 	row := q.db.QueryRow(ctx, getReportTargetAnswer, arg.TayfaID, arg.ID)
 	var i GetReportTargetAnswerRow
-	err := row.Scan(&i.AuthorID, &i.Visible)
+	err := row.Scan(&i.AuthorID, &i.Visible, &i.Pool)
 	return i, err
 }
 
-const getReportTargetCatch = `-- name: GetReportTargetCatch :one
-SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible, c.visibility
-FROM fishing_catches c
-JOIN events e ON e.id = c.event_id
-WHERE e.tayfa_id = $1 AND c.id = $2
+const getReportTargetDailyItem = `-- name: GetReportTargetDailyItem :one
+SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
+FROM tayfa_daily_items
+WHERE tayfa_id = $1 AND id = $2
 `
 
-type GetReportTargetCatchParams struct {
+type GetReportTargetDailyItemParams struct {
 	TayfaID pgtype.UUID
 	ID      pgtype.UUID
 }
 
-type GetReportTargetCatchRow struct {
-	AuthorID   pgtype.UUID
-	Visible    bool
-	Visibility string
+type GetReportTargetDailyItemRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
 }
 
-// Av kaydı: etkinliği de görünür olmalı; 'self' görünürlüğündeki kaydı
-// yalnızca sahibi görür (app katmanı kontrol eder).
-func (q *Queries) GetReportTargetCatch(ctx context.Context, arg GetReportTargetCatchParams) (GetReportTargetCatchRow, error) {
-	row := q.db.QueryRow(ctx, getReportTargetCatch, arg.TayfaID, arg.ID)
-	var i GetReportTargetCatchRow
-	err := row.Scan(&i.AuthorID, &i.Visible, &i.Visibility)
+// Günün içeriği (issue #269): yazarı ekleyendir.
+func (q *Queries) GetReportTargetDailyItem(ctx context.Context, arg GetReportTargetDailyItemParams) (GetReportTargetDailyItemRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetDailyItem, arg.TayfaID, arg.ID)
+	var i GetReportTargetDailyItemRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
 	return i, err
 }
 
@@ -449,6 +451,137 @@ func (q *Queries) GetReportTargetEventPhoto(ctx context.Context, arg GetReportTa
 	return i, err
 }
 
+const getReportTargetEventQuestion = `-- name: GetReportTargetEventQuestion :one
+SELECT q.author_id, (q.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible, q.anonymous
+FROM event_questions q
+JOIN events e ON e.id = q.event_id
+WHERE e.tayfa_id = $1 AND q.id = $2
+`
+
+type GetReportTargetEventQuestionParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetEventQuestionRow struct {
+	AuthorID  pgtype.UUID
+	Visible   bool
+	Anonymous bool
+}
+
+// Etkinlik sorusu (`questions` bileşeni, issue #256): etkinliği de görünür
+// olmalı. anonymous, şikâyette yazarın tayfa yönetiminden gizlenmesi
+// (subject_hidden) içindir.
+func (q *Queries) GetReportTargetEventQuestion(ctx context.Context, arg GetReportTargetEventQuestionParams) (GetReportTargetEventQuestionRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetEventQuestion, arg.TayfaID, arg.ID)
+	var i GetReportTargetEventQuestionRow
+	err := row.Scan(&i.AuthorID, &i.Visible, &i.Anonymous)
+	return i, err
+}
+
+const getReportTargetGarageVehicle = `-- name: GetReportTargetGarageVehicle :one
+SELECT g.owner_id AS author_id,
+       (g.deleted_at IS NULL AND m.status = 'active' AND garage_visible_in(g.owner_id, $1::uuid))::boolean AS visible
+FROM garage_vehicles g
+JOIN memberships m ON m.tayfa_id = $1::uuid AND m.user_id = g.owner_id
+WHERE g.id = $2
+`
+
+type GetReportTargetGarageVehicleParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetGarageVehicleRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Üye garajı aracı (issue #272): sahibi konusudur; sahibi tayfanın üyesi
+// değilse hedef yoktur. Görünür: silinmemiş, sahibi etkin üye ve garajı bu
+// tayfada görünür.
+func (q *Queries) GetReportTargetGarageVehicle(ctx context.Context, arg GetReportTargetGarageVehicleParams) (GetReportTargetGarageVehicleRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetGarageVehicle, arg.TayfaID, arg.ID)
+	var i GetReportTargetGarageVehicleRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
+const getReportTargetLibraryItem = `-- name: GetReportTargetLibraryItem :one
+SELECT owner_id AS author_id, (status <> 'withdrawn')::boolean AS visible
+FROM library_items
+WHERE tayfa_id = $1 AND id = $2
+`
+
+type GetReportTargetLibraryItemParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetLibraryItemRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Ortak kütüphane kalemi (issue #270): yazarı sahibidir.
+func (q *Queries) GetReportTargetLibraryItem(ctx context.Context, arg GetReportTargetLibraryItemParams) (GetReportTargetLibraryItemRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetLibraryItem, arg.TayfaID, arg.ID)
+	var i GetReportTargetLibraryItemRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
+const getReportTargetLogEntry = `-- name: GetReportTargetLogEntry :one
+SELECT c.user_id AS author_id, (c.deleted_at IS NULL AND e.deleted_at IS NULL)::boolean AS visible
+FROM event_log_entries c
+JOIN events e ON e.id = c.event_id
+WHERE e.tayfa_id = $1 AND c.id = $2
+`
+
+type GetReportTargetLogEntryParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetLogEntryRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Günlük kaydı (issue #243): etkinliği de görünür olmalı. Kaydın kendisi
+// (değerleri) etkinliği gören her üyeye açıktır; konum şikâyete girmez.
+func (q *Queries) GetReportTargetLogEntry(ctx context.Context, arg GetReportTargetLogEntryParams) (GetReportTargetLogEntryRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetLogEntry, arg.TayfaID, arg.ID)
+	var i GetReportTargetLogEntryRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
+const getReportTargetMaterial = `-- name: GetReportTargetMaterial :one
+SELECT author_id, (deleted_at IS NULL AND NOT material_domain_blocked(domain))::boolean AS visible
+FROM materials
+WHERE tayfa_id = $1 AND id = $2
+`
+
+type GetReportTargetMaterialParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+type GetReportTargetMaterialRow struct {
+	AuthorID pgtype.UUID
+	Visible  bool
+}
+
+// Materyal (issue #261): yazarı konusudur; engelli alan adındaki bağlantı
+// gizlidir.
+func (q *Queries) GetReportTargetMaterial(ctx context.Context, arg GetReportTargetMaterialParams) (GetReportTargetMaterialRow, error) {
+	row := q.db.QueryRow(ctx, getReportTargetMaterial, arg.TayfaID, arg.ID)
+	var i GetReportTargetMaterialRow
+	err := row.Scan(&i.AuthorID, &i.Visible)
+	return i, err
+}
+
 const getReportTargetPoll = `-- name: GetReportTargetPoll :one
 SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
 FROM polls
@@ -473,7 +606,7 @@ func (q *Queries) GetReportTargetPoll(ctx context.Context, arg GetReportTargetPo
 }
 
 const getReportTargetQuestion = `-- name: GetReportTargetQuestion :one
-SELECT author_id, (deleted_at IS NULL)::boolean AS visible
+SELECT author_id, (deleted_at IS NULL)::boolean AS visible, pool
 FROM questions
 WHERE tayfa_id = $1 AND id = $2
 `
@@ -486,12 +619,15 @@ type GetReportTargetQuestionParams struct {
 type GetReportTargetQuestionRow struct {
 	AuthorID pgtype.UUID
 	Visible  bool
+	Pool     string
 }
 
+// Sorunun havuzu modülünü verir: Soru-Cevap (qa) ya da soru havuzu
+// (question_pool, issue #271).
 func (q *Queries) GetReportTargetQuestion(ctx context.Context, arg GetReportTargetQuestionParams) (GetReportTargetQuestionRow, error) {
 	row := q.db.QueryRow(ctx, getReportTargetQuestion, arg.TayfaID, arg.ID)
 	var i GetReportTargetQuestionRow
-	err := row.Scan(&i.AuthorID, &i.Visible)
+	err := row.Scan(&i.AuthorID, &i.Visible, &i.Pool)
 	return i, err
 }
 
@@ -522,7 +658,7 @@ func (q *Queries) GetTayfaReportTarget(ctx context.Context, arg GetTayfaReportTa
 }
 
 const listOpenTayfaReports = `-- name: ListOpenTayfaReports :many
-SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
+SELECT id, tayfa_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status, resolution,
        handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND status = 'open' AND NOT platform_only
@@ -563,7 +699,9 @@ type ListOpenTayfaReportsRow struct {
 }
 
 // Kuyruk: tayfanın açık şikâyetleri; platforma özel olanlar ve izleyicinin
-// kendisi hakkındakiler hariç. minor_involved ve çocuk/genç güvenliği
+// kendisi hakkındakiler hariç. Yazarı gizli şikâyette (anonim soru, issue
+// #256) subject_user_id boş döner: yazar yalnızca platform yönetimine
+// görünür. Kuyruk ve çözüm okumaları aynı kuralı izler. minor_involved ve çocuk/genç güvenliği
 // şikâyetleri önce, sonra eskiden yeniye (ADR-0012, platform sahibinin
 // 2026-11-09 kararı; Notion v14). reporter_id
 // ve yükselme bilgisi seçilmez; yaş ve doğum tarihi core'da hiç yoktur.
@@ -679,7 +817,7 @@ func (q *Queries) ListReportsOfReporter(ctx context.Context, arg ListReportsOfRe
 }
 
 const listResolvedTayfaReports = `-- name: ListResolvedTayfaReports :many
-SELECT id, tayfa_id, target_type, target_id, subject_user_id, reason, description, status, resolution,
+SELECT id, tayfa_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status, resolution,
        handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND status = 'resolved' AND NOT platform_only
@@ -759,7 +897,7 @@ func (q *Queries) ListResolvedTayfaReports(ctx context.Context, arg ListResolved
 }
 
 const lockTayfaReport = `-- name: LockTayfaReport :one
-SELECT id, tayfa_id, reporter_id, target_type, target_id, subject_user_id, reason, description, status,
+SELECT id, tayfa_id, reporter_id, target_type, target_id, (CASE WHEN subject_hidden THEN NULL ELSE subject_user_id END)::uuid AS subject_user_id, reason, description, status,
        resolution, handled_by, handled_at, priority, created_at, channel_id
 FROM reports
 WHERE tayfa_id = $1 AND id = $2 AND NOT platform_only

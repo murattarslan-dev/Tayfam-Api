@@ -3,7 +3,9 @@ syntax = "proto3";
 package tayfam.core.v1;
 
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/badge.proto";
 import "tayfam/core/v1/membership.proto";
+import "tayfam/core/v1/stats.proto";
 import "tayfam/core/v1/tayfa.proto";
 
 // DiscoverService is Keşfet: events of tayfas opened to Keşfet, open to
@@ -71,6 +73,16 @@ service DiscoverService {
   // ERROR_REASON_TAYFA_READ_ONLY, ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS
   // (turning on with fewer than five active members).
   rpc SetTayfaDiscover(SetTayfaDiscoverRequest) returns (SetTayfaDiscoverResponse);
+
+  // SetTayfaStatsShowcase shows or hides the tayfa's statistics and badges
+  // in its Keşfet card (issue #267, ADR-0026 §3; on by default). It works
+  // whether or not the tayfa is in Keşfet and under any flag. Admin of the
+  // tayfa (permission tayfa.stats_showcase.update); a change is written to
+  // the audit log. Returns the tayfa's Keşfet state.
+  //
+  // Errors: ERROR_REASON_TAYFA_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_TAYFA_READ_ONLY.
+  rpc SetTayfaStatsShowcase(SetTayfaStatsShowcaseRequest) returns (SetTayfaStatsShowcaseResponse);
 
   // GetEventFeedback returns the caller's own "Was everything all right?"
   // answer; UNSPECIFIED when there is none. The feedback methods also
@@ -163,18 +175,38 @@ message DiscoverTayfa {
   int32 event_count = 6;
   // Verified attendances (ATTENDED) at those events.
   int32 attendance_count = 7;
+  // The tayfa's statistics card (issue #267); unset when its admins hid
+  // it or it has fewer than three frozen events. The client shows no card
+  // then (not "none yet").
+  TayfaShowcase showcase = 8;
+}
+
+// TayfaShowcase is what Keşfet shows of a tayfa's statistics (ADR-0026 §3,
+// ADR-0039 §3): its all-time totals and its badges. Only the overall
+// common metrics (events, attended, participants, duration), the common
+// metrics of each type ("<type>.<metric>") and the measures the catalog
+// allows in the showcase; no log metric, nothing of a type whose
+// attendance is sensitive, no person, date, time, place or year breakdown.
+message TayfaShowcase {
+  repeated TayfaStat stats = 1;
+  // In the order earned.
+  repeated EarnedBadge badges = 2;
 }
 
 // DiscoverEvent is an event as the feed shows it: no description, no
 // meeting point, no coordinates (they are for members only).
 message DiscoverEvent {
   string event_id = 1;
+  // Faz 1; never filled. See type_key.
   EventType type = 2;
   string title = 3;
   google.protobuf.Timestamp start_time = 4;
   google.protobuf.Timestamp end_time = 5;
   string city = 6;
   string district = 7;
+  // The event's type: a key of the catalog (CatalogEventType.key,
+  // ADR-0025).
+  string type_key = 8;
 }
 
 // DiscoverItem is one feed entry: "Ayşe and 2 friends are at this event".
@@ -229,6 +261,8 @@ message GetTayfaDiscoverResponse {
   TayfaDiscoverState state = 1;
   // The admins' wish (tayfas.visibility = listed).
   bool enabled = 2;
+  // Show the statistics and badges in the Keşfet card (issue #267).
+  bool stats_showcase = 3;
 }
 
 message SetTayfaDiscoverRequest {
@@ -239,6 +273,18 @@ message SetTayfaDiscoverRequest {
 message SetTayfaDiscoverResponse {
   TayfaDiscoverState state = 1;
   bool enabled = 2;
+  bool stats_showcase = 3;
+}
+
+message SetTayfaStatsShowcaseRequest {
+  string tayfa_id = 1;
+  bool stats_showcase = 2;
+}
+
+message SetTayfaStatsShowcaseResponse {
+  TayfaDiscoverState state = 1;
+  bool enabled = 2;
+  bool stats_showcase = 3;
 }
 
 // FeedbackAnswer is the answer to "Was everything all right?". There is no

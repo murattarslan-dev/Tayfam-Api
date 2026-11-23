@@ -1,0 +1,281 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// BracketComponentService is the bracket component (kind "bracket", issue
+// #251; ADR-0025 §4–§6, ADR-0037 §3): a tournament seeded from the event's
+// draw, played as an elimination, a league or a Swiss system, scored live.
+//
+// The format (elimination, league, swiss) and the games of a match (best
+// of 1, 3 or 5) are the component's parameters, the organizer's choice
+// where the definition leaves it to them. A match is scored game by game
+// by the scoreboard's rule: the type's first scoreboard component says
+// whether a game is points (high or low wins) or a win, draw or loss
+// (wdl). The rules are kept when the bracket starts.
+//
+// The entrants are the places of the type's first draw component, which
+// must have been drawn; matches name places, and the person or team is the
+// draw's. Elimination: round 1 pairs the places in order (an empty or odd
+// last place is a bye), every next round the winners in order; a drawn
+// match stays open for another game. League: every two entrants meet
+// once; all rounds are paired at the start. Swiss: ⌈log2 n⌉ rounds; every
+// next round pairs the standings top down without a rematch, and the
+// lowest without a bye gets one (a win). A league or Swiss table ranks by
+// points (win 1, draw ½, bye 1), then the points among those level, then
+// Buchholz; no rating.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto). Starting, pairing the next
+// round, correcting and deleting games and resetting are for managers (the
+// organizer, and moderators and admins as for every event); entering a
+// game also for the referees assigned to the match, the component or the
+// event (ADR-0025 §5). Games are entered once the event has started
+// (ERROR_REASON_SCORE_NOT_STARTED); every write ends when the write window
+// closes (ERROR_REASON_COMPONENT_FROZEN). Every change is live
+// (event.component_changed).
+//
+// Every method returns the component as the caller sees it.
+service BracketComponentService {
+  // GetBracket returns the bracket with its matches, standings and
+  // winners, or what a start would take. Open to every active member,
+  // muted ones included.
+  rpc GetBracket(GetBracketRequest) returns (GetBracketResponse);
+
+  // StartBracket starts the bracket from the draw and pairs its first
+  // round (a league's every round).
+  //
+  // Errors: ERROR_REASON_BRACKET_STARTED, ERROR_REASON_BRACKET_DRAW_REQUIRED,
+  // ERROR_REASON_BRACKET_TOO_FEW, ERROR_REASON_EVENT_LIMIT (an elimination
+  // of more than 128 places, a league of more than 20 or a Swiss bracket
+  // of more than 64 entrants), ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc StartBracket(StartBracketRequest) returns (StartBracketResponse);
+
+  // ResetBracket deletes the started bracket with its matches, games and
+  // the referee assignments to its matches; the draw stays.
+  //
+  // Errors: ERROR_REASON_BRACKET_NOT_STARTED,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc ResetBracket(ResetBracketRequest) returns (ResetBracketResponse);
+
+  // PairBracketRound pairs the next round of an elimination or a Swiss
+  // bracket once every match of the current round is decided.
+  //
+  // Errors: ERROR_REASON_BRACKET_NOT_STARTED,
+  // ERROR_REASON_BRACKET_ROUND_OPEN, ERROR_REASON_BRACKET_FINISHED (no
+  // next round; a league's are all paired),
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc PairBracketRound(PairBracketRoundRequest) returns (PairBracketRoundResponse);
+
+  // AddBracketGame enters the next game of an undecided match.
+  //
+  // Errors: ERROR_REASON_VALIDATION (match_id; a_points: both sides'
+  // points in -1000000–1000000 under the points rule, none under wdl;
+  // a_outcome: win, draw or loss under wdl, none under points),
+  // ERROR_REASON_BRACKET_NOT_STARTED, ERROR_REASON_BRACKET_MATCH_NOT_FOUND,
+  // ERROR_REASON_BRACKET_MATCH_DECIDED, ERROR_REASON_BRACKET_ROUND_CLOSED,
+  // ERROR_REASON_EVENT_LIMIT (9 games), ERROR_REASON_SCORE_NOT_STARTED,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc AddBracketGame(AddBracketGameRequest) returns (AddBracketGameResponse);
+
+  // CorrectBracketGame replaces an entered game, on a decided match too;
+  // managers only.
+  //
+  // Errors: ERROR_REASON_VALIDATION (game: 1–9, and as AddBracketGame),
+  // ERROR_REASON_BRACKET_GAME_NOT_FOUND, ERROR_REASON_BRACKET_ROUND_CLOSED
+  // and the errors of AddBracketGame but the decided match and the
+  // event's start.
+  rpc CorrectBracketGame(CorrectBracketGameRequest) returns (CorrectBracketGameResponse);
+
+  // DeleteBracketGame deletes the last game of a match; managers only.
+  //
+  // Errors: ERROR_REASON_VALIDATION (match_id, game: 1–9),
+  // ERROR_REASON_BRACKET_GAME_NOT_FOUND (also a game that is not the
+  // last), ERROR_REASON_BRACKET_ROUND_CLOSED and the errors of
+  // CorrectBracketGame.
+  rpc DeleteBracketGame(DeleteBracketGameRequest) returns (DeleteBracketGameResponse);
+}
+
+// BracketEntrant is a place of the draw the bracket seeds from.
+message BracketEntrant {
+  // 1-based.
+  int32 position = 1;
+  // A participant draw: the person's user ID; empty when the place is
+  // empty (the person left the tayfa or deleted their account).
+  string user_id = 2;
+  // A team draw: the team's ID; empty when the team was removed.
+  string team_id = 3;
+  // A participant draw: the guest player's ID (issue #252).
+  string guest_id = 4;
+}
+
+// BracketGame is one game of a match.
+message BracketGame {
+  // 1-based.
+  int32 number = 1;
+  // The points rule: both sides' points.
+  int32 a_points = 2;
+  int32 b_points = 3;
+  // The wdl rule: A's outcome (win, draw, loss); B's is the inverse.
+  string a_outcome = 4;
+}
+
+// BracketMatch is one match.
+message BracketMatch {
+  string id = 1;
+  int32 round = 2;
+  // The match's order in its round, 1-based.
+  int32 slot = 3;
+  // The sides' places in the draw; 0 for no side (a bye).
+  int32 a_position = 4;
+  int32 b_position = 5;
+  repeated BracketGame games = 6;
+  // The match has its result: a winner, a draw (not in an elimination) or
+  // a bye.
+  bool decided = 7;
+  // A match with at most one side.
+  bool bye = 8;
+  // The winner's place; 0 for a draw, an undecided match or no sides.
+  int32 winner_position = 9;
+  // The sides' totals (wdl: win 1, draw 0.5) and the games each won alone.
+  double a_total = 10;
+  double b_total = 11;
+  int32 a_games_won = 12;
+  int32 b_games_won = 13;
+  // The caller may enter a game now: a manager or the match's referee, an
+  // undecided match of the current round, the event started, and the
+  // event, the tayfa and the write window allow it.
+  bool caller_can_score = 14;
+}
+
+// BracketStanding is an entrant's place in a league or Swiss table.
+message BracketStanding {
+  int32 position = 1;
+  int32 played = 2;
+  int32 won = 3;
+  int32 drawn = 4;
+  int32 lost = 5;
+  // A win 1, a draw 0.5, a bye 1.
+  double points = 6;
+  // Points against those level on points.
+  double head_to_head = 7;
+  // The sum of the opponents' points.
+  double buchholz = 8;
+  // 1-based; entrants equal on all three share it.
+  int32 rank = 9;
+}
+
+// Bracket is one bracket component of an event, as the caller sees it.
+message Bracket {
+  // The bracket was started; before it, the rules and the draw's fields
+  // are what a start would take.
+  bool started = 1;
+  // "elimination", "league" or "swiss".
+  string format = 2;
+  // 1, 3 or 5.
+  int32 best_of = 3;
+  // "points" or "wdl".
+  string result = 4;
+  // "high" or "low": which points win under the points rule.
+  string winner = 5;
+  // The draw component the bracket seeds from; empty when the type has
+  // none.
+  string draw_key = 6;
+  // That draw was made; subject, teams_key and entrants are its.
+  bool drawn = 7;
+  string subject = 8;
+  string teams_key = 9;
+  // The planned rounds: the league's, the Swiss rounds to play, the most
+  // an elimination may take.
+  int32 rounds = 10;
+  // The last paired round; 0 before the start.
+  int32 current_round = 11;
+  google.protobuf.Timestamp start_time = 12;
+  repeated BracketEntrant entrants = 13;
+  // Ordered by round and slot.
+  repeated BracketMatch matches = 14;
+  // A league or Swiss table, by rank; empty for an elimination.
+  repeated BracketStanding standings = 15;
+  // The bracket has its result.
+  bool finished = 16;
+  // The winners' places once finished: the elimination's last winner or
+  // the table's first (more than one for a full tie).
+  repeated int32 winner_positions = 17;
+  // The caller may start, pair, correct and reset now: a manager who is
+  // not muted, and the event, the tayfa and the write window allow it.
+  bool caller_can_manage = 18;
+}
+
+message GetBracketRequest {
+  ComponentRef ref = 1;
+}
+
+message GetBracketResponse {
+  Bracket bracket = 1;
+}
+
+message StartBracketRequest {
+  ComponentRef ref = 1;
+}
+
+message StartBracketResponse {
+  Bracket bracket = 1;
+}
+
+message ResetBracketRequest {
+  ComponentRef ref = 1;
+}
+
+message ResetBracketResponse {
+  Bracket bracket = 1;
+}
+
+message PairBracketRoundRequest {
+  ComponentRef ref = 1;
+}
+
+message PairBracketRoundResponse {
+  Bracket bracket = 1;
+}
+
+message AddBracketGameRequest {
+  ComponentRef ref = 1;
+  string match_id = 2;
+  int32 a_points = 3;
+  int32 b_points = 4;
+  string a_outcome = 5;
+}
+
+message AddBracketGameResponse {
+  Bracket bracket = 1;
+}
+
+message CorrectBracketGameRequest {
+  ComponentRef ref = 1;
+  string match_id = 2;
+  int32 game = 3;
+  int32 a_points = 4;
+  int32 b_points = 5;
+  string a_outcome = 6;
+}
+
+message CorrectBracketGameResponse {
+  Bracket bracket = 1;
+}
+
+message DeleteBracketGameRequest {
+  ComponentRef ref = 1;
+  string match_id = 2;
+  int32 game = 3;
+}
+
+message DeleteBracketGameResponse {
+  Bracket bracket = 1;
+}

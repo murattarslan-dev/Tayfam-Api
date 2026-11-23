@@ -18,6 +18,17 @@ type AuthIdentity struct {
 	LastUsedAt pgtype.Timestamptz
 }
 
+type CatalogCopy struct {
+	ID             bool
+	CatalogVersion int64
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type CatalogInterest struct {
+	Key    string
+	Status string
+}
+
 type ConsentRecord struct {
 	ID              pgtype.UUID
 	UserID          pgtype.UUID
@@ -165,6 +176,7 @@ type User struct {
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
+	StatsVisibility     string
 }
 
 type UserSocialAccount struct {

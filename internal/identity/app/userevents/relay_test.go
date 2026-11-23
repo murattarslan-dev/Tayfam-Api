@@ -107,3 +107,24 @@ func TestCoreRequestCarriesVisibility(t *testing.T) {
 		}
 	}
 }
+
+// TestCoreRequestCarriesStatsVisibility (issue #267): the personal
+// statistics setting reaches core; an older event has none and an unknown
+// value is refused.
+func TestCoreRequestCarriesStatsVisibility(t *testing.T) {
+	for payload, want := range map[string]corev1.StatsVisibility{
+		`{"display_name": "Ece"}`:                                           corev1.StatsVisibility_STATS_VISIBILITY_UNSPECIFIED,
+		`{"display_name": "Ece", "stats_visibility": "none"}`:               corev1.StatsVisibility_STATS_VISIBILITY_NONE,
+		`{"display_name": "Ece", "stats_visibility": "friends"}`:            corev1.StatsVisibility_STATS_VISIBILITY_FRIENDS,
+		`{"display_name": "Ece", "stats_visibility": "friends_and_mutual"}`: corev1.StatsVisibility_STATS_VISIBILITY_FRIENDS_AND_MUTUAL,
+	} {
+		req, err := coreRequest(outbox.Event{ID: id.New(), Type: TypeProfileUpdated, SubjectType: "user", SubjectID: id.New(), Payload: []byte(payload)})
+		if err != nil || req.GetProfileUpdated().GetStatsVisibility() != want {
+			t.Errorf("%s: %v %v", payload, req, err)
+		}
+	}
+	if _, err := coreRequest(outbox.Event{ID: id.New(), Type: TypeProfileUpdated, SubjectType: "user", SubjectID: id.New(),
+		Payload: []byte(`{"display_name": "Ece", "stats_visibility": "public"}`)}); err == nil {
+		t.Error("bilinmeyen istatistik görünürlüğü kabul edildi")
+	}
+}

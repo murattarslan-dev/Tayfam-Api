@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// GoalComponentService is the goal bar component (kind "goal", issue #246;
+// ADR-0025 §4, §5): a target for one of the event's measures and the
+// progress towards it. The measure the goal is bound to and the default
+// target are parameters of the component in the event's type version; the
+// organizer may set the event's own target.
+//
+// Progress is read from the measure's stored values (the value of a total
+// measure, the sum of a personal measure's values); a suggested value is
+// not counted. For a sensitive personal measure only those who see every
+// value see the progress.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on. Targets are never logged.
+service GoalComponentService {
+  // GetGoal returns the goal and the progress the caller may see. Open to
+  // every active member, muted ones included.
+  rpc GetGoal(GetGoalRequest) returns (GetGoalResponse);
+
+  // SetGoalTarget sets the event's target. Managers (the organizer, and
+  // moderators and admins as for every event), until the component freezes
+  // seven days after the event's end. Errors: ERROR_REASON_VALIDATION
+  // (target: not above zero, too large, or above a total measure's
+  // maximum), ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the
+  // errors of every component change.
+  rpc SetGoalTarget(SetGoalTargetRequest) returns (SetGoalTargetResponse);
+
+  // RemoveGoalTarget removes the event's target; the definition's default
+  // holds again. Removing one that is not there is not an error. Errors as
+  // SetGoalTarget, without the target.
+  rpc RemoveGoalTarget(RemoveGoalTargetRequest) returns (RemoveGoalTargetResponse);
+}
+
+// EventGoal is one goal component of an event, as the caller sees it.
+message EventGoal {
+  // The key of the measure the goal is bound to, and its unit (a closed
+  // list) and decimals.
+  string measure_key = 1;
+  string unit = 2;
+  int32 decimals = 3;
+  // The event's target: the organizer's, or the definition's default
+  // without one; unset when there is neither.
+  optional double target = 4;
+  // The target is the organizer's, last written at target_update_time.
+  bool target_set = 5;
+  google.protobuf.Timestamp target_update_time = 6;
+  // The definition's default target; unset without one.
+  optional double default_target = 7;
+  // The measure's stored value (total) or the sum of its values
+  // (personal); unset when progress_hidden or when the measure is off.
+  optional double current = 8;
+  // The caller may not see the progress (a sensitive personal measure).
+  bool progress_hidden = 9;
+  // The measure is switched on for the event.
+  bool measure_enabled = 10;
+  // current has reached target.
+  bool reached = 11;
+  // The caller may set the target now.
+  bool caller_can_edit = 12;
+}
+
+message GetGoalRequest {
+  ComponentRef ref = 1;
+}
+
+message GetGoalResponse {
+  EventGoal goal = 1;
+}
+
+message SetGoalTargetRequest {
+  ComponentRef ref = 1;
+  double target = 2;
+}
+
+message SetGoalTargetResponse {
+  EventGoal goal = 1;
+}
+
+message RemoveGoalTargetRequest {
+  ComponentRef ref = 1;
+}
+
+message RemoveGoalTargetResponse {
+  EventGoal goal = 1;
+}

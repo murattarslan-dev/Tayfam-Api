@@ -35,6 +35,9 @@ type Answer struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+	Pool            string
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
 }
 
 type AnswerVote struct {
@@ -52,6 +55,85 @@ type AuditLog struct {
 	TargetID   pgtype.UUID
 	Metadata   []byte
 	CreatedAt  pgtype.Timestamptz
+}
+
+type BlockedDomain struct {
+	Domain    string
+	CreatedAt pgtype.Timestamptz
+	CreatedBy pgtype.UUID
+	Initial   bool
+}
+
+type CatalogBadge struct {
+	Key       string
+	Scope     string
+	Position  int32
+	Labels    []byte
+	Icon      string
+	Rule      []byte
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type CatalogEventType struct {
+	Key          string
+	InterestKeys []string
+	Position     int32
+	Labels       []byte
+	Icon         string
+	Modes        []string
+	Status       string
+	Version      int32
+	Definition   []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type CatalogEventTypeVersion struct {
+	TypeKey    string
+	Version    int32
+	Labels     []byte
+	Icon       string
+	Modes      []string
+	Definition []byte
+	CreatedAt  pgtype.Timestamptz
+}
+
+type CatalogInterest struct {
+	Key            string
+	Position       int32
+	Labels         []byte
+	Icon           string
+	Status         string
+	DefaultWidgets []string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type CatalogMetum struct {
+	ID             bool
+	CatalogVersion int64
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type CatalogScorePreset struct {
+	Key       string
+	Position  int16
+	Labels    []byte
+	Params    []byte
+	Status    string
+	UpdatedAt pgtype.Timestamptz
+}
+
+type CatalogStudyTag struct {
+	Key       string
+	ParentKey pgtype.Text
+	Position  int32
+	Labels    []byte
+	Status    string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
 type DiscoverJoin struct {
@@ -102,25 +184,86 @@ type Event struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
+	TypeVersion      int32
+	OpenEnded        bool
 }
 
-type EventCamp struct {
-	EventID   pgtype.UUID
-	Type      string
-	SiteName  pgtype.Text
-	HasWater  pgtype.Bool
-	HasToilet pgtype.Bool
-	Notes     pgtype.Text
+type EventBadgeRun struct {
+	EventID pgtype.UUID
+	DoneAt  pgtype.Timestamptz
 }
 
-type EventCampItem struct {
+type EventBracket struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	DrawKey      string
+	Format       string
+	BestOf       int16
+	Result       string
+	Winner       string
+	Rounds       int16
+	StartedAt    pgtype.Timestamptz
+}
+
+type EventBracketGame struct {
+	MatchID      pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Number       int16
+	APoints      pgtype.Int4
+	BPoints      pgtype.Int4
+	AOutcome     pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventBracketMatch struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	DrawKey      string
+	Round        int16
+	Slot         int16
+	APosition    pgtype.Int2
+	BPosition    pgtype.Int2
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventCelebration struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	AnnouncedBy  pgtype.UUID
+	AnnouncedAt  pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventCelebrationWinner struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	Position     int16
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventChecklistItem struct {
 	ID             pgtype.UUID
 	EventID        pgtype.UUID
+	ComponentKey   string
 	Name           string
 	Quantity       int32
 	AssignedUserID pgtype.UUID
 	CreatedBy      pgtype.UUID
 	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+type EventComponent struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	Enabled      bool
+	Params       []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 type EventConsumer struct {
@@ -129,23 +272,24 @@ type EventConsumer struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
-type EventConvoy struct {
-	EventID pgtype.UUID
-	Type    string
-	Route   []byte
+type EventDraw struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	Subject      string
+	TeamKey      pgtype.Text
+	DrawnAt      pgtype.Timestamptz
 }
 
-type EventConvoyVehicle struct {
-	ID        pgtype.UUID
-	EventID   pgtype.UUID
-	UserID    pgtype.UUID
-	VehicleID pgtype.UUID
-	Make      string
-	Model     pgtype.Text
-	ModelYear pgtype.Int4
-	Color     pgtype.Text
-	Plate     pgtype.Text
-	CreatedAt pgtype.Timestamptz
+type EventDrawEntry struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Position     int16
+	UserID       pgtype.UUID
+	TeamKey      pgtype.Text
+	TeamID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+	GuestID      pgtype.UUID
 }
 
 type EventFeedback struct {
@@ -156,39 +300,75 @@ type EventFeedback struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
-type EventFishing struct {
-	EventID        pgtype.UUID
-	Type           string
-	SpotVisibility string
+type EventFieldValue struct {
+	EventID   pgtype.UUID
+	FieldKey  string
+	Value     []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
 }
 
-type EventGaming struct {
-	EventID  pgtype.UUID
-	Type     string
-	Game     string
-	Platform string
+type EventGoal struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	Target       pgtype.Numeric
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
-type EventHike struct {
+type EventGuestPlayer struct {
+	ID        pgtype.UUID
+	EventID   pgtype.UUID
+	Nickname  pgtype.Text
+	CreatedBy pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
+type EventJoinQrCount struct {
+	EventID pgtype.UUID
+	Joins   int32
+}
+
+type EventJoinQrToken struct {
+	ID        pgtype.UUID
+	EventID   pgtype.UUID
+	CreatedBy pgtype.UUID
+	TokenHash []byte
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
+type EventLogEntry struct {
+	ID                 pgtype.UUID
 	EventID            pgtype.UUID
-	Type               string
-	Difficulty         pgtype.Int4
-	DistanceKm         pgtype.Numeric
-	ElevationM         pgtype.Int4
-	ExpectedReturnAt   pgtype.Timestamptz
-	ReturnGraceMinutes int32
-}
-
-type EventHikeCheckin struct {
-	EventID            pgtype.UUID
+	ComponentKey       string
 	UserID             pgtype.UUID
-	StartedAt          pgtype.Timestamptz
-	StartedReceivedAt  pgtype.Timestamptz
-	ReturnedAt         pgtype.Timestamptz
-	ReturnedReceivedAt pgtype.Timestamptz
-	AlertSentAt        pgtype.Timestamptz
+	FieldValues        []byte
+	Lat                pgtype.Float8
+	Lng                pgtype.Float8
+	LocationVisibility pgtype.Text
+	PhotoUploadID      pgtype.UUID
+	ClientRequestID    pgtype.UUID
+	DeletedAt          pgtype.Timestamptz
+	DeletedBy          pgtype.UUID
 	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
+}
+
+type EventLogEntryVocabulary struct {
+	EntryID      pgtype.UUID
+	FieldKey     string
+	VocabularyID pgtype.UUID
+}
+
+type EventMeasurement struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	Value        pgtype.Numeric
+	EnteredBy    pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 type EventPhoto struct {
@@ -201,6 +381,86 @@ type EventPhoto struct {
 	CreatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+}
+
+type EventPoolLink struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	QuestionID   pgtype.UUID
+	Position     int16
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventQuestion struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	ComponentKey    string
+	AuthorID        pgtype.UUID
+	Anonymous       bool
+	Body            string
+	AnsweredAt      pgtype.Timestamptz
+	AnsweredBy      pgtype.UUID
+	ClientRequestID pgtype.UUID
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+}
+
+type EventQuestionVote struct {
+	QuestionID   pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventRankingEntry struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	Value        pgtype.Numeric
+	EnteredBy    pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventReferee struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	UserID       pgtype.UUID
+	ComponentKey pgtype.Text
+	ScopeID      pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventRollCall struct {
+	EventID          pgtype.UUID
+	ComponentKey     string
+	ExpectedReturnAt pgtype.Timestamptz
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
+type EventRollCallCheckin struct {
+	EventID            pgtype.UUID
+	ComponentKey       string
+	UserID             pgtype.UUID
+	StartedAt          pgtype.Timestamptz
+	StartedReceivedAt  pgtype.Timestamptz
+	ReturnedAt         pgtype.Timestamptz
+	ReturnedReceivedAt pgtype.Timestamptz
+	AlertSentAt        pgtype.Timestamptz
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+}
+
+type EventRoute struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	Points       []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 type EventRsvp struct {
@@ -229,6 +489,62 @@ type EventSafetyContact struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type EventScheduleItem struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	StartsAt     pgtype.Timestamptz
+	EndsAt       pgtype.Timestamptz
+	Title        string
+	Note         pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventScore struct {
+	ID           pgtype.UUID
+	TableID      pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	PlayerID     pgtype.UUID
+	Round        int16
+	Points       pgtype.Int4
+	Outcome      pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventScorePlayer struct {
+	ID           pgtype.UUID
+	TableID      pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Position     int16
+	UserID       pgtype.UUID
+	TeamKey      pgtype.Text
+	TeamID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+	GuestID      pgtype.UUID
+}
+
+type EventScoreTable struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Label        string
+	PresetKey    pgtype.Text
+	Side         string
+	Rounds       string
+	Winner       string
+	Result       string
+	Target       pgtype.Int4
+	BestOf       pgtype.Int2
+	TeamKey      pgtype.Text
+	Status       string
+	FinishedAt   pgtype.Timestamptz
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
 type EventSeries struct {
 	ID              pgtype.UUID
 	TayfaID         pgtype.UUID
@@ -243,27 +559,87 @@ type EventSeries struct {
 	Dtstart         pgtype.Timestamptz
 }
 
-type EventSport struct {
+type EventStatRun struct {
 	EventID   pgtype.UUID
-	Type      string
-	Sport     string
-	VenueName pgtype.Text
+	TayfaID   pgtype.UUID
+	Counted   bool
+	ChangedAt pgtype.Timestamptz
 }
 
-type FishingCatch struct {
+type EventTeam struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	Position     int16
+	Name         pgtype.Text
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventTeamMember struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	TeamID       pgtype.UUID
+	UserID       pgtype.UUID
+	CreatedAt    pgtype.Timestamptz
+}
+
+type EventVehicle struct {
+	ID           pgtype.UUID
+	EventID      pgtype.UUID
+	ComponentKey string
+	UserID       pgtype.UUID
+	VehicleID    pgtype.UUID
+	Make         string
+	Model        pgtype.Text
+	ModelYear    pgtype.Int4
+	Color        pgtype.Text
+	Plate        pgtype.Text
+	Seats        int32
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+type EventVehicleSeatRequest struct {
+	ID             pgtype.UUID
+	EventID        pgtype.UUID
+	ComponentKey   string
+	UserID         pgtype.UUID
+	EventVehicleID pgtype.UUID
+	Status         string
+	CreatedAt      pgtype.Timestamptz
+	DecidedAt      pgtype.Timestamptz
+}
+
+type EventVote struct {
 	ID              pgtype.UUID
 	EventID         pgtype.UUID
+	ComponentKey    string
 	UserID          pgtype.UUID
-	Species         string
-	LengthCm        pgtype.Numeric
-	Lat             pgtype.Float8
-	Lng             pgtype.Float8
-	Visibility      string
-	ClientRequestID pgtype.UUID
-	DeletedAt       pgtype.Timestamptz
-	DeletedBy       pgtype.UUID
+	OptionID        pgtype.UUID
+	CandidateUserID pgtype.UUID
+	EventVehicleID  pgtype.UUID
+	PhotoID         pgtype.UUID
 	CreatedAt       pgtype.Timestamptz
-	PhotoUploadID   pgtype.UUID
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type EventVoteClosure struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	ClosedBy     pgtype.UUID
+	ClosedAt     pgtype.Timestamptz
+}
+
+type EventVoteOption struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	ComponentKey    string
+	Label           string
+	LabelNormalized string
+	Position        int16
+	CreatedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
 }
 
 type FriendRequestOutcome struct {
@@ -300,6 +676,31 @@ type Friendship struct {
 	AcceptedAt  pgtype.Timestamptz
 }
 
+type GarageTayfaVisibility struct {
+	UserID    pgtype.UUID
+	TayfaID   pgtype.UUID
+	Visible   bool
+	UpdatedAt pgtype.Timestamptz
+}
+
+type GarageVehicle struct {
+	ID              pgtype.UUID
+	OwnerID         pgtype.UUID
+	Make            string
+	Model           pgtype.Text
+	ModelYear       pgtype.Int4
+	Color           pgtype.Text
+	Note            pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
+	Photo3UploadID  pgtype.UUID
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
 type InvitationOutcome struct {
 	TayfaID    pgtype.UUID
 	UserID     pgtype.UUID
@@ -327,6 +728,68 @@ type JobRun struct {
 	LastSucceededAt pgtype.Timestamptz
 }
 
+type LibraryItem struct {
+	ID                  pgtype.UUID
+	TayfaID             pgtype.UUID
+	OwnerID             pgtype.UUID
+	Kind                string
+	Name                string
+	VocabularyID        pgtype.UUID
+	VocabularyNamespace pgtype.Text
+	Note                pgtype.Text
+	PhotoUploadID       pgtype.UUID
+	Status              string
+	WithdrawnAt         pgtype.Timestamptz
+	WithdrawnBy         pgtype.UUID
+	ClientRequestID     pgtype.UUID
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+}
+
+type LibraryLoan struct {
+	ID           pgtype.UUID
+	ItemID       pgtype.UUID
+	TayfaID      pgtype.UUID
+	BorrowerID   pgtype.UUID
+	State        string
+	RequestedAt  pgtype.Timestamptz
+	ApprovedAt   pgtype.Timestamptz
+	HandedOverAt pgtype.Timestamptz
+	DueAt        pgtype.Timestamptz
+	RemindedAt   pgtype.Timestamptz
+	OrphanedAt   pgtype.Timestamptz
+	EndedAt      pgtype.Timestamptz
+}
+
+type LibraryQueue struct {
+	ID        pgtype.UUID
+	ItemID    pgtype.UUID
+	TayfaID   pgtype.UUID
+	UserID    pgtype.UUID
+	Position  int32
+	CreatedAt pgtype.Timestamptz
+}
+
+type Material struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	AuthorID        pgtype.UUID
+	Kind            string
+	Title           string
+	Url             pgtype.Text
+	Domain          pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
+	Photo3UploadID  pgtype.UUID
+	SubjectKey      string
+	TopicKey        pgtype.Text
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
 type Membership struct {
 	TayfaID         pgtype.UUID
 	UserID          pgtype.UUID
@@ -341,6 +804,13 @@ type Membership struct {
 	JoinedAt        pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+}
+
+type NowNotificationCounter struct {
+	Scope     string
+	SubjectID pgtype.UUID
+	Day       pgtype.Date
+	Sent      int32
 }
 
 type Poll struct {
@@ -385,6 +855,11 @@ type Question struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+	Pool            string
+	SubjectKey      pgtype.Text
+	TopicKey        pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
 }
 
 type QuestionTag struct {
@@ -426,6 +901,7 @@ type Report struct {
 	PlaceLatitude         pgtype.Float8
 	PlaceLongitude        pgtype.Float8
 	PlaceName             pgtype.Text
+	SubjectHidden         bool
 }
 
 type SocialSetting struct {
@@ -434,6 +910,7 @@ type SocialSetting struct {
 	HideFromSuggestions      bool
 	UpdatedAt                pgtype.Timestamptz
 	DiscoverVisibleToFriends bool
+	NowFromFriends           string
 }
 
 type Tag struct {
@@ -474,6 +951,41 @@ type Tayfa struct {
 	CoverUploadID          pgtype.UUID
 	Kind                   string
 	ConvertedAt            pgtype.Timestamptz
+	NowCreateMinRole       string
+	StatsShowcase          bool
+}
+
+type TayfaBadge struct {
+	ID        pgtype.UUID
+	TayfaID   pgtype.UUID
+	BadgeKey  string
+	PeriodKey string
+	EarnedAt  pgtype.Timestamptz
+}
+
+type TayfaDailyItem struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	Body            string
+	Attribution     pgtype.Text
+	Position        int32
+	PinMonth        pgtype.Int2
+	PinDay          pgtype.Int2
+	PinYear         pgtype.Int2
+	CreatedBy       pgtype.UUID
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
+type TayfaDailyState struct {
+	TayfaID      pgtype.UUID
+	NextPosition int32
+	ShownOn      pgtype.Date
+	ShownItemID  pgtype.UUID
+	UpdatedAt    pgtype.Timestamptz
 }
 
 type TayfaDiscover struct {
@@ -491,10 +1003,19 @@ type TayfaDiscover struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
-type TayfaInterest struct {
+type TayfaHomeWidget struct {
 	TayfaID   pgtype.UUID
-	EventType string
-	CreatedAt pgtype.Timestamptz
+	WidgetKey string
+	Enabled   bool
+	Position  int32
+	Config    []byte
+	UpdatedAt pgtype.Timestamptz
+}
+
+type TayfaInterest struct {
+	TayfaID     pgtype.UUID
+	CreatedAt   pgtype.Timestamptz
+	InterestKey string
 }
 
 type TayfaModule struct {
@@ -503,6 +1024,32 @@ type TayfaModule struct {
 	Enabled   bool
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
+}
+
+type TayfaStat struct {
+	TayfaID    pgtype.UUID
+	Year       int32
+	MetricKey  string
+	Source     string
+	Value      pgtype.Numeric
+	EventCount int32
+	ComputedAt pgtype.Timestamptz
+}
+
+type TayfaStatQueue struct {
+	TayfaID  pgtype.UUID
+	QueuedAt pgtype.Timestamptz
+}
+
+type TayfaVocabulary struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	Namespace       string
+	Value           string
+	ValueNormalized string
+	MergedInto      pgtype.UUID
+	CreatedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
 }
 
 type Upload struct {
@@ -558,6 +1105,16 @@ type UserAvailability struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type UserBadge struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	BadgeKey  string
+	PeriodKey string
+	TayfaID   pgtype.UUID
+	EventID   pgtype.UUID
+	EarnedAt  pgtype.Timestamptz
+}
+
 type UserBlock struct {
 	BlockerID pgtype.UUID
 	BlockedID pgtype.UUID
@@ -578,4 +1135,17 @@ type UserProfile struct {
 	DeletedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
 	ActivityVisibility string
+	StatsVisibility    string
+}
+
+type UserStat struct {
+	ID         pgtype.UUID
+	UserID     pgtype.UUID
+	TayfaID    pgtype.UUID
+	Year       int32
+	MetricKey  string
+	Source     string
+	Value      pgtype.Numeric
+	EventCount int32
+	ComputedAt pgtype.Timestamptz
 }

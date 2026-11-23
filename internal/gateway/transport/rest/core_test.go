@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -59,6 +60,12 @@ type fakeCore struct {
 	tayfa *corev1.Tayfa
 	// feed replaces the Keşfet feed's items when set.
 	feed []*corev1.DiscoverItem
+	// catalogDefinition replaces the catalog types' definition when set.
+	catalogDefinition string
+	// event replaces GetEvent's answer when set.
+	event *corev1.Event
+	// profile replaces GetUserProfile's answer when set.
+	profile *corev1.UserProfile
 }
 
 func (f *fakeCore) record(ctx context.Context, in proto.Message) error {
@@ -78,8 +85,8 @@ func (f *fakeCore) last() (proto.Message, string, int) {
 func testTayfa() *corev1.Tayfa {
 	return &corev1.Tayfa{
 		Id: tayfaID, Name: "Klasikçiler", Description: "Hafta sonu konvoyları",
-		Interests:  []corev1.EventType{corev1.EventType_EVENT_TYPE_CONVOY, corev1.EventType_EVENT_TYPE_CAMP},
-		JoinPolicy: corev1.JoinPolicy_JOIN_POLICY_APPROVAL,
+		InterestKeys: []string{"automotive", "nature"},
+		JoinPolicy:   corev1.JoinPolicy_JOIN_POLICY_APPROVAL,
 		Modules: []*corev1.ModuleState{
 			{Module: corev1.Module_MODULE_ANNOUNCEMENTS, Enabled: true},
 			{Module: corev1.Module_MODULE_EVENTS, Enabled: true},
@@ -172,7 +179,7 @@ func (f *fakeCore) RevokeInviteLink(ctx context.Context, in *corev1.RevokeInvite
 	return &corev1.RevokeInviteLinkResponse{}, f.record(ctx, in)
 }
 func (f *fakeCore) PreviewInvite(ctx context.Context, in *corev1.PreviewInviteRequest, _ ...grpc.CallOption) (*corev1.PreviewInviteResponse, error) {
-	return &corev1.PreviewInviteResponse{TayfaId: tayfaID, Name: "Klasikçiler", MemberCount: 12, Interests: []string{"convoy", "bilinmeyen"}}, f.record(ctx, in)
+	return &corev1.PreviewInviteResponse{TayfaId: tayfaID, Name: "Klasikçiler", MemberCount: 12, Interests: []string{"automotive", "Bozuk Anahtar"}}, f.record(ctx, in)
 }
 func (f *fakeCore) JoinByInvite(ctx context.Context, in *corev1.JoinByInviteRequest, _ ...grpc.CallOption) (*corev1.JoinByInviteResponse, error) {
 	return &corev1.JoinByInviteResponse{Membership: testMembership()}, f.record(ctx, in)
@@ -223,7 +230,8 @@ func (f *fakeCore) LeaveTayfa(ctx context.Context, in *corev1.LeaveTayfaRequest,
 func testCoreDeps(f *fakeCore, burst int) CoreDeps {
 	return CoreDeps{
 		Tayfas: f, Members: f, Announcements: f, Events: f, QA: f, Polls: f, Verifier: fakeVerifier{},
-		Social: f, Availability: f, Discover: f, Invitations: f, Profiles: f, Accounts: f, Reports: f, Media: f, Avatars: f, DataExports: f,
+		Components: fakeServices{eventComponentService: f},
+		Social:     f, Availability: f, Catalog: f, Discover: f, Invitations: f, Profiles: f, Accounts: f, Reports: f, Media: f, Avatars: f, DataExports: f,
 		Log:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
 		TrustCFConnectingIP: true,
 		CreateTayfaLimit:    ratelimit.New(60, burst),
@@ -330,7 +338,7 @@ func TestCoreWritesNeedClientHeader(t *testing.T) {
 func TestCreateTayfa(t *testing.T) {
 	f := &fakeCore{}
 	w := as(coreRouter(f), "POST", "/v1/tayfas",
-		`{"name":"Klasikçiler","description":"Hafta sonu","interests":["convoy","camp"],"join_policy":"open","client_request_id":"`+reqID+`"}`)
+		`{"name":"Klasikçiler","description":"Hafta sonu","interests":["automotive","nature"],"join_policy":"open","client_request_id":"`+reqID+`"}`)
 	if w.Code != 201 {
 		t.Fatalf("kod %d: %s", w.Code, w.Body)
 	}
@@ -340,14 +348,14 @@ func TestCreateTayfa(t *testing.T) {
 	got, _, _ := f.last()
 	want := &corev1.CreateTayfaRequest{
 		Name: "Klasikçiler", Description: "Hafta sonu",
-		Interests:  []corev1.EventType{corev1.EventType_EVENT_TYPE_CONVOY, corev1.EventType_EVENT_TYPE_CAMP},
-		JoinPolicy: corev1.JoinPolicy_JOIN_POLICY_OPEN, ClientRequestId: reqID,
+		InterestKeys: []string{"automotive", "nature"},
+		JoinPolicy:   corev1.JoinPolicy_JOIN_POLICY_OPEN, ClientRequestId: reqID,
 	}
 	if !proto.Equal(got, want) {
 		t.Fatalf("core'a giden = %v", got)
 	}
 	b := decodeBody[tayfaJSON](t, w)
-	if b.ID != tayfaID || b.JoinPolicy != "approval" || !slices.Equal(b.Interests, []string{"convoy", "camp"}) ||
+	if b.ID != tayfaID || b.JoinPolicy != "approval" || !slices.Equal(b.Interests, []string{"automotive", "nature"}) ||
 		b.Status != "active" || b.JoinCode != "K7M2P9QX" || !b.CreatedAt.Equal(t0) ||
 		b.PendingJoinRequestCount == nil || *b.PendingJoinRequestCount != 3 {
 		t.Fatalf("gövde = %+v", b)
@@ -360,6 +368,52 @@ func TestCreateTayfa(t *testing.T) {
 	}
 }
 
+// manyInterestKeys returns n distinct, well-formed interest keys.
+func manyInterestKeys(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = "key_" + strconv.Itoa(i)
+	}
+	return out
+}
+
+// A new interest needs no release (ADR-0025): any key of the catalog's
+// form goes on to core, which knows the catalog.
+func TestTayfaInterestsAreCatalogKeys(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "POST", "/v1/tayfas", `{"name":"Tayfa","interests":["board_games_2"],"client_request_id":"`+reqID+`"}`)
+	got, _, _ := f.last()
+	if req, ok := got.(*corev1.CreateTayfaRequest); w.Code != 201 || !ok || !slices.Equal(req.GetInterestKeys(), []string{"board_games_2"}) || len(req.GetInterests()) != 0 {
+		t.Fatalf("oluşturma: %d %v", w.Code, got)
+	}
+	w = as(h, "PATCH", "/v1/tayfas/"+tayfaID, `{"interests":["water","games"]}`)
+	got, _, _ = f.last()
+	if req, ok := got.(*corev1.UpdateTayfaRequest); w.Code != 200 || !ok || !slices.Equal(req.GetInterestKeys(), []string{"water", "games"}) ||
+		len(req.GetInterests()) != 0 || !slices.Equal(req.GetUpdateMask().GetPaths(), []string{"interests"}) {
+		t.Fatalf("güncelleme: %d %v", w.Code, got)
+	}
+	n0 := func() int { _, _, n := f.last(); return n }()
+	for _, body := range []string{
+		`{"interests":["Water"]}`,
+		`{"interests":["water","water"]}`,
+		`{"interests":["a"]}`,
+		`{"interests":["` + strings.Join(manyInterestKeys(maxInterests+1), `","`) + `"]}`,
+	} {
+		if w := as(h, "PATCH", "/v1/tayfas/"+tayfaID, body); w.Code != 400 || problemType(t, w) != "invalid-request" {
+			t.Errorf("%s: %d", body, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != n0 {
+		t.Fatal("geçersiz ilgi alanı core'a ulaştı")
+	}
+	// core's refusal of a key the catalog does not have is invalid-request.
+	w = as(coreRouter(&fakeCore{err: coreErr(codes.InvalidArgument, "ERROR_REASON_VALIDATION")}), "PATCH", "/v1/tayfas/"+tayfaID, `{"interests":["dance"]}`)
+	if w.Code != 400 || problemType(t, w) != "invalid-request" {
+		t.Fatalf("core reddi: %d %s", w.Code, problemType(t, w))
+	}
+}
+
 func TestCreateTayfaBadBodies(t *testing.T) {
 	f := &fakeCore{}
 	h := coreRouter(f)
@@ -369,8 +423,12 @@ func TestCreateTayfaBadBodies(t *testing.T) {
 		"uzun açıklama":       `{"name":"Tayfa","description":"` + strings.Repeat("a", 501) + `","client_request_id":"` + reqID + `"}`,
 		"istek kimliği yok":   `{"name":"Tayfa"}`,
 		"bozuk istek kimliği": `{"name":"Tayfa","client_request_id":"1"}`,
-		"bilinmeyen ilgi":     `{"name":"Tayfa","interests":["golf"],"client_request_id":"` + reqID + `"}`,
-		"tekrarlı ilgi":       `{"name":"Tayfa","interests":["camp","camp"],"client_request_id":"` + reqID + `"}`,
+		// Interests are catalog keys: the shape is checked here, the
+		// catalog in core.
+		"bozuk ilgi":          `{"name":"Tayfa","interests":["Doğa"],"client_request_id":"` + reqID + `"}`,
+		"boş ilgi":            `{"name":"Tayfa","interests":[""],"client_request_id":"` + reqID + `"}`,
+		"tekrarlı ilgi":       `{"name":"Tayfa","interests":["nature","nature"],"client_request_id":"` + reqID + `"}`,
+		"çok fazla ilgi":      `{"name":"Tayfa","interests":["` + strings.Join(manyInterestKeys(maxInterests+1), `","`) + `"],"client_request_id":"` + reqID + `"}`,
 		"bilinmeyen politika": `{"name":"Tayfa","join_policy":"secret","client_request_id":"` + reqID + `"}`,
 		"bilinmeyen alan":     `{"name":"Tayfa","client_request_id":"` + reqID + `","owner_id":"x"}`,
 	} {
@@ -643,7 +701,7 @@ func TestJoiningCarriesSecretsInBody(t *testing.T) {
 		t.Fatalf("önizleme: %d %v", w.Code, got)
 	}
 	if p := decodeBody[invitePreviewJSON](t, w); p.Name != "Klasikçiler" || p.MemberCount != 12 || p.AlreadyMember ||
-		len(p.Interests) != 1 || p.Interests[0] != "convoy" {
+		len(p.Interests) != 1 || p.Interests[0] != "automotive" {
 		t.Fatalf("önizleme yanıtı: %+v", p)
 	}
 	w = as(h, "POST", "/v1/invite-joins", `{"token":"GIZLI"}`)
@@ -739,11 +797,12 @@ func TestCoreErrorsBecomeProblems(t *testing.T) {
 func TestUnknownEnumValuesFromNewerCore(t *testing.T) {
 	tf := testTayfa()
 	tf.Status = corev1.TayfaStatus(99)
-	tf.Interests = append(tf.Interests, corev1.EventType(42))
-	tf.Modules = append(tf.Modules, &corev1.ModuleState{Module: corev1.Module(7), Enabled: true})
+	// An interest key that is not of the contract's form is left out.
+	tf.InterestKeys = append(tf.InterestKeys, "Bozuk Anahtar")
+	tf.Modules = append(tf.Modules, &corev1.ModuleState{Module: corev1.Module(99), Enabled: true})
 	w := as(coreRouter(&fakeCore{tayfa: tf}), "GET", "/v1/tayfas/"+tayfaID, "")
 	v := decodeBody[tayfaViewJSON](t, w)
-	if v.Tayfa.Status != "unknown" || v.Tayfa.Interests[2] != "unknown" || len(v.Tayfa.Modules) != 4 {
+	if v.Tayfa.Status != "unknown" || !slices.Equal(v.Tayfa.Interests, []string{"automotive", "nature"}) || len(v.Tayfa.Modules) != 4 {
 		t.Fatalf("bilinmeyen değerler: %+v", v.Tayfa)
 	}
 }
@@ -770,7 +829,8 @@ func TestBanReasonRejected(t *testing.T) {
 }
 
 // TestMemberAndInviteInterests (issue #194): one member read; the tayfa's
-// interests in the invite preview and invitations (unknown names dropped).
+// interests in the invite preview and invitations (catalog interest keys;
+// a value that is not of a key's form is dropped).
 func TestMemberAndInviteInterests(t *testing.T) {
 	f := &fakeCore{}
 	h := coreRouter(f)
@@ -787,7 +847,7 @@ func TestMemberAndInviteInterests(t *testing.T) {
 	if w.Code != 404 || problemType(t, w) != "member-not-found" {
 		t.Fatalf("bulunamadı: %d %s", w.Code, problemType(t, w))
 	}
-	if j := invitationFrom(&corev1.Invitation{Interests: []string{"hike", "camp"}}); len(j.Interests) != 2 || j.Interests[0] != "hike" {
+	if j := invitationFrom(&corev1.Invitation{Interests: []string{"nature", "water", "Bozuk"}}); len(j.Interests) != 2 || j.Interests[0] != "nature" {
 		t.Fatalf("davet ilgi alanları = %v", j.Interests)
 	}
 	if j := invitationFrom(&corev1.Invitation{}); j.Interests == nil {

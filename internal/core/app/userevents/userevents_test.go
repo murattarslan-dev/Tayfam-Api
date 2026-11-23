@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
@@ -176,42 +177,21 @@ func TestApplyRejectsMalformed(t *testing.T) {
 func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 	t.Helper()
 	refs := map[string]int{}
-	for name, sql := range map[string]string{
-		"memberships.user_id":            `SELECT count(*) FROM memberships WHERE user_id = $1`,
-		"memberships.invited_by_user_id": `SELECT count(*) FROM memberships WHERE invited_by_user_id = $1`,
-		"memberships.approved_by":        `SELECT count(*) FROM memberships WHERE approved_by = $1`,
-		"memberships.muted_by":           `SELECT count(*) FROM memberships WHERE muted_by = $1`,
-		"tayfas":                         `SELECT count(*) FROM tayfas WHERE $1 IN (created_by, deletion_requested_by, suspended_by, deleted_by)`,
-		"invites.created_by":             `SELECT count(*) FROM invites WHERE created_by = $1`,
-		"audit_logs.actor_id":            `SELECT count(*) FROM audit_logs WHERE actor_id = $1`,
-		"domain_events.actor_id":         `SELECT count(*) FROM domain_events WHERE actor_id = $1`,
-		"announcements":                  `SELECT count(*) FROM announcements WHERE $1 IN (author_id, deleted_by)`,
-		"events":                         `SELECT count(*) FROM events WHERE $1 IN (created_by, cancelled_by, deleted_by)`,
-		"event_series.created_by":        `SELECT count(*) FROM event_series WHERE created_by = $1`,
-		"event_rsvps":                    `SELECT count(*) FROM event_rsvps WHERE $1 IN (user_id, attendance_marked_by)`,
-		"event_convoy_vehicles.user_id":  `SELECT count(*) FROM event_convoy_vehicles WHERE user_id = $1`,
-		"event_camp_items":               `SELECT count(*) FROM event_camp_items WHERE $1 IN (assigned_user_id, created_by)`,
-		"event_hike_checkins.user_id":    `SELECT count(*) FROM event_hike_checkins WHERE user_id = $1`,
-		"fishing_catches":                `SELECT count(*) FROM fishing_catches WHERE $1 IN (user_id, deleted_by)`,
-		"event_photos":                   `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
-		"user_activity_records.user_id":  `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
-		"questions":                      `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
-		"answers":                        `SELECT count(*) FROM answers WHERE $1 IN (author_id, deleted_by)`,
-		"answer_votes.user_id":           `SELECT count(*) FROM answer_votes WHERE user_id = $1`,
-		"polls":                          `SELECT count(*) FROM polls WHERE $1 IN (created_by, deleted_by)`,
-		"poll_votes.user_id":             `SELECT count(*) FROM poll_votes WHERE user_id = $1`,
-		"friendships":                    `SELECT count(*) FROM friendships WHERE $1 IN (user_low_id, user_high_id, requested_by)`,
-		"user_blocks":                    `SELECT count(*) FROM user_blocks WHERE $1 IN (blocker_id, blocked_id)`,
-		"friend_scores":                  `SELECT count(*) FROM friend_scores WHERE $1 IN (user_low_id, user_high_id)`,
-		"friend_suggestions":             `SELECT count(*) FROM friend_suggestions WHERE $1 IN (user_id, suggested_user_id)`,
-		"social_settings":                `SELECT count(*) FROM social_settings WHERE user_id = $1`,
-		"user_availability":              `SELECT count(*) FROM user_availability WHERE user_id = $1`,
-		"reports":                        `SELECT count(*) FROM reports WHERE $1 IN (reporter_id, subject_user_id, handled_by, platform_handled_by)`,
-		"user_profiles (kişisel)":        `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
-	} {
-		if n := e.count(t, sql, u.PG()); n != 0 {
+	// Every column of the KVKK inventory (kvkk_test.go) that account
+	// deletion removes or clears (issue #275).
+	for name, c := range personColumns {
+		if c.fate == kept {
+			continue
+		}
+		table, column, _ := strings.Cut(name, ".")
+		sql := "SELECT count(*) FROM " + pgx.Identifier{table}.Sanitize() + " WHERE " + pgx.Identifier{column}.Sanitize() + " = $1"
+		if n := e.adminCount(t, sql, u.PG()); n != 0 {
 			refs[name] = n
 		}
+	}
+	// The profile stays as a tombstone with nothing personal on it.
+	if n := e.count(t, `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`, u.PG()); n != 0 {
+		refs["user_profiles (kişisel)"] = n
 	}
 	return refs
 }
@@ -274,7 +254,7 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	e.seed(t, `INSERT INTO answer_votes (answer_id, user_id) VALUES ($1, $2), ($3, $4)`, ownA.PG(), other.PG(), otherA.PG(), u.PG())
 
 	// u's events stay with an empty organizer; u's RSVPs and vehicle (plate)
-	// go; camp items stay without u.
+	// go; list items stay without u (issue #241).
 	ownEvent, otherEvent, campEvent := id.New(), id.New(), id.New()
 	for _, x := range []struct {
 		ev, by id.ID
@@ -285,12 +265,19 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 			x.ev.PG(), t2.PG(), x.typ, x.by.PG(), u.PG())
 	}
 	e.seed(t, `INSERT INTO event_series (id, tayfa_id, rrule, timezone, dtstart, created_by) VALUES ($1, $2, 'FREQ=WEEKLY', 'Europe/Istanbul', now(), $3)`, id.New().PG(), t2.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_convoy (event_id) VALUES ($1), ($2)`, ownEvent.PG(), otherEvent.PG())
-	e.seed(t, `INSERT INTO event_camp (event_id) VALUES ($1)`, campEvent.PG())
 	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status) VALUES ($1, $2, 'going')`, otherEvent.PG(), u.PG())
 	e.seed(t, `INSERT INTO event_rsvps (event_id, user_id, status, attendance, attendance_method, attendance_marked_by, attendance_marked_at) VALUES ($1, $2, 'going', 'attended', 'organizer', $3, now())`, otherEvent.PG(), other.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, plate) VALUES ($1, $2, $3, 'Ford', '35 ABC 123')`, id.New().PG(), otherEvent.PG(), u.PG())
-	e.seed(t, `INSERT INTO event_camp_items (id, event_id, name, assigned_user_id, created_by) VALUES ($1, $2, 'Çadır', $3, $3)`, id.New().PG(), campEvent.PG(), u.PG())
+	// u's vehicle goes with the seat request another member made to it;
+	// u's own request to another member's vehicle goes, the vehicle stays
+	// (issue #240).
+	ownVehicle, otherVehicle := id.New(), id.New()
+	e.seed(t, `INSERT INTO event_vehicles (id, event_id, component_key, user_id, make, plate, seats) VALUES ($1, $3, 'vehicles', $4, 'Ford', '35 ABC 123', 2), ($2, $5, 'vehicles', $6, 'Fiat', NULL, 2)`,
+		ownVehicle.PG(), otherVehicle.PG(), otherEvent.PG(), u.PG(), ownEvent.PG(), other.PG())
+	e.seed(t, `INSERT INTO event_vehicle_seat_requests (id, event_id, component_key, user_id, event_vehicle_id) VALUES ($1, $3, 'vehicles', $4, $5), ($2, $6, 'vehicles', $7, $8)`,
+		id.New().PG(), id.New().PG(), otherEvent.PG(), other.PG(), ownVehicle.PG(), ownEvent.PG(), u.PG(), otherVehicle.PG())
+	// u's referee assignment goes; another member's stays (issue #238).
+	e.seed(t, `INSERT INTO event_referees (id, event_id, user_id) VALUES ($1, $3, $4), ($2, $3, $5)`, id.New().PG(), id.New().PG(), otherEvent.PG(), u.PG(), other.PG())
+	e.seed(t, `INSERT INTO event_checklist_items (id, event_id, component_key, name, assigned_user_id, created_by) VALUES ($1, $2, 'gear', 'Çadır', $3, $3)`, id.New().PG(), campEvent.PG(), u.PG())
 
 	// u's poll stays with an empty creator; u's votes go, other votes stay.
 	// One poll u deleted loses deleted_by.
@@ -316,6 +303,15 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	if refs := e.userRefs(t, u); len(refs) != 0 {
 		t.Fatalf("core'da kullanıcıya ait kayıt kaldı: %v", refs)
 	}
+	if n := e.count(t, `SELECT count(*) FROM event_referees WHERE event_id = $1 AND user_id = $2`, otherEvent.PG(), other.PG()); n != 1 {
+		t.Fatalf("başkasının hakem ataması = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_vehicles WHERE id = $1 AND user_id = $2`, otherVehicle.PG(), other.PG()); n != 1 {
+		t.Fatalf("başkasının aracı = %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_vehicles`) + e.count(t, `SELECT count(*) FROM event_vehicle_seat_requests`); n != 1 {
+		t.Fatalf("silinen kullanıcının aracı ya da koltuk istekleri kaldı: %d", n)
+	}
 	if n := e.count(t, `SELECT count(*) FROM announcements WHERE (id = $1 AND author_id IS NULL AND title = 'Duyuru') OR (id = $2 AND author_id = $3 AND deleted_at IS NOT NULL AND deleted_by IS NULL)`, ownAnn.PG(), hiddenAnn.PG(), other.PG()); n != 2 {
 		t.Fatalf("duyurular = %d", n)
 	}
@@ -340,8 +336,8 @@ func TestDeletedRemovesPersonalRecords(t *testing.T) {
 	if n := e.count(t, `SELECT count(*) FROM event_rsvps WHERE event_id = $1 AND user_id = $2 AND attendance = 'attended'`, otherEvent.PG(), other.PG()); n != 1 {
 		t.Fatal("başkasının katılım kaydı silindi")
 	}
-	if n := e.count(t, `SELECT count(*) FROM event_camp_items WHERE event_id = $1`, campEvent.PG()); n != 1 {
-		t.Fatal("kamp malzemesi silindi")
+	if n := e.count(t, `SELECT count(*) FROM event_checklist_items WHERE event_id = $1 AND assigned_user_id IS NULL AND created_by IS NULL`, campEvent.PG()); n != 1 {
+		t.Fatal("liste maddesi silindi ya da kişi alanları kaldı")
 	}
 	if got := e.role(t, t1, modOld); got != "active/admin" {
 		t.Fatalf("halef = %s", got)
@@ -467,7 +463,7 @@ func (e *env) status(t *testing.T, ev, u id.ID) string {
 // were going to, the oldest waitlisted answer becomes going in the same
 // transaction, with an rsvp.promoted event and audit record by the system
 // (issue #50). Ended, cancelled and not-going events are left alone. The
-// user's hike roll calls, catches and activity records go too.
+// user's roll calls, log entries (catches) and activity records go too.
 func TestDeletedPromotesWaitlist(t *testing.T) {
 	e := setup(t)
 	u, admin, a, w1, w2 := id.New(), id.New(), id.New(), id.New(), id.New()
@@ -503,16 +499,78 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 
 	// Personal attendance data of u.
 	hike := e.eventAt(t, tf, "hike", now.Add(-5*time.Hour), now.Add(-time.Hour), nil, "scheduled")
-	e.seed(t, `INSERT INTO event_hike (event_id) VALUES ($1)`, hike.PG())
-	e.seed(t, `INSERT INTO event_hike_checkins (event_id, user_id, started_at, started_received_at) VALUES ($1, $2, $3, $3)`, hike.PG(), u.PG(), now.Add(-4*time.Hour))
+	e.seed(t, `INSERT INTO event_roll_call_checkins (event_id, component_key, user_id, started_at, started_received_at) VALUES ($1, 'roll_call', $2, $3, $3)`, hike.PG(), u.PG(), now.Add(-4*time.Hour))
 	e.seed(t, `INSERT INTO user_activity_records (id, user_id, event_id, tayfa_id, event_type, mode, event_title, started_at, duration_minutes, attendance_method)
 		VALUES ($1, $2, $3, $4, 'hike', 'in_person', 'Etkinlik', $5, 240, 'hike_start')`, id.New().PG(), u.PG(), hike.PG(), tf.PG(), now.Add(-4*time.Hour))
 	fishing := e.eventAt(t, tf, "fishing", now.Add(-5*time.Hour), now.Add(-time.Hour), nil, "scheduled")
-	e.seed(t, `INSERT INTO event_fishing (event_id) VALUES ($1)`, fishing.PG())
-	e.seed(t, `INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, lat, lng, client_request_id) VALUES ($1, $2, $3, 'Levrek', 40, 38.1, 26.9, $4)`,
+	e.seed(t, `INSERT INTO event_log_entries (id, event_id, component_key, user_id, field_values, lat, lng, location_visibility, client_request_id)
+		VALUES ($1, $2, 'catches', $3, '{"species": "Levrek"}', 38.1, 26.9, 'self', $4)`,
 		id.New().PG(), fishing.PG(), u.PG(), id.New().PG())
-	e.seed(t, `INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, client_request_id, deleted_at, deleted_by) VALUES ($1, $2, $3, 'Çipura', 30, $4, now(), $5)`,
+	e.seed(t, `INSERT INTO event_log_entries (id, event_id, component_key, user_id, field_values, client_request_id, deleted_at, deleted_by)
+		VALUES ($1, $2, 'catches', $3, '{"species": "Çipura"}', $4, now(), $5)`,
 		id.New().PG(), fishing.PG(), a.PG(), id.New().PG(), u.PG())
+	// A tayfa vocabulary value u added stays, without its writer (issue
+	// #244).
+	e.seed(t, `INSERT INTO tayfa_vocabulary (id, tayfa_id, namespace, value, value_normalized, created_by) VALUES ($1, $2, 'fish_species', 'Levrek', 'levrek', $3)`,
+		id.New().PG(), tf.PG(), u.PG())
+	// Measurements (issue #245): u's personal value goes; the total u
+	// entered and a's value u entered stay without their writer.
+	e.seed(t, `INSERT INTO event_measurements (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'distance', NULL, 12.5, $3)`,
+		id.New().PG(), hike.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_measurements (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'goals', $3, 2, $3)`,
+		id.New().PG(), hike.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_measurements (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'goals', $3, 1, $4)`,
+		id.New().PG(), hike.PG(), a.PG(), u.PG())
+	// Rankings (issue #253): u's time goes; a's time u entered stays
+	// without its writer.
+	e.seed(t, `INSERT INTO event_ranking_entries (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'ranking', $3, 61.5, $4)`,
+		id.New().PG(), hike.PG(), u.PG(), a.PG())
+	e.seed(t, `INSERT INTO event_ranking_entries (id, event_id, component_key, user_id, value, entered_by) VALUES ($1, $2, 'ranking', $3, 63, $4)`,
+		id.New().PG(), hike.PG(), a.PG(), u.PG())
+	// Celebrations (issue #255): u's win goes; the celebration u announced
+	// and a's win stay, without the announcer.
+	e.seed(t, `INSERT INTO event_celebrations (event_id, component_key, announced_by, announced_at, updated_at) VALUES ($1, 'celebration', $2, now(), now())`,
+		hike.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, position) VALUES ($1, $2, 'celebration', $3, 1)`,
+		id.New().PG(), hike.PG(), u.PG())
+	e.seed(t, `INSERT INTO event_celebration_winners (id, event_id, component_key, user_id, position) VALUES ($1, $2, 'celebration', $3, 2)`,
+		id.New().PG(), hike.PG(), a.PG())
+	// Badges (issue #258; ADR-0039 §5): u's badges go, a's stay.
+	e.seed(t, `INSERT INTO user_badges (id, user_id, badge_key, period_key, tayfa_id, event_id, earned_at) VALUES ($1, $3, 'test_first', 'all', NULL, NULL, now()), ($2, $4, 'test_first', 'all', NULL, NULL, now())`,
+		id.New().PG(), id.New().PG(), u.PG(), a.PG())
+	// Statistics (issue #266): u's go, a's stay.
+	e.seed(t, `INSERT INTO user_stats (user_id, tayfa_id, year, metric_key, source, value, event_count, computed_at) VALUES ($1, $3, 0, 'attended', 'common', 2, 2, now()), ($2, $3, 0, 'attended', 'common', 1, 1, now())`,
+		u.PG(), a.PG(), tf.PG())
+	// Event questions (issue #256): u's questions (an anonymous one too)
+	// and votes go; a's question that u marked answered and removed stays,
+	// without them, with a's vote on it.
+	uQuestion, aQuestion := id.New(), id.New()
+	e.seed(t, `INSERT INTO event_questions (id, event_id, component_key, author_id, anonymous, body, client_request_id) VALUES ($1, $2, 'questions', $3, true, 'Anonim soru?', $4)`,
+		uQuestion.PG(), hike.PG(), u.PG(), id.New().PG())
+	e.seed(t, `INSERT INTO event_questions (id, event_id, component_key, author_id, anonymous, body, answered_at, answered_by, client_request_id, deleted_at, deleted_by)
+		VALUES ($1, $2, 'questions', $3, false, 'Açık soru?', now(), $4, $5, now(), $4)`,
+		aQuestion.PG(), hike.PG(), a.PG(), u.PG(), id.New().PG())
+	e.seed(t, `INSERT INTO event_question_votes (question_id, event_id, component_key, user_id) VALUES ($1, $3, 'questions', $4), ($2, $3, 'questions', $4), ($2, $3, 'questions', $5)`,
+		uQuestion.PG(), aQuestion.PG(), hike.PG(), u.PG(), a.PG())
+	// Teams (issue #248): u's place goes; the team and a's place stay.
+	team := id.New()
+	e.seed(t, `INSERT INTO event_teams (id, event_id, component_key, position) VALUES ($1, $2, 'teams', 1)`, team.PG(), hike.PG())
+	e.seed(t, `INSERT INTO event_team_members (event_id, component_key, team_id, user_id) VALUES ($1, 'teams', $2, $3), ($1, 'teams', $2, $4)`,
+		hike.PG(), team.PG(), u.PG(), a.PG())
+	// Draw (issue #249): the draw is fixed; u's place stays empty, a's
+	// place keeps its position.
+	e.seed(t, `INSERT INTO event_draws (event_id, component_key, subject, drawn_at) VALUES ($1, 'draw', 'participants', now())`, hike.PG())
+	e.seed(t, `INSERT INTO event_draw_entries (id, event_id, component_key, position, user_id) VALUES ($1, $3, 'draw', 1, $4), ($2, $3, 'draw', 2, $5)`,
+		id.New().PG(), id.New().PG(), hike.PG(), u.PG(), a.PG())
+	// Scoreboard (issue #250): u's seat and scores stay as a deleted user;
+	// a's seat is untouched.
+	scoreTable, uSeat := id.New(), id.New()
+	e.seed(t, `INSERT INTO event_score_tables (id, event_id, component_key, label, side, rounds, winner, result) VALUES ($1, $2, 'scoreboard', 'Masa 1', 'player', 'round', 'high', 'points')`,
+		scoreTable.PG(), hike.PG())
+	e.seed(t, `INSERT INTO event_score_players (id, table_id, event_id, component_key, position, user_id) VALUES ($1, $3, $4, 'scoreboard', 1, $5), ($2, $3, $4, 'scoreboard', 2, $6)`,
+		uSeat.PG(), id.New().PG(), scoreTable.PG(), hike.PG(), u.PG(), a.PG())
+	e.seed(t, `INSERT INTO event_scores (id, table_id, event_id, component_key, player_id, round, points) VALUES ($1, $2, $3, 'scoreboard', $4, 1, 12)`,
+		id.New().PG(), scoreTable.PG(), hike.PG(), uSeat.PG())
 	// Album photos (issue #206): u's own go; a's photo that u removed stays
 	// without its remover.
 	e.seed(t, `INSERT INTO event_photos (id, event_id, uploader_id, upload_id, caption, client_request_id) VALUES ($1, $2, $3, $4, 'Zirve', $5)`,
@@ -539,8 +597,44 @@ func TestDeletedPromotesWaitlist(t *testing.T) {
 			t.Errorf("%s etkinlikte terfi oldu: %s", name, got)
 		}
 	}
-	if n := e.count(t, `SELECT count(*) FROM fishing_catches WHERE user_id = $1 AND deleted_at IS NOT NULL AND deleted_by IS NULL`, a.PG()); n != 1 {
+	if n := e.count(t, `SELECT count(*) FROM event_log_entries WHERE user_id = $1 AND deleted_at IS NOT NULL AND deleted_by IS NULL`, a.PG()); n != 1 {
 		t.Error("başkasının av kaydı silindi ya da silen boşalmadı")
+	}
+	if n := e.count(t, `SELECT count(*) FROM tayfa_vocabulary WHERE tayfa_id = $1 AND value = 'Levrek' AND created_by IS NULL`, tf.PG()); n != 1 {
+		t.Error("sözlük değeri silindi ya da ekleyen boşalmadı")
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_measurements WHERE event_id = $1 AND entered_by IS NULL AND (user_id IS NULL OR user_id = $2)`, hike.PG(), a.PG()); n != 2 {
+		t.Errorf("toplam ölçüm ya da başkasının ölçümü silindi ya da yazan boşalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_ranking_entries WHERE event_id = $1 AND user_id = $2 AND entered_by IS NULL`, hike.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının derecesi silindi ya da yazan boşalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_celebration_winners AS w JOIN event_celebrations AS c USING (event_id, component_key)
+		WHERE w.event_id = $1 AND w.user_id = $2 AND c.announced_by IS NULL`, hike.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının kazananlığı ya da ilan silindi ya da ilan eden boşalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM user_badges WHERE user_id = $1`, a.PG()); n != 1 {
+		t.Errorf("başkasının rozeti silindi: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM user_stats WHERE user_id = $1`, a.PG()); n != 1 {
+		t.Errorf("başkasının istatistiği silindi: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_questions q JOIN event_question_votes v ON v.question_id = q.id
+		WHERE q.id = $1 AND q.answered_at IS NOT NULL AND q.answered_by IS NULL AND q.deleted_at IS NOT NULL AND q.deleted_by IS NULL AND v.user_id = $2`,
+		aQuestion.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının sorusu ya da oyu silindi ya da işaretleyen/silen boşalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_team_members WHERE team_id = $1 AND user_id = $2`, team.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının takımdaki yeri silindi: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_draw_entries WHERE event_id = $1 AND ((position = 1 AND user_id IS NULL) OR (position = 2 AND user_id = $2))`, hike.PG(), a.PG()); n != 2 {
+		t.Errorf("kuradaki yer boşalmadı ya da kura değişti: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_score_players p JOIN event_scores s ON s.player_id = p.id WHERE p.id = $1 AND p.user_id IS NULL AND s.points = 12`, uSeat.PG()); n != 1 {
+		t.Errorf("yazbozdaki yer ve skor silinmiş kullanıcı olarak kalmadı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_score_players WHERE table_id = $1 AND user_id = $2`, scoreTable.PG(), a.PG()); n != 1 {
+		t.Errorf("başkasının yazbozdaki yeri değişti: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'rsvp.promoted' AND actor_id IS NULL AND tayfa_id = $1 AND subject_id = $2 AND payload->>'user_id' = $3`,
 		tf.PG(), full.PG(), w1.String()); n != 1 {
@@ -675,6 +769,42 @@ func TestProfileCarriesActivityVisibility(t *testing.T) {
 	var verr *apperr.ValidationError
 	if err := e.svc.Apply(ctx, Event{ID: id.New(), User: u, Profile: &Profile{DisplayName: "Ece", ActivityVisibility: "friends"}}); !errors.As(err, &verr) {
 		t.Fatalf("geçersiz görünürlük: %v", err)
+	}
+}
+
+// TestProfileCarriesStatsVisibility (issue #267): the copy of the
+// personal statistics setting starts as none, follows the events, stays
+// when an older event lacks the field, refuses an unknown value and goes
+// back to none on the tombstone.
+func TestProfileCarriesStatsVisibility(t *testing.T) {
+	e := setup(t)
+	u := id.New()
+	ev := eventIDs(4)
+	vis := func() string {
+		t.Helper()
+		var v string
+		must(t, e.pool.QueryRow(ctx, `SELECT stats_visibility FROM user_profiles WHERE user_id = $1`, u.PG()).Scan(&v))
+		return v
+	}
+	must(t, e.svc.Apply(ctx, profile(ev[0], u, "Ece")))
+	if v := vis(); v != StatsNone {
+		t.Fatalf("varsayılan = %s", v)
+	}
+	must(t, e.svc.Apply(ctx, Event{ID: ev[1], User: u, Profile: &Profile{DisplayName: "Ece", StatsVisibility: StatsFriendsAndMutual}}))
+	if v := vis(); v != StatsFriendsAndMutual {
+		t.Fatalf("görünürlük = %s", v)
+	}
+	must(t, e.svc.Apply(ctx, profile(ev[2], u, "Ece Y")))
+	if v := vis(); v != StatsFriendsAndMutual {
+		t.Fatalf("alansız olay ayarı değiştirdi: %s", v)
+	}
+	var verr *apperr.ValidationError
+	if err := e.svc.Apply(ctx, Event{ID: id.New(), User: u, Profile: &Profile{DisplayName: "Ece", StatsVisibility: "public"}}); !errors.As(err, &verr) {
+		t.Fatalf("geçersiz görünürlük: %v", err)
+	}
+	must(t, e.svc.Apply(ctx, Event{ID: ev[3], User: u, Deleted: true}))
+	if v := vis(); v != StatsNone {
+		t.Fatalf("mezar taşında görünürlük = %s", v)
 	}
 }
 

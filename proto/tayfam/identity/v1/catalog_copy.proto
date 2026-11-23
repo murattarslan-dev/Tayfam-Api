@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package tayfam.identity.v1;
+
+// CatalogCopyService keeps identity's read-only copy of core's event type
+// catalog (catalog_copy, catalog_interests) up to date (issue #280,
+// ADR-0042, ADR-0025 §10). identity checks profile interests against the
+// copy.
+//
+// core writes catalog.changed to its outbox when the catalog changes; core's
+// relay delivers it here at least once. It is a service-to-service API: only
+// a Kubernetes service token (ADR-0013) with audience
+// identity.tayfam.internal from the tayfam-core ServiceAccount is accepted.
+// A user access token is refused (UNAUTHENTICATED); a service token from any
+// other ServiceAccount is PERMISSION_DENIED.
+service CatalogCopyService {
+  // ApplyCatalogChange replaces the copy with the catalog of the request in
+  // one transaction, but only when catalog_version is newer than the copy's.
+  // An older or equal version changes nothing and succeeds (a repeated or
+  // late event), so the method is idempotent.
+  //
+  // interests is the catalog's complete list. A key of the list is added or
+  // its status updated; a key the copy has but the list lacks is retired,
+  // never deleted (profiles keep showing it).
+  //
+  // Errors: INVALID_ARGUMENT for a version below 1, 0 or more than 200
+  // interests, a key not matching ^[a-z][a-z0-9_]{1,39}$, a repeated key or
+  // an unspecified status. Nothing is applied then.
+  rpc ApplyCatalogChange(ApplyCatalogChangeRequest) returns (ApplyCatalogChangeResponse);
+}
+
+message ApplyCatalogChangeRequest {
+  // core's outbox event ID (UUIDv7); for tracing only, the version decides.
+  string event_id = 1;
+  // core's catalog_meta.catalog_version at the event.
+  int64 catalog_version = 2;
+  // Every interest of the catalog, retired ones included.
+  repeated CatalogInterestState interests = 3;
+}
+
+message CatalogInterestState {
+  string key = 1;
+  CatalogInterestStatus status = 2;
+}
+
+enum CatalogInterestStatus {
+  CATALOG_INTEREST_STATUS_UNSPECIFIED = 0;
+  CATALOG_INTEREST_STATUS_ACTIVE = 1;
+  CATALOG_INTEREST_STATUS_RETIRED = 2;
+}
+
+message ApplyCatalogChangeResponse {
+  // Whether the copy changed (false: the version was not newer).
+  bool applied = 1;
+}

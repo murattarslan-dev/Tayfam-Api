@@ -124,17 +124,17 @@ enum ErrorReason {
   // a convoy vehicle, checking in; online check-in also needs it given
   // before the start).
   ERROR_REASON_EVENT_NOT_GOING = 33;
-  // NOT_FOUND. No camp item, convoy vehicle, fishing catch or album photo
+  // NOT_FOUND. No list item, vehicle, fishing catch or album photo
   // with this ID on this event that the caller may remove.
   ERROR_REASON_EVENT_ITEM_NOT_FOUND = 34;
-  // RESOURCE_EXHAUSTED. The event's list is full (200 camp items; 30 album
+  // RESOURCE_EXHAUSTED. The event's list is full (200 list items; 30 album
   // photos per person or 500 per album).
   ERROR_REASON_EVENT_LIMIT = 35;
   // FAILED_PRECONDITION. The method is for another event type (for example
-  // AddCampItem on a convoy event).
+  // ListFishingCatches on a convoy event).
   ERROR_REASON_EVENT_TYPE_MISMATCH = 36;
-  // ABORTED. Someone else took the camp item; reload the event (issue
-  // #198).
+  // ABORTED. Someone else took the list item; reload the list (issues
+  // #198, #241).
   ERROR_REASON_EVENT_ITEM_TAKEN = 37;
 
   // Attendance (EventService check-in, correction and fishing catches;
@@ -153,7 +153,9 @@ enum ErrorReason {
   // FAILED_PRECONDITION. Outside the organizer's correction window: the
   // seven days after the end.
   ERROR_REASON_CORRECTION_CLOSED = 43;
-  // FAILED_PRECONDITION. FinishHike without StartHike.
+  // FAILED_PRECONDITION. A roll call return without a start
+  // (RollCallComponentService.ReturnRollCall; the name is from the Faz 1
+  // hike roll call).
   ERROR_REASON_HIKE_NOT_STARTED = 44;
   // FAILED_PRECONDITION. The action needs the caller's verified attendance
   // (AddFishingCatch, AddEventPhoto).
@@ -298,4 +300,298 @@ enum ErrorReason {
   ERROR_REASON_SAFETY_CONTACT_CLOSED = 129;
   // NOT_FOUND. The caller chose no safety contact for this event.
   ERROR_REASON_SAFETY_CONTACT_NOT_FOUND = 131;
+
+  // Event type catalog (CatalogService, issue #237, ADR-0025).
+
+  // NOT_FOUND. The catalog has no event type with this key and version.
+  ERROR_REASON_CATALOG_TYPE_NOT_FOUND = 132;
+
+  // Event components: the framework every component shares
+  // (EventComponentService, component.proto; issue #238, ADR-0025 §4–§6,
+  // ADR-0037 §2).
+  //
+  // Numbering of component reasons: the reasons of the component of issue
+  // #N are numbered N*10 … N*10+9 (route, #239: 2390–2399), so that
+  // components developed side by side never take the same number.
+
+  // NOT_FOUND. The event's type version has no component with this key, or
+  // the component is of another kind than the method.
+  ERROR_REASON_COMPONENT_NOT_FOUND = 133;
+  // FAILED_PRECONDITION. The component is optional and turned off for this
+  // event. Reads are refused too.
+  ERROR_REASON_COMPONENT_DISABLED = 134;
+  // FAILED_PRECONDITION. The organizer's selections (optional components,
+  // chosen parameters) cannot change once the event has started.
+  ERROR_REASON_COMPONENT_LOCKED = 135;
+  // FAILED_PRECONDITION. Component data cannot change from seven days after
+  // the event's end.
+  ERROR_REASON_COMPONENT_FROZEN = 136;
+
+  // Vehicles component (VehiclesComponentService, component_vehicles.proto;
+  // issue #240: 2400–2409).
+
+  // FAILED_PRECONDITION. The vehicle has no free seat: every seat the
+  // owner offers is taken by an approved rider, or it offers none.
+  ERROR_REASON_VEHICLE_FULL = 2400;
+  // FAILED_PRECONDITION. The owner cannot offer fewer seats than the riders
+  // already approved; a rider is removed first.
+  ERROR_REASON_VEHICLE_SEATS_TAKEN = 2401;
+  // FAILED_PRECONDITION. Someone who has a vehicle of their own in the
+  // component cannot ask for a seat.
+  ERROR_REASON_SEAT_REQUEST_DRIVER = 2402;
+
+  // Tayfa vocabulary (TayfaVocabularyService, vocabulary.proto; issue #244:
+  // 2440–2449).
+
+  // NOT_FOUND. The tayfa has no such value in this namespace.
+  ERROR_REASON_VOCABULARY_NOT_FOUND = 2440;
+  // FAILED_PRECONDITION. The value or the merge target is already merged
+  // into another value; undo that merge or choose its target.
+  ERROR_REASON_VOCABULARY_MERGED = 2441;
+  // FAILED_PRECONDITION. The value is not merged; there is nothing to undo.
+  ERROR_REASON_VOCABULARY_NOT_MERGED = 2442;
+
+  // Measure component (MeasureComponentService, component_measure.proto;
+  // issue #245: 2450–2459).
+
+  // FAILED_PRECONDITION. A measurement is entered once the event has
+  // started.
+  ERROR_REASON_MEASUREMENT_NOT_STARTED = 2450;
+  // FAILED_PRECONDITION. The person is not a participant of the event: they
+  // did not answer "going" and their attendance was not verified.
+  ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT = 2451;
+  // FAILED_PRECONDITION. The measure is of the other scope: a total measure
+  // has no per-person values, a personal one no total.
+  ERROR_REASON_MEASUREMENT_SCOPE = 2452;
+
+  // Teams component (TeamsComponentService, component_teams.proto; issue
+  // #248: 2480–2489).
+
+  // FAILED_PRECONDITION. The component's mode is manual: teams are formed
+  // by hand (ReplaceTeams), not generated.
+  ERROR_REASON_TEAMS_MANUAL = 2480;
+  // FAILED_PRECONDITION. Too few participants for the teams: at least two,
+  // and at least one per team.
+  ERROR_REASON_TEAMS_TOO_FEW = 2481;
+  // FAILED_PRECONDITION. A person put in a team is not a participant of the
+  // event: an active member who answered "going" or whose attendance was
+  // verified.
+  ERROR_REASON_TEAMS_NOT_PARTICIPANT = 2482;
+
+  // Draw component (DrawComponentService, component_draw.proto; issue #249:
+  // 2490–2499).
+
+  // FAILED_PRECONDITION. The component's draw was made; its result is fixed
+  // and cannot be drawn again.
+  ERROR_REASON_DRAW_ALREADY_MADE = 2490;
+  // FAILED_PRECONDITION. Fewer than two to draw: participants, or teams
+  // with people when the type forms teams.
+  ERROR_REASON_DRAW_TOO_FEW = 2491;
+
+  // Scoreboard component (ScoreboardComponentService,
+  // component_scoreboard.proto; issue #250: 2500–2509).
+
+  // FAILED_PRECONDITION. The preset is not one the component offers or is
+  // retired; or the component offers presets and the table names none, or
+  // offers none and the table names one.
+  ERROR_REASON_SCORE_PRESET_UNAVAILABLE = 2500;
+  // NOT_FOUND. No such table in the component.
+  ERROR_REASON_SCORE_TABLE_NOT_FOUND = 2501;
+  // FAILED_PRECONDITION. The table is finished; a manager reopens it
+  // before a new round is entered.
+  ERROR_REASON_SCORE_TABLE_FINISHED = 2502;
+  // FAILED_PRECONDITION. The table has scores; its players no longer
+  // change.
+  ERROR_REASON_SCORE_TABLE_STARTED = 2503;
+  // FAILED_PRECONDITION. A player is not a participant of the event (an
+  // active member who answered "going" or whose attendance was verified),
+  // or a team is not a team of the named teams component.
+  ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT = 2504;
+  // FAILED_PRECONDITION. Scores are entered once the event has started.
+  ERROR_REASON_SCORE_NOT_STARTED = 2505;
+
+  // Bracket component (BracketComponentService, component_bracket.proto;
+  // issue #251: 2510–2519).
+
+  // FAILED_PRECONDITION. The bracket seeds from the type's draw component:
+  // its draw was not made, or the type has none.
+  ERROR_REASON_BRACKET_DRAW_REQUIRED = 2510;
+  // FAILED_PRECONDITION. The bracket was started; a manager resets it
+  // before starting again.
+  ERROR_REASON_BRACKET_STARTED = 2511;
+  // FAILED_PRECONDITION. The bracket has not been started.
+  ERROR_REASON_BRACKET_NOT_STARTED = 2512;
+  // FAILED_PRECONDITION. Fewer than two entrants in the draw.
+  ERROR_REASON_BRACKET_TOO_FEW = 2513;
+  // NOT_FOUND. No such match in the bracket.
+  ERROR_REASON_BRACKET_MATCH_NOT_FOUND = 2514;
+  // NOT_FOUND. No such game in the match; only the last game is deleted.
+  ERROR_REASON_BRACKET_GAME_NOT_FOUND = 2515;
+  // FAILED_PRECONDITION. The match is decided (or a bye): no more games.
+  ERROR_REASON_BRACKET_MATCH_DECIDED = 2516;
+  // FAILED_PRECONDITION. A match of the current round is not decided yet.
+  ERROR_REASON_BRACKET_ROUND_OPEN = 2517;
+  // FAILED_PRECONDITION. A later round was paired from the match's round;
+  // its games no longer change (reset the bracket instead).
+  ERROR_REASON_BRACKET_ROUND_CLOSED = 2518;
+  // FAILED_PRECONDITION. The bracket has no next round.
+  ERROR_REASON_BRACKET_FINISHED = 2519;
+
+  // Guest players (GuestPlayerComponentService, component_guest.proto;
+  // issue #252: 2520–2529).
+
+  // FAILED_PRECONDITION. The scoreboard component does not take guest
+  // players (its `guests` parameter is off).
+  ERROR_REASON_GUEST_PLAYERS_DISABLED = 2520;
+  // NOT_FOUND. No such guest player in the event.
+  ERROR_REASON_GUEST_PLAYER_NOT_FOUND = 2521;
+  // FAILED_PRECONDITION. The guest has a seat at a table or a place in a
+  // draw; it is not removed.
+  ERROR_REASON_GUEST_PLAYER_IN_USE = 2522;
+
+  // Ranking component (RankingComponentService, component_ranking.proto;
+  // issue #253: 2530–2539).
+
+  // FAILED_PRECONDITION. A ranking is entered once the event has started.
+  ERROR_REASON_RANKING_NOT_STARTED = 2530;
+  // FAILED_PRECONDITION. The person is not a participant of the event: they
+  // did not answer "going" and their attendance was not verified.
+  ERROR_REASON_RANKING_NOT_PARTICIPANT = 2531;
+  // FAILED_PRECONDITION. The ranking is computed from a measure (its
+  // `source` parameter); the measure's values are entered instead.
+  ERROR_REASON_RANKING_FROM_MEASURE = 2532;
+
+  // Vote component (VoteComponentService, component_vote.proto; issue
+  // #254: 2540–2549).
+
+  // FAILED_PRECONDITION. The organizer closed the vote: no votes and no
+  // option changes.
+  ERROR_REASON_VOTE_CLOSED = 2540;
+  // FAILED_PRECONDITION. The option is the caller: themselves, their own
+  // vehicle or their own photo.
+  ERROR_REASON_VOTE_OWN_OPTION = 2541;
+  // FAILED_PRECONDITION. The vote's options come from its source
+  // (participants, vehicles, album); only a free vote takes options
+  // written by the organizer.
+  ERROR_REASON_VOTE_OPTIONS_FIXED = 2542;
+  // ALREADY_EXISTS. A free option with the same label (Turkish lower case)
+  // is already in the vote.
+  ERROR_REASON_VOTE_OPTION_EXISTS = 2543;
+
+  // Celebration component (CelebrationComponentService,
+  // component_celebration.proto; issue #255: 2550–2559).
+
+  // FAILED_PRECONDITION. A winner is announced once the event has started.
+  ERROR_REASON_CELEBRATION_NOT_STARTED = 2550;
+  // FAILED_PRECONDITION. The source component has no winner yet: a table
+  // that is still open, a bracket that has not finished, an empty ranking
+  // or one hidden from everyone (a sensitive measure).
+  ERROR_REASON_CELEBRATION_NO_WINNER = 2551;
+  // FAILED_PRECONDITION. A winner chosen by hand is not a participant of
+  // the event: they did not answer "going" and their attendance was not
+  // verified.
+  ERROR_REASON_CELEBRATION_NOT_PARTICIPANT = 2552;
+
+  // Type flags (ADR-0037 §1; issue #257: 2570–2579).
+
+  // PERMISSION_DENIED. The attendee list of an event whose type's
+  // attendance is sensitive (sensitive_attendance) is the organizer's,
+  // moderators' and admins' only; the others see the counts on the event.
+  ERROR_REASON_ATTENDEES_HIDDEN = 2570;
+  // INVALID_ARGUMENT. An album photo of a type with album_notice needs the
+  // uploader's acknowledgement that the people in it (a child's guardian)
+  // agreed: consent_ack true.
+  ERROR_REASON_ALBUM_CONSENT_REQUIRED = 2571;
+
+  // Şimdi başlat (ADR-0038 §1, §2; issue #263: 2630–2639).
+
+  // RESOURCE_EXHAUSTED. The caller already organizes an open now event (a
+  // starts_now event that is not finished, ended or cancelled), in a
+  // tayfa or as an instant event: at most one at a time.
+  ERROR_REASON_NOW_LIMIT_REACHED = 2630;
+  // FAILED_PRECONDITION. FinishEvent on an event that was not started now
+  // (Event.open_ended false): a planned event ends at its end_time.
+  ERROR_REASON_EVENT_NOT_OPEN_ENDED = 2631;
+
+  // QR ile katılım (ADR-0038 §3; issue #264: 2640–2649).
+
+  // NOT_FOUND. The join QR token is malformed, unknown or expired, its
+  // event is cancelled, ended, deleted or online, its tayfa is read-only
+  // or gone, or the caller may not join: banned in the tayfa, blocked
+  // with the organizer either way, deleted or banned on the platform.
+  // These cases are indistinguishable on purpose (ADR-0011).
+  ERROR_REASON_INVALID_JOIN_QR = 2640;
+  // RESOURCE_EXHAUSTED. The event already had 30 joins by QR.
+  ERROR_REASON_JOIN_QR_LIMIT_REACHED = 2641;
+
+  // Şimdi bildirimi (ADR-0038 §4; issue #265: 2650–2659).
+
+  // RESOURCE_EXHAUSTED. CreateInstantEvent with now_recipient_ids when the
+  // caller already sent 2 now broadcasts to friends today (Europe/Istanbul
+  // day). Nothing is created; without now_recipient_ids the event can be
+  // started.
+  ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED = 2650;
+
+  // Ana sayfa (ADR-0027 §3–§4; issue #268: 2680–2689).
+
+  // NOT_FOUND. GetHomeWidgetData for a widget the tayfa's home page does
+  // not show (unknown key, switched off, its module off, a countdown past
+  // its date) or whose data is not read through this method (sections and
+  // module widgets read their own endpoints).
+  ERROR_REASON_HOME_WIDGET_NOT_FOUND = 2680;
+
+  // Günün içeriği (ADR-0027 §5; issue #269: 2690–2699).
+
+  // NOT_FOUND. A daily content item that is not in the tayfa's pool: never
+  // there, deleted (for anything but RestoreDailyItem), or deleted more
+  // than 30 days ago (RestoreDailyItem).
+  ERROR_REASON_DAILY_ITEM_NOT_FOUND = 2690;
+  // FAILED_PRECONDITION. The pool already has 1000 items; nothing is
+  // added or restored.
+  ERROR_REASON_DAILY_ITEM_LIMIT = 2691;
+
+  // Ortak kütüphane (ADR-0040 §1; issue #270: 2700–2709).
+
+  // NOT_FOUND. A library item that is not in the tayfa's library (never
+  // there or withdrawn), or, for an owner's step, not the caller's.
+  ERROR_REASON_LIBRARY_ITEM_NOT_FOUND = 2700;
+  // NOT_FOUND. A loan that is not the caller's to act on: the owner's steps
+  // need the caller to own the item.
+  ERROR_REASON_LIBRARY_LOAN_NOT_FOUND = 2701;
+  // FAILED_PRECONDITION. The caller asked for their own item.
+  ERROR_REASON_LIBRARY_OWN_ITEM = 2702;
+  // FAILED_PRECONDITION. The loan is not in a state the step follows
+  // (approve: requested; hand over: approved; take back: handed over;
+  // decline: requested or approved).
+  ERROR_REASON_LIBRARY_LOAN_STATE = 2703;
+  // FAILED_PRECONDITION. The item is handed over; the owner takes it back
+  // before withdrawing it.
+  ERROR_REASON_LIBRARY_ITEM_ON_LOAN = 2704;
+  // FAILED_PRECONDITION. The caller already has 100 items in the tayfa's
+  // library.
+  ERROR_REASON_LIBRARY_ITEM_LIMIT = 2705;
+  // FAILED_PRECONDITION. 20 members already wait for the item.
+  ERROR_REASON_LIBRARY_QUEUE_FULL = 2706;
+
+  // Materyal kütüphanesi (ADR-0040 §3; issue #261: 2720–2729).
+
+  // NOT_FOUND. A material that is not visible in the tayfa's material
+  // library (never there, deleted, or linking to a blocked domain), or,
+  // for an author's step, not the caller's.
+  ERROR_REASON_MATERIAL_NOT_FOUND = 2720;
+  // INVALID_ARGUMENT. The link's domain, or a domain above it, is on the
+  // platform's blocked domain list.
+  ERROR_REASON_BLOCKED_LINK = 2721;
+  // FAILED_PRECONDITION. The caller already has 200 materials in the
+  // tayfa's material library.
+  ERROR_REASON_MATERIAL_LIMIT = 2722;
+
+  // Üye garajı (ADR-0040 §4; issue #272: 2730–2739).
+
+  // NOT_FOUND. A vehicle that is not in the caller's garage (for the
+  // owner's steps and the vehicles component), or that does not show in
+  // the tayfa (a moderator's removal).
+  ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND = 2730;
+  // FAILED_PRECONDITION. The caller already has 10 vehicles in the garage.
+  ERROR_REASON_GARAGE_LIMIT = 2731;
 }

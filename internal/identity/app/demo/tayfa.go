@@ -24,7 +24,7 @@ func (s *Seeder) seedTayfa(ctx context.Context, t tayfaSpec, users map[string]id
 	founder := users[t.Founder]
 	created, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.CreateTayfaResponse, error) {
 		return s.cfg.Core.Tayfas.CreateTayfa(ctx, &corev1.CreateTayfaRequest{
-			Name: t.Name, Description: t.Description, Interests: t.Interests,
+			Name: t.Name, Description: t.Description, InterestKeys: t.Interests,
 			JoinPolicy:      corev1.JoinPolicy_JOIN_POLICY_APPROVAL,
 			ClientRequestId: requestID(keyOf(t.Key, "tayfa")),
 		})
@@ -193,23 +193,9 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		req.MeetingPointName, req.City, req.District = e.PlaceName, e.City, e.District
 		req.MeetingPoint = &corev1.LatLng{Lat: e.Lat, Lng: e.Lng}
 	}
-	switch {
-	case e.Convoy != nil:
-		req.Details = &corev1.CreateEventRequest_Convoy{Convoy: e.Convoy}
-	case e.Camp != nil:
-		req.Details = &corev1.CreateEventRequest_Camp{Camp: e.Camp}
-	case e.Hike != nil:
-		hike := &corev1.HikeDetails{Difficulty: e.Hike.Difficulty, DistanceKm: e.Hike.DistanceKm, ElevationM: e.Hike.ElevationM}
-		if e.Hike.ReturnAfter > 0 {
-			hike.ExpectedReturnTime = timestamppb.New(start.Add(time.Duration(e.Hike.ReturnAfter) * time.Hour))
-		}
-		req.Details = &corev1.CreateEventRequest_Hike{Hike: hike}
-	case e.Fishing != nil:
-		req.Details = &corev1.CreateEventRequest_Fishing{Fishing: e.Fishing}
-	case e.Gaming != nil:
-		req.Details = &corev1.CreateEventRequest_Gaming{Gaming: e.Gaming}
-	case e.Sports != nil:
-		req.Details = &corev1.CreateEventRequest_Sports{Sports: e.Sports}
+	req.Fields = e.Fields
+	if e.Hike != nil {
+		req.Fields = e.Hike.fields()
 	}
 	created, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.CreateEventResponse, error) {
 		return s.cfg.Core.Events.CreateEvent(ctx, req)
@@ -221,7 +207,41 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 
 	// An event that has ended or was cancelled since the first run takes no
 	// more answers; its remaining steps are skipped.
-	over := func(err error) bool { return is(err, "ERROR_REASON_EVENT_ENDED", "ERROR_REASON_EVENT_CANCELLED") }
+	// A component's data is frozen seven days after the end.
+	over := func(err error) bool {
+		return is(err, "ERROR_REASON_EVENT_ENDED", "ERROR_REASON_EVENT_CANCELLED", "ERROR_REASON_COMPONENT_FROZEN")
+	}
+	// The route is the route component's (issue #239); setting it again
+	// writes the same points.
+	if len(e.Route) > 0 {
+		_, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.SetRouteResponse, error) {
+			return s.cfg.Core.Routes.SetRoute(ctx, &corev1.SetRouteRequest{
+				Ref: &corev1.ComponentRef{TayfaId: tayfaID, EventId: eventID, ComponentKey: "route"}, Points: e.Route,
+			})
+		})
+		if over(err) {
+			return nil
+		}
+		if err != nil {
+			return check("rota", err)
+		}
+	}
+	// The expected return is the roll call component's (issue #242);
+	// setting it again writes the same time.
+	if e.Hike != nil && e.Hike.ReturnAfter > 0 {
+		_, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.SetExpectedReturnResponse, error) {
+			return s.cfg.Core.RollCalls.SetExpectedReturn(ctx, &corev1.SetExpectedReturnRequest{
+				Ref:                &corev1.ComponentRef{TayfaId: tayfaID, EventId: eventID, ComponentKey: "roll_call"},
+				ExpectedReturnTime: timestamppb.New(start.Add(time.Duration(e.Hike.ReturnAfter) * time.Hour)),
+			})
+		})
+		if over(err) {
+			return nil
+		}
+		if err != nil {
+			return check("yoklama planı", err)
+		}
+	}
 	for _, r := range e.RSVPs {
 		_, err := call(ctx, s, users[r.Person], func(ctx context.Context) (*corev1.SetRsvpResponse, error) {
 			return s.cfg.Core.Events.SetRsvp(ctx, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: r.Status})
@@ -234,47 +254,53 @@ func (s *Seeder) seedEvent(ctx context.Context, t tayfaSpec, e eventSpec, tayfaI
 		}
 	}
 	for _, v := range e.Vehicles {
-		_, err := call(ctx, s, users[v.Person], func(ctx context.Context) (*corev1.AddConvoyVehicleResponse, error) {
-			return s.cfg.Core.Events.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{
-				TayfaId: tayfaID, EventId: eventID, Make: v.Make, Model: v.Model, ModelYear: v.Year, Color: v.Color,
+		// The vehicles are the vehicles component's (issue #240), under
+		// the key "vehicles" (the convoy); setting one again replaces it.
+		_, err := call(ctx, s, users[v.Person], func(ctx context.Context) (*corev1.SetVehicleResponse, error) {
+			return s.cfg.Core.Vehicles.SetVehicle(ctx, &corev1.SetVehicleRequest{
+				Ref:  &corev1.ComponentRef{TayfaId: tayfaID, EventId: eventID, ComponentKey: "vehicles"},
+				Make: v.Make, Model: v.Model, ModelYear: v.Year, Color: v.Color,
 			})
 		})
 		if over(err) {
 			return nil
 		}
 		if err != nil {
-			return check("konvoy aracı", err)
+			return check("araç", err)
 		}
 	}
-	if len(e.CampItems) == 0 {
+	if len(e.Gear) == 0 {
 		return nil
 	}
-	got, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.GetEventResponse, error) {
-		return s.cfg.Core.Events.GetEvent(ctx, &corev1.GetEventRequest{TayfaId: tayfaID, EventId: eventID})
+	// The list is the list component's (issue #241), under the key "gear"
+	// (the camp); an item already on it is not added again.
+	gear := &corev1.ComponentRef{TayfaId: tayfaID, EventId: eventID, ComponentKey: "gear"}
+	got, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.ListChecklistResponse, error) {
+		return s.cfg.Core.Checklists.ListChecklist(ctx, &corev1.ListChecklistRequest{Ref: gear})
 	})
 	if err != nil {
-		return check("etkinlik", err)
+		return check("liste", err)
 	}
 	have := map[string]bool{}
-	for _, it := range got.GetEvent().GetCamp().GetItems() {
+	for _, it := range got.GetChecklist().GetItems() {
 		have[it.GetName()] = true
 	}
-	for _, it := range e.CampItems {
+	for _, it := range e.Gear {
 		if have[it.Name] {
 			continue
 		}
-		req := &corev1.AddCampItemRequest{TayfaId: tayfaID, EventId: eventID, Name: it.Name, Quantity: it.Quantity}
+		req := &corev1.AddChecklistItemRequest{Ref: gear, Name: it.Name, Quantity: it.Quantity}
 		if it.Assigned != "" {
 			req.AssignedUserId = users[it.Assigned].String()
 		}
-		_, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.AddCampItemResponse, error) {
-			return s.cfg.Core.Events.AddCampItem(ctx, req)
+		_, err := call(ctx, s, founder, func(ctx context.Context) (*corev1.AddChecklistItemResponse, error) {
+			return s.cfg.Core.Checklists.AddChecklistItem(ctx, req)
 		})
 		if over(err) {
 			return nil
 		}
 		if err != nil {
-			return check("kamp malzemesi", err)
+			return check("liste maddesi", err)
 		}
 	}
 	return nil

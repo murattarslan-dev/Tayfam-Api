@@ -24,7 +24,7 @@
 //     anywhere and expires in minutes.
 //   - Running it again creates no copies: accounts are found by their demo
 //     subject, every create carries a client_request_id derived from the
-//     record's key (requestID), and lists (members, channels, camp items)
+//     record's key (requestID), and lists (members, channels, list items)
 //     are read before adding. Nothing is refreshed: a record that exists
 //     stays as it is, and the inactive tayfa cleanup archives the tayfas
 //     when they go quiet. Only demo-purge deletes.

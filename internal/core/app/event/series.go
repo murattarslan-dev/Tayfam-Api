@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -224,16 +225,11 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 	if s.EndedAt.Valid {
 		return apperr.ErrEventSeriesEnded
 	}
-	var details Details
-	if set[FieldDetails] {
-		if ev.Type == TypeGeneral {
-			return apperr.Validation("details")
-		}
-		if details, err = cleanDetails(ev.Type, in.Details, ev.StartsAt.Time, false); err != nil {
+	var values map[string]json.RawMessage
+	if set[FieldFields] {
+		// Every event of a series has the template's type version.
+		if values, err = cleanEventFields(ctx, q, ev, in.Fields); err != nil {
 			return err
-		}
-		if details.typ() == "" {
-			return apperr.Validation("details")
 		}
 	}
 	upcoming, err := q.ListSeriesUpcomingEvents(ctx, store.ListSeriesUpcomingEventsParams{TayfaID: tayfa.PG(), SeriesID: s.ID, Now: ts(c.now)})
@@ -299,8 +295,8 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 				return err
 			}
 		}
-		if set[FieldDetails] {
-			if err := setDetails(ctx, q, t, shiftDetails(details, row.StartsAt.Time.Sub(ev.StartsAt.Time))); err != nil {
+		if set[FieldFields] && row.Type == ev.Type && row.TypeVersion == ev.TypeVersion {
+			if err := setFields(ctx, q, t, values, true); err != nil {
 				return err
 			}
 		}
@@ -314,17 +310,6 @@ func updateSeries(ctx context.Context, q *store.Queries, c caller, b *batch, ev 
 	}
 	return txn.Audit(ctx, q, tayfa, c.user, SeriesUpdated, txn.Target{Type: "event_series", ID: id.ID(s.ID.Bytes)},
 		map[string]any{"fields": changed, "events": len(targets)})
-}
-
-// shiftDetails moves the times inside d (a hike's expected return) by off,
-// for a copy of d on an event that starts off later.
-func shiftDetails(d Details, off time.Duration) Details {
-	if d.Hike != nil && !d.Hike.ExpectedReturnAt.IsZero() {
-		h := *d.Hike
-		h.ExpectedReturnAt = h.ExpectedReturnAt.Add(off)
-		d.Hike = &h
-	}
-	return d
 }
 
 // GetSeries returns a series of the tayfa.
@@ -495,11 +480,6 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 		if err != nil {
 			return fmt.Errorf("seri kuralı: %w", err)
 		}
-		details, err := typeDetails(ctx, q, tmpl)
-		if err != nil {
-			return err
-		}
-
 		after := sr.Dtstart.Time
 		if sr.GeneratedUntil.Valid && sr.GeneratedUntil.InfinityModifier == pgtype.Finite && sr.GeneratedUntil.Time.After(after) {
 			after = sr.GeneratedUntil.Time
@@ -515,7 +495,7 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 			eid := id.New()
 			start := o.UTC().Truncate(time.Microsecond)
 			n, err := q.CreateSeriesEvent(ctx, store.CreateSeriesEventParams{
-				ID: eid.PG(), TayfaID: tayfa.PG(), Type: tmpl.Type, Mode: tmpl.Mode, Title: tmpl.Title,
+				ID: eid.PG(), TayfaID: tayfa.PG(), Type: tmpl.Type, TypeVersion: tmpl.TypeVersion, Mode: tmpl.Mode, Title: tmpl.Title,
 				Description: tmpl.Description, StartsAt: ts(start), EndsAt: ts(start.Add(duration)),
 				MeetingPointName: tmpl.MeetingPointName, MeetingLat: tmpl.MeetingLat, MeetingLng: tmpl.MeetingLng,
 				City: tmpl.City, District: tmpl.District, OnlineUrl: tmpl.OnlineUrl, Capacity: tmpl.Capacity,
@@ -528,8 +508,37 @@ func (s *Service) GenerateSeries(ctx context.Context, tayfa, series id.ID) (int,
 				// Already there (another pod, or an earlier run).
 				continue
 			}
-			if err := setDetails(ctx, q, eid, shiftDetails(details, start.Sub(tmpl.StartsAt.Time))); err != nil {
-				return err
+			// The occurrence gets the template's type version and its field
+			// values.
+			if err := q.CopyEventFieldValues(ctx, store.CopyEventFieldValuesParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin alan değerleri: %w", err)
+			}
+			// And the organizer's component selections (issue #238).
+			if err := q.CopyEventComponents(ctx, store.CopyEventComponentsParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin bileşen seçimleri: %w", err)
+			}
+			// Component data that is part of the event's plan, one line per
+			// component under its own heading and after the selections
+			// (the tables' trigger asks whether the component is on).
+
+			// route (#239)
+			if err := q.CopyEventRoutes(ctx, store.CopyEventRoutesParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin rotası: %w", err)
+			}
+
+			// roll_call (#242): the expected return, moved with the start.
+			if err := q.CopyRollCallPlans(ctx, store.CopyRollCallPlansParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin yoklama planı: %w", err)
+			}
+
+			// goal (#246): the organizer's target.
+			if err := q.CopyEventGoals(ctx, store.CopyEventGoalsParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin hedefi: %w", err)
+			}
+
+			// schedule (#247): the programme, moved with the start.
+			if err := q.CopyScheduleItems(ctx, store.CopyScheduleItemsParams{ToEventID: eid.PG(), FromEventID: tmpl.ID}); err != nil {
+				return fmt.Errorf("seri örneğinin programı: %w", err)
 			}
 			events = append(events, made{eid})
 		}

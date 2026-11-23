@@ -52,8 +52,11 @@ const (
 //     anything else is ERROR_REASON_VALIDATION.
 //   - A caller who is not an ACTIVE member gets
 //     ERROR_REASON_TAYFA_NOT_FOUND, the same as for an unknown tayfa.
-//   - While the tayfa has the qa module turned off, every method, reads
-//     included, fails with ERROR_REASON_MODULE_DISABLED.
+//   - While the tayfa has the question's module turned off, every method,
+//     reads included, fails with ERROR_REASON_MODULE_DISABLED: the qa
+//     module for the Soru-Cevap pool, the question_pool module for the
+//     question pool. A method on an existing question or answer checks the
+//     module of its pool; the tag methods belong to the qa module.
 //   - The permission table (ADR-0004) decides the rest:
 //     ERROR_REASON_PERMISSION_DENIED for a role that is too low,
 //     ERROR_REASON_MUTED for a muted member's writes.
@@ -82,6 +85,18 @@ const (
 // Audit records and events never hold titles, bodies, tag names or search
 // queries, and the search query is never logged.
 //
+// Pools (issue #271; ADR-0040 §2): the same questions, answers and helpful
+// votes serve two modules. QUESTION_POOL_QA is the tayfa's Soru-Cevap
+// (title, body, free tags). QUESTION_POOL_QUESTION_POOL is the Eğitim
+// question pool: no title and no tags; the subject (required) and topic
+// (optional) come from Tayfam's study tag list (CatalogService study_tags,
+// keys only); the text and/or up to 2 photos (upload purpose
+// UPLOAD_PURPOSE_QUESTION_POOL) of the question and of each answer. There
+// is no "solved" mark in either pool: answers are ordered by helpful votes.
+// A question's pool never changes. The photos are the authors' own
+// uploads; the client reads their links with MediaService.GetMediaUrls
+// (active members, question_pool module on).
+//
 // Paging: page_size 0 means 20; values above 100 are treated as 100;
 // negative values are ERROR_REASON_VALIDATION. page_token is opaque and only
 // valid for the same tayfa and the same request (question, query, tag); a
@@ -93,25 +108,32 @@ type QAServiceClient interface {
 	// a new one is created. A repeat with the same client_request_id by the
 	// same caller returns the first question and creates nothing.
 	//
-	// Errors: the common ones, ERROR_REASON_VALIDATION,
-	// ERROR_REASON_TAG_LIMIT.
+	// Errors: the common ones, ERROR_REASON_VALIDATION (also: a field of the
+	// other pool, subject_key or topic_key not a selectable study tag),
+	// ERROR_REASON_TAG_LIMIT, ERROR_REASON_UPLOAD_NOT_FOUND,
+	// ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE.
 	CreateQuestion(ctx context.Context, in *CreateQuestionRequest, opts ...grpc.CallOption) (*CreateQuestionResponse, error)
 	// GetQuestion returns one visible question. Works on read-only tayfas.
 	GetQuestion(ctx context.Context, in *GetQuestionRequest, opts ...grpc.CallOption) (*GetQuestionResponse, error)
-	// ListQuestions lists visible questions, newest first. With query, only
-	// questions whose title or body match it (Turkish full-text search,
-	// İ/ı aware), most relevant first. With tag_id, only questions with that
-	// tag. Works on read-only tayfas.
+	// ListQuestions lists the visible questions of one pool, newest first.
+	// With query, only questions whose title or body match it (Turkish
+	// full-text search, İ/ı aware), most relevant first. With tag_id, only
+	// questions with that tag (qa pool); with subject_key and topic_key,
+	// only questions with that subject or topic (question pool; retired tags
+	// too). Works on read-only tayfas.
 	//
 	// Errors: the common ones, ERROR_REASON_VALIDATION,
 	// ERROR_REASON_TAG_NOT_FOUND.
 	ListQuestions(ctx context.Context, in *ListQuestionsRequest, opts ...grpc.CallOption) (*ListQuestionsResponse, error)
 	// UpdateQuestion changes the fields named in update_mask. "tags" replaces
-	// the question's tags. Setting the current values succeeds and records
-	// nothing.
+	// the question's tags. In the question pool "subject" sets subject_key
+	// and topic_key together (the same subject and topic stay valid after
+	// being retired) and "photos" replaces the photos (a removed photo's file
+	// is deleted). Setting the current values succeeds and records nothing.
 	//
 	// Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
-	// ERROR_REASON_VALIDATION, ERROR_REASON_TAG_LIMIT.
+	// ERROR_REASON_VALIDATION, ERROR_REASON_TAG_LIMIT and the upload errors
+	// of CreateQuestion.
 	UpdateQuestion(ctx context.Context, in *UpdateQuestionRequest, opts ...grpc.CallOption) (*UpdateQuestionResponse, error)
 	// DeleteQuestion deletes a question; its answers are no longer visible
 	// with it. Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.
@@ -127,7 +149,8 @@ type QAServiceClient interface {
 	// client_request_id by the same caller returns the first answer.
 	//
 	// Errors: the common ones, ERROR_REASON_VALIDATION,
-	// ERROR_REASON_QUESTION_NOT_FOUND.
+	// ERROR_REASON_QUESTION_NOT_FOUND and the upload errors of
+	// CreateQuestion.
 	CreateAnswer(ctx context.Context, in *CreateAnswerRequest, opts ...grpc.CallOption) (*CreateAnswerResponse, error)
 	// ListAnswers lists the visible answers of a visible question: most
 	// helpful votes first, then oldest first. Works on read-only tayfas.
@@ -135,11 +158,12 @@ type QAServiceClient interface {
 	// Errors: the common ones, ERROR_REASON_VALIDATION,
 	// ERROR_REASON_QUESTION_NOT_FOUND.
 	ListAnswers(ctx context.Context, in *ListAnswersRequest, opts ...grpc.CallOption) (*ListAnswersResponse, error)
-	// UpdateAnswer replaces an answer's body. Setting the current body
-	// succeeds and records nothing.
+	// UpdateAnswer replaces an answer's body and, in the question pool, its
+	// photos (empty photo_upload_ids removes them). Setting the current
+	// values succeeds and records nothing.
 	//
 	// Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
-	// ERROR_REASON_VALIDATION.
+	// ERROR_REASON_VALIDATION and the upload errors of CreateQuestion.
 	UpdateAnswer(ctx context.Context, in *UpdateAnswerRequest, opts ...grpc.CallOption) (*UpdateAnswerResponse, error)
 	// DeleteAnswer deletes an answer. The author's own deletion also removes
 	// its votes. Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.
@@ -327,8 +351,11 @@ func (c *qAServiceClient) DeleteTag(ctx context.Context, in *DeleteTagRequest, o
 //     anything else is ERROR_REASON_VALIDATION.
 //   - A caller who is not an ACTIVE member gets
 //     ERROR_REASON_TAYFA_NOT_FOUND, the same as for an unknown tayfa.
-//   - While the tayfa has the qa module turned off, every method, reads
-//     included, fails with ERROR_REASON_MODULE_DISABLED.
+//   - While the tayfa has the question's module turned off, every method,
+//     reads included, fails with ERROR_REASON_MODULE_DISABLED: the qa
+//     module for the Soru-Cevap pool, the question_pool module for the
+//     question pool. A method on an existing question or answer checks the
+//     module of its pool; the tag methods belong to the qa module.
 //   - The permission table (ADR-0004) decides the rest:
 //     ERROR_REASON_PERMISSION_DENIED for a role that is too low,
 //     ERROR_REASON_MUTED for a muted member's writes.
@@ -357,6 +384,18 @@ func (c *qAServiceClient) DeleteTag(ctx context.Context, in *DeleteTagRequest, o
 // Audit records and events never hold titles, bodies, tag names or search
 // queries, and the search query is never logged.
 //
+// Pools (issue #271; ADR-0040 §2): the same questions, answers and helpful
+// votes serve two modules. QUESTION_POOL_QA is the tayfa's Soru-Cevap
+// (title, body, free tags). QUESTION_POOL_QUESTION_POOL is the Eğitim
+// question pool: no title and no tags; the subject (required) and topic
+// (optional) come from Tayfam's study tag list (CatalogService study_tags,
+// keys only); the text and/or up to 2 photos (upload purpose
+// UPLOAD_PURPOSE_QUESTION_POOL) of the question and of each answer. There
+// is no "solved" mark in either pool: answers are ordered by helpful votes.
+// A question's pool never changes. The photos are the authors' own
+// uploads; the client reads their links with MediaService.GetMediaUrls
+// (active members, question_pool module on).
+//
 // Paging: page_size 0 means 20; values above 100 are treated as 100;
 // negative values are ERROR_REASON_VALIDATION. page_token is opaque and only
 // valid for the same tayfa and the same request (question, query, tag); a
@@ -368,25 +407,32 @@ type QAServiceServer interface {
 	// a new one is created. A repeat with the same client_request_id by the
 	// same caller returns the first question and creates nothing.
 	//
-	// Errors: the common ones, ERROR_REASON_VALIDATION,
-	// ERROR_REASON_TAG_LIMIT.
+	// Errors: the common ones, ERROR_REASON_VALIDATION (also: a field of the
+	// other pool, subject_key or topic_key not a selectable study tag),
+	// ERROR_REASON_TAG_LIMIT, ERROR_REASON_UPLOAD_NOT_FOUND,
+	// ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE.
 	CreateQuestion(context.Context, *CreateQuestionRequest) (*CreateQuestionResponse, error)
 	// GetQuestion returns one visible question. Works on read-only tayfas.
 	GetQuestion(context.Context, *GetQuestionRequest) (*GetQuestionResponse, error)
-	// ListQuestions lists visible questions, newest first. With query, only
-	// questions whose title or body match it (Turkish full-text search,
-	// İ/ı aware), most relevant first. With tag_id, only questions with that
-	// tag. Works on read-only tayfas.
+	// ListQuestions lists the visible questions of one pool, newest first.
+	// With query, only questions whose title or body match it (Turkish
+	// full-text search, İ/ı aware), most relevant first. With tag_id, only
+	// questions with that tag (qa pool); with subject_key and topic_key,
+	// only questions with that subject or topic (question pool; retired tags
+	// too). Works on read-only tayfas.
 	//
 	// Errors: the common ones, ERROR_REASON_VALIDATION,
 	// ERROR_REASON_TAG_NOT_FOUND.
 	ListQuestions(context.Context, *ListQuestionsRequest) (*ListQuestionsResponse, error)
 	// UpdateQuestion changes the fields named in update_mask. "tags" replaces
-	// the question's tags. Setting the current values succeeds and records
-	// nothing.
+	// the question's tags. In the question pool "subject" sets subject_key
+	// and topic_key together (the same subject and topic stay valid after
+	// being retired) and "photos" replaces the photos (a removed photo's file
+	// is deleted). Setting the current values succeeds and records nothing.
 	//
 	// Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
-	// ERROR_REASON_VALIDATION, ERROR_REASON_TAG_LIMIT.
+	// ERROR_REASON_VALIDATION, ERROR_REASON_TAG_LIMIT and the upload errors
+	// of CreateQuestion.
 	UpdateQuestion(context.Context, *UpdateQuestionRequest) (*UpdateQuestionResponse, error)
 	// DeleteQuestion deletes a question; its answers are no longer visible
 	// with it. Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.
@@ -402,7 +448,8 @@ type QAServiceServer interface {
 	// client_request_id by the same caller returns the first answer.
 	//
 	// Errors: the common ones, ERROR_REASON_VALIDATION,
-	// ERROR_REASON_QUESTION_NOT_FOUND.
+	// ERROR_REASON_QUESTION_NOT_FOUND and the upload errors of
+	// CreateQuestion.
 	CreateAnswer(context.Context, *CreateAnswerRequest) (*CreateAnswerResponse, error)
 	// ListAnswers lists the visible answers of a visible question: most
 	// helpful votes first, then oldest first. Works on read-only tayfas.
@@ -410,11 +457,12 @@ type QAServiceServer interface {
 	// Errors: the common ones, ERROR_REASON_VALIDATION,
 	// ERROR_REASON_QUESTION_NOT_FOUND.
 	ListAnswers(context.Context, *ListAnswersRequest) (*ListAnswersResponse, error)
-	// UpdateAnswer replaces an answer's body. Setting the current body
-	// succeeds and records nothing.
+	// UpdateAnswer replaces an answer's body and, in the question pool, its
+	// photos (empty photo_upload_ids removes them). Setting the current
+	// values succeeds and records nothing.
 	//
 	// Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
-	// ERROR_REASON_VALIDATION.
+	// ERROR_REASON_VALIDATION and the upload errors of CreateQuestion.
 	UpdateAnswer(context.Context, *UpdateAnswerRequest) (*UpdateAnswerResponse, error)
 	// DeleteAnswer deletes an answer. The author's own deletion also removes
 	// its votes. Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY.

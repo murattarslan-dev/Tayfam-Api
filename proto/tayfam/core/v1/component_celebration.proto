@@ -1,0 +1,104 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// CelebrationComponentService is the celebration component (kind
+// "celebration", issue #255; ADR-0025 §4, §5): the winner's screen of an
+// event and the tayfa's notice that the winner was announced.
+//
+// With source (the key of a scoreboard, bracket, ranking or vote component
+// of the same type version) the winners are read from the source's stored
+// result whenever the celebration is read: the winning seats of every
+// finished table, the bracket's champions once it finished, the ranking's
+// first place, the closed vote's most voted options. Without source the
+// organizer names one to ten winners from the event's participants when
+// announcing. A winner is a person, a team, a guest player or a vote's
+// option. A ranking of a sensitive measure, and every celebration of
+// a type whose attendance is sensitive, has no winner for anyone.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+service CelebrationComponentService {
+  // GetCelebration returns the celebration. Open to every active member,
+  // muted ones included; it reads on cancelled and frozen events too.
+  rpc GetCelebration(GetCelebrationRequest) returns (GetCelebrationResponse);
+
+  // AnnounceCelebration announces the winner; managers only, from the
+  // event's start until the component freezes seven days after the
+  // event's end. The first announcement sends the tayfa's members but the
+  // caller an in-app "celebration" notification (no push; it never names
+  // the winner); announcing again only replaces the winners chosen by
+  // hand and notifies no one. Errors: ERROR_REASON_VALIDATION (winner_ids:
+  // given with a source, or not one to ten distinct people without one),
+  // ERROR_REASON_CELEBRATION_NOT_STARTED, ERROR_REASON_CELEBRATION_NO_WINNER
+  // (the source has no winner yet, or hides it),
+  // ERROR_REASON_CELEBRATION_NOT_PARTICIPANT, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc AnnounceCelebration(AnnounceCelebrationRequest) returns (AnnounceCelebrationResponse);
+}
+
+// CelebrationWinner is one winner: exactly one of user_id, team_id and
+// guest_id is set, except for a vote source (vote_option_id), where
+// user_id is the person behind the option (the participant, the vehicle's
+// owner, the photo's uploader) and is empty for a free option.
+message CelebrationWinner {
+  string user_id = 1;
+  // A team of the teams component the source seats.
+  string team_id = 2;
+  // A guest player of the event (no account; the nickname is read from
+  // the event's guests).
+  string guest_id = 3;
+  // The scoreboard table the winner won at; empty for the other sources.
+  string table_id = 4;
+  // For a vote source (issue #254): the winning option's ID in the vote
+  // component (GetVote: a free option, a participant's user ID, an event
+  // vehicle or an album photo). Empty for the other sources.
+  string vote_option_id = 5;
+}
+
+// EventCelebration is one celebration component of an event, as the
+// caller sees it.
+message EventCelebration {
+  // The key and kind of the component the winners come from; empty for
+  // winners chosen by hand.
+  string source = 1;
+  string source_kind = 2;
+  // The winners: the source's (tables in their order, a tie in the order
+  // of seats or places) or those chosen by hand in the order given. Empty
+  // while the source has no winner, before winners are chosen by hand and
+  // when hidden.
+  repeated CelebrationWinner winners = 3;
+  // The source hides its result from everyone (a sensitive measure), or
+  // the type's attendance is sensitive.
+  bool hidden = 4;
+  // The organizer announced the winner, first at announce_time.
+  bool announced = 5;
+  google.protobuf.Timestamp announce_time = 6;
+  // The caller may announce now (a manager; the event started, not
+  // cancelled or frozen, the tayfa not read-only).
+  bool caller_can_announce = 7;
+}
+
+message GetCelebrationRequest {
+  ComponentRef ref = 1;
+}
+
+message GetCelebrationResponse {
+  EventCelebration celebration = 1;
+}
+
+message AnnounceCelebrationRequest {
+  ComponentRef ref = 1;
+  // The winners chosen by hand (one to ten participants); only for a
+  // celebration without a source.
+  repeated string winner_ids = 2;
+}
+
+message AnnounceCelebrationResponse {
+  EventCelebration celebration = 1;
+}

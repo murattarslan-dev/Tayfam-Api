@@ -158,7 +158,8 @@ func TestAuditEntryHasNoPersonalData(t *testing.T) {
 	for f := range reflect.TypeFor[AuditEntry]().Fields() {
 		fields = append(fields, f.Name)
 	}
-	want := []string{"ID", "CreatedAt", "Actor", "ActorName", "Action", "TargetType", "TargetID", "Reason", "Tayfa", "User", "Report"}
+	// CatalogKey is a catalog key or a blocked domain (issue #262).
+	want := []string{"ID", "CreatedAt", "Actor", "ActorName", "Action", "TargetType", "TargetID", "Reason", "Tayfa", "User", "Report", "CatalogKey"}
 	if !slices.Equal(fields, want) {
 		t.Fatalf("denetim kaydı alanları değişti: %v", fields)
 	}
@@ -223,5 +224,38 @@ func TestUserStats(t *testing.T) {
 	want := UserStats{Total: 7, Active: 1, Suspended: 1, Banned: 1, DeletionsPending: 2, DeletionsOverdue: 1}
 	if got != want {
 		t.Fatalf("sayılar = %+v, beklenen %+v", got, want)
+	}
+}
+
+// TestListAuditLogsCatalogKey: a catalog action's key comes back with the
+// entry (issue #262); a value that is not a key or a host name is dropped.
+func TestListAuditLogsCatalogKey(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	c := e.signedIn(t)
+	base := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	e.coreEntry(t, base, "catalog.type_update", "", id.ID{}, map[string]string{"catalog_key": "board_game_night"})
+	e.coreEntry(t, base.Add(time.Hour), "catalog.domain_block", "", id.ID{}, map[string]string{"catalog_key": "Bozuk Değer"})
+	p, err := e.svc.ListAuditLogs(ctx, c, AuditFilter{Since: base}, 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := map[string]string{}
+	for _, en := range p.Entries {
+		keys[en.Action] = en.CatalogKey
+	}
+	if keys["catalog.type_update"] != "board_game_night" || keys["catalog.domain_block"] != "" {
+		t.Fatalf("katalog anahtarları = %v", keys)
+	}
+}
+
+func TestValidCatalogKey(t *testing.T) {
+	for s, want := range map[string]bool{
+		"board_game_night": true, "example.com": true, "a-b.example.com": true, "x1": true,
+		"": false, "Büyük": false, "_x": false, ".x": false, "a b": false, "a/b": false, "a@b.com": false,
+	} {
+		if got := ValidCatalogKey(s); got != want {
+			t.Errorf("ValidCatalogKey(%q) = %v", s, got)
+		}
 	}
 }

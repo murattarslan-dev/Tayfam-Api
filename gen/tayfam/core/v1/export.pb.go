@@ -33,7 +33,9 @@ const (
 	CoreExportSection_CORE_EXPORT_SECTION_EVENT_RSVPS CoreExportSection = 2
 	// Hike start and return times.
 	CoreExportSection_CORE_EXPORT_SECTION_HIKE_CHECKINS CoreExportSection = 3
-	// Convoy vehicles, plates included.
+	// The vehicles the caller wrote on events (the vehicles component,
+	// issue #240), plates included. The name is from Faz 1; vehicles of
+	// every event type are here.
 	CoreExportSection_CORE_EXPORT_SECTION_CONVOY_VEHICLES CoreExportSection = 4
 	// The attendance history (user_activity_records).
 	CoreExportSection_CORE_EXPORT_SECTION_ACTIVITY_RECORDS CoreExportSection = 5
@@ -49,7 +51,8 @@ const (
 	// The caller's own votes, anonymous polls included (v14: the only place
 	// an anonymous vote ever leaves the database).
 	CoreExportSection_CORE_EXPORT_SECTION_POLL_VOTES CoreExportSection = 12
-	// Fishing catches, the shared catch place included.
+	// Every log component entry (issue #243; fishing catches among them),
+	// the location included. The name is from Faz 1.
 	CoreExportSection_CORE_EXPORT_SECTION_FISHING_CATCHES CoreExportSection = 13
 	CoreExportSection_CORE_EXPORT_SECTION_FRIENDSHIPS     CoreExportSection = 14
 	// Users the caller blocked.
@@ -73,6 +76,97 @@ const (
 	// safety contacts they chose (issue #210, ADR-0033). Being someone
 	// else's safety contact is that person's data and is not exported.
 	CoreExportSection_CORE_EXPORT_SECTION_DISCOVER CoreExportSection = 23
+	// The caller's requests for a seat in someone else's vehicle (the
+	// vehicles component, issue #240). The vehicle's owner and plate are the
+	// owner's data and are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS CoreExportSection = 24
+	// The caller's personal measurements (the measure component, issue #245):
+	// their own entries and those an organizer or referee entered for them.
+	// Total measurements belong to the event and are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_MEASUREMENTS CoreExportSection = 25
+	// The teams the caller is in (the teams component, issue #248): the event,
+	// the component and the team's ID and position. Teammates and the team's
+	// name are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS CoreExportSection = 26
+	// The caller's places in draws (the draw component, issue #249): the
+	// event, the component, the place and when it was drawn. The others in
+	// the draw are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_DRAW_ENTRIES CoreExportSection = 27
+	// The caller's seats at scoreboard tables (the scoreboard component,
+	// issue #250): the event, the component, the table, the seat and the
+	// caller's score in every round. The others at the table are not
+	// exported.
+	CoreExportSection_CORE_EXPORT_SECTION_SCORES CoreExportSection = 28
+	// The caller's matches in brackets (the bracket component, issue #251),
+	// through their place in the draw: the event, the component, the round,
+	// the place and the caller's own score in every game. The opponent and
+	// their score are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_BRACKET_MATCHES CoreExportSection = 29
+	// The guest players the caller added (issue #252): the guest, the event,
+	// the nickname (empty once cleared) and when. The guest's seats, places
+	// and scores are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_GUEST_PLAYERS CoreExportSection = 30
+	// The rankings an organizer or referee entered for the caller by hand
+	// (the ranking component, issue #253): the time or the place. Rankings
+	// computed from a measure are the caller's measurements.
+	CoreExportSection_CORE_EXPORT_SECTION_RANKING_ENTRIES CoreExportSection = 31
+	// The celebrations that named the caller a winner by hand (the
+	// celebration component, issue #255): the event, the component and when
+	// it was announced. Who announced it and the other winners are not
+	// exported; wins read from a scoreboard, bracket or ranking are in those
+	// sections.
+	CoreExportSection_CORE_EXPORT_SECTION_CELEBRATION_WINS CoreExportSection = 32
+	// The questions the caller asked in events (the questions component,
+	// issue #256), anonymous ones included, and the questions the caller
+	// voted for (without their text). Other people's questions, votes and
+	// who marked a question answered are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_EVENT_QUESTIONS CoreExportSection = 33
+	// The badges the caller earned (issue #258, ADR-0039 §5): the badge's
+	// key, its period ("all" or the year), when it was earned, and for a
+	// champion badge the event and its tayfa. Tayfa badges are the tayfa's.
+	CoreExportSection_CORE_EXPORT_SECTION_BADGES CoreExportSection = 34
+	// The caller's statistics (issue #266, ADR-0026): per tayfa and year (no
+	// year for all time) the metric, its value and how many events made it.
+	// Derived from frozen events; nothing sensitive is in it.
+	CoreExportSection_CORE_EXPORT_SECTION_USER_STATS CoreExportSection = 35
+	// The tayfa daily content items the caller added (issue #269, ADR-0027
+	// §5), deleted ones included: text, attribution, pinned day. Their place
+	// in the pool and who deleted them are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_DAILY_ITEMS CoreExportSection = 36
+	// The library items the caller owns (issue #270, ADR-0040 §1),
+	// withdrawn ones included: kind, name, note, status and times. The photo
+	// is not in it.
+	CoreExportSection_CORE_EXPORT_SECTION_LIBRARY_ITEMS CoreExportSection = 37
+	// The caller's loans, as borrower or as the item's owner (kept for a
+	// year after they end), and the queues the caller waits in: the item,
+	// the caller's role, the state and its times. The other person is not
+	// exported.
+	CoreExportSection_CORE_EXPORT_SECTION_LIBRARY_LOANS CoreExportSection = 38
+	// The materials the caller added to a tayfa's material library (issue
+	// #261, ADR-0040 §3), deleted ones included: kind, title, link and its
+	// domain, study tags and times. The photos are not in it.
+	CoreExportSection_CORE_EXPORT_SECTION_MATERIALS CoreExportSection = 39
+	// The vehicles of the caller's garage (issue #272, ADR-0040 §4), deleted
+	// ones included: make, model, model year, colour, note and times. The
+	// photos are not in it.
+	CoreExportSection_CORE_EXPORT_SECTION_GARAGE_VEHICLES CoreExportSection = 40
+	// The caller's choices of showing the garage in a tayfa (issue #272).
+	CoreExportSection_CORE_EXPORT_SECTION_GARAGE_VISIBILITY CoreExportSection = 41
+	// The caller's referee assignments (issue #238; exported since #275):
+	// event, component and scope. Who assigned and the other referees are not
+	// in it.
+	CoreExportSection_CORE_EXPORT_SECTION_EVENT_REFEREES CoreExportSection = 42
+	// The list items (checklist component, issue #241; exported since #275)
+	// the caller added or took on, with "added by me" / "assigned to me".
+	CoreExportSection_CORE_EXPORT_SECTION_CHECKLIST_ITEMS CoreExportSection = 43
+	// The values the caller first added to a tayfa's vocabulary (issue #244;
+	// exported since #275).
+	CoreExportSection_CORE_EXPORT_SECTION_VOCABULARY CoreExportSection = 44
+	// The caller's votes (the vote component, issue #254): event, component,
+	// the kind of target, a free option's label and times. Who, which vehicle
+	// or which photo the caller voted for (other people's data), other
+	// people's votes and the options the caller wrote are not exported.
+	CoreExportSection_CORE_EXPORT_SECTION_EVENT_VOTES CoreExportSection = 45
 )
 
 // Enum value maps for CoreExportSection.
@@ -101,31 +195,75 @@ var (
 		20: "CORE_EXPORT_SECTION_SOCIAL_SETTINGS",
 		21: "CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS",
 		23: "CORE_EXPORT_SECTION_DISCOVER",
+		24: "CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS",
+		25: "CORE_EXPORT_SECTION_MEASUREMENTS",
+		26: "CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS",
+		27: "CORE_EXPORT_SECTION_DRAW_ENTRIES",
+		28: "CORE_EXPORT_SECTION_SCORES",
+		29: "CORE_EXPORT_SECTION_BRACKET_MATCHES",
+		30: "CORE_EXPORT_SECTION_GUEST_PLAYERS",
+		31: "CORE_EXPORT_SECTION_RANKING_ENTRIES",
+		32: "CORE_EXPORT_SECTION_CELEBRATION_WINS",
+		33: "CORE_EXPORT_SECTION_EVENT_QUESTIONS",
+		34: "CORE_EXPORT_SECTION_BADGES",
+		35: "CORE_EXPORT_SECTION_USER_STATS",
+		36: "CORE_EXPORT_SECTION_DAILY_ITEMS",
+		37: "CORE_EXPORT_SECTION_LIBRARY_ITEMS",
+		38: "CORE_EXPORT_SECTION_LIBRARY_LOANS",
+		39: "CORE_EXPORT_SECTION_MATERIALS",
+		40: "CORE_EXPORT_SECTION_GARAGE_VEHICLES",
+		41: "CORE_EXPORT_SECTION_GARAGE_VISIBILITY",
+		42: "CORE_EXPORT_SECTION_EVENT_REFEREES",
+		43: "CORE_EXPORT_SECTION_CHECKLIST_ITEMS",
+		44: "CORE_EXPORT_SECTION_VOCABULARY",
+		45: "CORE_EXPORT_SECTION_EVENT_VOTES",
 	}
 	CoreExportSection_value = map[string]int32{
-		"CORE_EXPORT_SECTION_UNSPECIFIED":        0,
-		"CORE_EXPORT_SECTION_MEMBERSHIPS":        1,
-		"CORE_EXPORT_SECTION_EVENT_RSVPS":        2,
-		"CORE_EXPORT_SECTION_HIKE_CHECKINS":      3,
-		"CORE_EXPORT_SECTION_CONVOY_VEHICLES":    4,
-		"CORE_EXPORT_SECTION_ACTIVITY_RECORDS":   5,
-		"CORE_EXPORT_SECTION_ANNOUNCEMENTS":      6,
-		"CORE_EXPORT_SECTION_EVENTS":             7,
-		"CORE_EXPORT_SECTION_QUESTIONS":          8,
-		"CORE_EXPORT_SECTION_ANSWERS":            9,
-		"CORE_EXPORT_SECTION_ANSWER_VOTES":       10,
-		"CORE_EXPORT_SECTION_POLLS":              11,
-		"CORE_EXPORT_SECTION_POLL_VOTES":         12,
-		"CORE_EXPORT_SECTION_FISHING_CATCHES":    13,
-		"CORE_EXPORT_SECTION_FRIENDSHIPS":        14,
-		"CORE_EXPORT_SECTION_BLOCKS":             15,
-		"CORE_EXPORT_SECTION_REPORTS":            16,
-		"CORE_EXPORT_SECTION_UPLOADS":            17,
-		"CORE_EXPORT_SECTION_EVENT_PHOTOS":       18,
-		"CORE_EXPORT_SECTION_AVAILABILITY":       19,
-		"CORE_EXPORT_SECTION_SOCIAL_SETTINGS":    20,
-		"CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS": 21,
-		"CORE_EXPORT_SECTION_DISCOVER":           23,
+		"CORE_EXPORT_SECTION_UNSPECIFIED":           0,
+		"CORE_EXPORT_SECTION_MEMBERSHIPS":           1,
+		"CORE_EXPORT_SECTION_EVENT_RSVPS":           2,
+		"CORE_EXPORT_SECTION_HIKE_CHECKINS":         3,
+		"CORE_EXPORT_SECTION_CONVOY_VEHICLES":       4,
+		"CORE_EXPORT_SECTION_ACTIVITY_RECORDS":      5,
+		"CORE_EXPORT_SECTION_ANNOUNCEMENTS":         6,
+		"CORE_EXPORT_SECTION_EVENTS":                7,
+		"CORE_EXPORT_SECTION_QUESTIONS":             8,
+		"CORE_EXPORT_SECTION_ANSWERS":               9,
+		"CORE_EXPORT_SECTION_ANSWER_VOTES":          10,
+		"CORE_EXPORT_SECTION_POLLS":                 11,
+		"CORE_EXPORT_SECTION_POLL_VOTES":            12,
+		"CORE_EXPORT_SECTION_FISHING_CATCHES":       13,
+		"CORE_EXPORT_SECTION_FRIENDSHIPS":           14,
+		"CORE_EXPORT_SECTION_BLOCKS":                15,
+		"CORE_EXPORT_SECTION_REPORTS":               16,
+		"CORE_EXPORT_SECTION_UPLOADS":               17,
+		"CORE_EXPORT_SECTION_EVENT_PHOTOS":          18,
+		"CORE_EXPORT_SECTION_AVAILABILITY":          19,
+		"CORE_EXPORT_SECTION_SOCIAL_SETTINGS":       20,
+		"CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS":    21,
+		"CORE_EXPORT_SECTION_DISCOVER":              23,
+		"CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS": 24,
+		"CORE_EXPORT_SECTION_MEASUREMENTS":          25,
+		"CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS":      26,
+		"CORE_EXPORT_SECTION_DRAW_ENTRIES":          27,
+		"CORE_EXPORT_SECTION_SCORES":                28,
+		"CORE_EXPORT_SECTION_BRACKET_MATCHES":       29,
+		"CORE_EXPORT_SECTION_GUEST_PLAYERS":         30,
+		"CORE_EXPORT_SECTION_RANKING_ENTRIES":       31,
+		"CORE_EXPORT_SECTION_CELEBRATION_WINS":      32,
+		"CORE_EXPORT_SECTION_EVENT_QUESTIONS":       33,
+		"CORE_EXPORT_SECTION_BADGES":                34,
+		"CORE_EXPORT_SECTION_USER_STATS":            35,
+		"CORE_EXPORT_SECTION_DAILY_ITEMS":           36,
+		"CORE_EXPORT_SECTION_LIBRARY_ITEMS":         37,
+		"CORE_EXPORT_SECTION_LIBRARY_LOANS":         38,
+		"CORE_EXPORT_SECTION_MATERIALS":             39,
+		"CORE_EXPORT_SECTION_GARAGE_VEHICLES":       40,
+		"CORE_EXPORT_SECTION_GARAGE_VISIBILITY":     41,
+		"CORE_EXPORT_SECTION_EVENT_REFEREES":        42,
+		"CORE_EXPORT_SECTION_CHECKLIST_ITEMS":       43,
+		"CORE_EXPORT_SECTION_VOCABULARY":            44,
+		"CORE_EXPORT_SECTION_EVENT_VOTES":           45,
 	}
 )
 
@@ -253,7 +391,7 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	"\x13ExportMyDataRequest\"m\n" +
 	"\x14ExportMyDataResponse\x12;\n" +
 	"\asection\x18\x01 \x01(\x0e2!.tayfam.core.v1.CoreExportSectionR\asection\x12\x18\n" +
-	"\arecords\x18\x02 \x03(\fR\arecords*\xe3\x06\n" +
+	"\arecords\x18\x02 \x03(\fR\arecords*\xbc\r\n" +
 	"\x11CoreExportSection\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fCORE_EXPORT_SECTION_MEMBERSHIPS\x10\x01\x12#\n" +
@@ -278,7 +416,29 @@ const file_tayfam_core_v1_export_proto_rawDesc = "" +
 	" CORE_EXPORT_SECTION_AVAILABILITY\x10\x13\x12'\n" +
 	"#CORE_EXPORT_SECTION_SOCIAL_SETTINGS\x10\x14\x12*\n" +
 	"&CORE_EXPORT_SECTION_FRIEND_SUGGESTIONS\x10\x15\x12 \n" +
-	"\x1cCORE_EXPORT_SECTION_DISCOVER\x10\x172l\n" +
+	"\x1cCORE_EXPORT_SECTION_DISCOVER\x10\x17\x12-\n" +
+	")CORE_EXPORT_SECTION_VEHICLE_SEAT_REQUESTS\x10\x18\x12$\n" +
+	" CORE_EXPORT_SECTION_MEASUREMENTS\x10\x19\x12(\n" +
+	"$CORE_EXPORT_SECTION_TEAM_MEMBERSHIPS\x10\x1a\x12$\n" +
+	" CORE_EXPORT_SECTION_DRAW_ENTRIES\x10\x1b\x12\x1e\n" +
+	"\x1aCORE_EXPORT_SECTION_SCORES\x10\x1c\x12'\n" +
+	"#CORE_EXPORT_SECTION_BRACKET_MATCHES\x10\x1d\x12%\n" +
+	"!CORE_EXPORT_SECTION_GUEST_PLAYERS\x10\x1e\x12'\n" +
+	"#CORE_EXPORT_SECTION_RANKING_ENTRIES\x10\x1f\x12(\n" +
+	"$CORE_EXPORT_SECTION_CELEBRATION_WINS\x10 \x12'\n" +
+	"#CORE_EXPORT_SECTION_EVENT_QUESTIONS\x10!\x12\x1e\n" +
+	"\x1aCORE_EXPORT_SECTION_BADGES\x10\"\x12\"\n" +
+	"\x1eCORE_EXPORT_SECTION_USER_STATS\x10#\x12#\n" +
+	"\x1fCORE_EXPORT_SECTION_DAILY_ITEMS\x10$\x12%\n" +
+	"!CORE_EXPORT_SECTION_LIBRARY_ITEMS\x10%\x12%\n" +
+	"!CORE_EXPORT_SECTION_LIBRARY_LOANS\x10&\x12!\n" +
+	"\x1dCORE_EXPORT_SECTION_MATERIALS\x10'\x12'\n" +
+	"#CORE_EXPORT_SECTION_GARAGE_VEHICLES\x10(\x12)\n" +
+	"%CORE_EXPORT_SECTION_GARAGE_VISIBILITY\x10)\x12&\n" +
+	"\"CORE_EXPORT_SECTION_EVENT_REFEREES\x10*\x12'\n" +
+	"#CORE_EXPORT_SECTION_CHECKLIST_ITEMS\x10+\x12\"\n" +
+	"\x1eCORE_EXPORT_SECTION_VOCABULARY\x10,\x12#\n" +
+	"\x1fCORE_EXPORT_SECTION_EVENT_VOTES\x10-2l\n" +
 	"\rExportService\x12[\n" +
 	"\fExportMyData\x12#.tayfam.core.v1.ExportMyDataRequest\x1a$.tayfam.core.v1.ExportMyDataResponse0\x01B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vExportProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"

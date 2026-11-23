@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/stats"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/db/dbtest"
@@ -674,7 +676,7 @@ func TestTayfaSetting(t *testing.T) {
 	plain := e.user(t, "Üye", "tayfa")
 	e.member(t, tf, plain, "member", "active", "code")
 
-	if st, err := s.GetTayfa(ctx, admin, tf); err != nil || st != (TayfaState{State: StateOff}) {
+	if st, err := s.GetTayfa(ctx, admin, tf); err != nil || st != (TayfaState{State: StateOff, StatsShowcase: true}) {
 		t.Fatalf("başlangıç: %+v %v", st, err)
 	}
 	if _, err := s.SetTayfa(ctx, plain, tf, true); !errors.Is(err, apperr.ErrPermissionDenied) {
@@ -690,7 +692,7 @@ func TestTayfaSetting(t *testing.T) {
 		e.member(t, tf, e.user(t, "Üye", "tayfa"), "member", "active", "code")
 	}
 	st, err := s.SetTayfa(ctx, admin, tf, true)
-	if err != nil || st != (TayfaState{State: StatePending, Enabled: true}) {
+	if err != nil || st != (TayfaState{State: StatePending, Enabled: true, StatsShowcase: true}) {
 		t.Fatalf("açma: %+v %v", st, err)
 	}
 	if n := e.one(t, `SELECT count(*)::text FROM audit_logs WHERE tayfa_id = $1 AND action = 'tayfa.discover_enabled'`, tf.PG()); n != "1" {
@@ -701,7 +703,7 @@ func TestTayfaSetting(t *testing.T) {
 		t.Fatalf("onaylı: %+v", st)
 	}
 	// Turning it off and on keeps the approval.
-	if st, _ := s.SetTayfa(ctx, admin, tf, false); st != (TayfaState{State: StateOff}) {
+	if st, _ := s.SetTayfa(ctx, admin, tf, false); st != (TayfaState{State: StateOff, StatsShowcase: true}) {
 		t.Fatalf("kapatma: %+v", st)
 	}
 	if st, _ := s.SetTayfa(ctx, admin, tf, true); st.State != StateListed {
@@ -721,6 +723,108 @@ func TestTayfaSetting(t *testing.T) {
 	_, _ = s.SetTayfa(ctx, admin, tf, false)
 	if st, _ := s.SetTayfa(ctx, admin, tf, true); st.State != StatePending {
 		t.Fatalf("retten sonra yeniden başvuru: %+v", st)
+	}
+}
+
+// TestStatsShowcaseSetting (issue #267, ADR-0026 §3): on by default; only
+// an admin changes it, also while the tayfa is not in Keşfet and with the
+// flag off; a change is audited, the same value records nothing.
+func TestStatsShowcaseSetting(t *testing.T) {
+	e := setup(t)
+	s := e.svc(t, false, 0)
+	tf, admin := e.listedTayfa(t, 5)
+	mod := e.user(t, "Moderatör", "tayfa")
+	e.member(t, tf, mod, "moderator", "active", "code")
+	plain := e.user(t, "Üye", "tayfa")
+	e.member(t, tf, plain, "member", "active", "code")
+
+	if st, err := s.GetTayfa(ctx, admin, tf); err != nil || !st.StatsShowcase {
+		t.Fatalf("varsayılan: %+v %v", st, err)
+	}
+	for _, u := range []id.ID{mod, plain} {
+		if _, err := s.SetStatsShowcase(ctx, u, tf, false); !errors.Is(err, apperr.ErrPermissionDenied) {
+			t.Fatalf("yönetici olmayan değiştirdi: %v", err)
+		}
+	}
+	if _, err := s.SetStatsShowcase(ctx, e.user(t, "Yabancı", "tayfa"), tf, false); !errors.Is(err, apperr.ErrTayfaNotFound) {
+		t.Fatalf("yabancı değiştirdi: %v", err)
+	}
+	st, err := s.SetStatsShowcase(ctx, admin, tf, false)
+	if err != nil || st != (TayfaState{State: StateListed, Enabled: true}) {
+		t.Fatalf("gizleme: %+v %v", st, err)
+	}
+	if _, err := s.SetStatsShowcase(ctx, admin, tf, false); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.SetStatsShowcase(ctx, admin, tf, true); !st.StatsShowcase {
+		t.Fatalf("gösterme: %+v", st)
+	}
+	for action, want := range map[string]string{AuditStatsShowcaseHidden: "1", AuditStatsShowcaseShown: "1"} {
+		if n := e.one(t, `SELECT count(*)::text FROM audit_logs WHERE tayfa_id = $1 AND action = $2`, tf.PG(), action); n != want {
+			t.Fatalf("denetim kaydı %s: %s", action, n)
+		}
+	}
+	if v := e.one(t, `SELECT stats_showcase::text FROM tayfas WHERE id = $1`, tf.PG()); v != "true" {
+		t.Fatalf("bayrak: %s", v)
+	}
+}
+
+// showcaseEvents writes n frozen in-person events of the tayfa with one
+// verified attendance each and recomputes its statistics.
+func (e *env) showcaseEvents(t *testing.T, tf, organizer, attendee id.ID, n int) {
+	t.Helper()
+	for i := range n {
+		start := -time.Duration(10+i) * 24 * time.Hour
+		ev := e.event(t, tf, organizer, eventOpts{discoverable: false, mode: "in_person", start: start, end: start + time.Hour, status: "scheduled"})
+		e.rsvp(t, ev, attendee, "going", "attended")
+	}
+	must(t, pgx.BeginFunc(ctx, e.pool, func(tx pgx.Tx) error {
+		return stats.Recompute(ctx, store.New(tx), tf, e.base, nil)
+	}))
+}
+
+// TestFeedShowcase (issue #267, ADR-0026 §3): the card comes with the feed
+// item only from three frozen events and while the admins leave it on;
+// without it the item has no showcase at all. A tayfa that is not in the
+// viewer's Keşfet shows nothing, card or not.
+func TestFeedShowcase(t *testing.T) {
+	e := setup(t)
+	sc := e.scenario(t)
+	e.showcaseEvents(t, sc.tf, sc.admin, sc.friend, 2)
+	items := e.feed(t, sc.viewer)
+	if len(items) != 1 || items[0].Showcase != nil {
+		t.Fatalf("iki etkinlikte kart: %+v", items)
+	}
+
+	e.showcaseEvents(t, sc.tf, sc.admin, sc.friend, 1)
+	items = e.feed(t, sc.viewer)
+	if len(items) != 1 || items[0].Showcase == nil {
+		t.Fatalf("üç etkinlikte kart yok: %+v", items)
+	}
+	got := map[string]float64{}
+	for _, st := range items[0].Showcase.Stats {
+		got[st.Metric] = st.Value
+	}
+	if got["events"] != 3 || got["attended"] != 3 || got["participants"] != 1 {
+		t.Fatalf("kart: %v", got)
+	}
+
+	if _, err := e.svc(t, true, 0).SetStatsShowcase(ctx, sc.admin, sc.tf, false); err != nil {
+		t.Fatal(err)
+	}
+	if items := e.feed(t, sc.viewer); len(items) != 1 || items[0].Showcase != nil {
+		t.Fatalf("gizlenmiş kart: %+v", items)
+	}
+
+	// Members do not see their own tayfa in Keşfet; a tayfa out of Keşfet
+	// is not listed: the card never leaves the feed.
+	_, _ = e.svc(t, true, 0).SetStatsShowcase(ctx, sc.admin, sc.tf, true)
+	if items := e.feed(t, sc.friend); len(items) != 0 {
+		t.Fatalf("üye kendi tayfasını gördü: %+v", items)
+	}
+	e.seedExec(t, `UPDATE tayfas SET visibility = 'private' WHERE id = $1`, sc.tf.PG())
+	if items := e.feed(t, sc.viewer); len(items) != 0 {
+		t.Fatalf("Keşfet dışı tayfa listelendi: %+v", items)
 	}
 }
 

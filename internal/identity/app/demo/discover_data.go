@@ -80,7 +80,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Belgrad Ormanı Yürüyüş Demo",
 		Description: "Hafta sonu sabahları Belgrad Ormanı'nda tempolu yürüyüşler; yeni gelenlere kısa rota. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_HIKE},
+		Interests: []string{"nature"},
 		Founder:   "asli",
 		Members: []memberSpec{
 			{Person: "oguz", Role: moderator}, {Person: "nazli", Role: member}, {Person: "volkan", Role: member},
@@ -123,7 +123,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Moda Sahil Voleybol Demo",
 		Description: "Moda sahilinde hafta içi akşam ve pazar sabahı plaj voleybolu. Seviye fark etmez. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_SPORTS},
+		Interests: []string{"sports"},
 		Founder:   "sinan",
 		Members: []memberSpec{
 			{Person: "ipek", Role: moderator}, {Person: "hakan", Role: member}, {Person: "defne", Role: member},
@@ -138,7 +138,7 @@ var discoverTayfas = []tayfaSpec{
 				Start:       at{Days: 6, Hour: 10}, Hours: 3,
 				PlaceName: "Moda sahili çay bahçesi önü", Lat: 40.9817, Lng: 29.0259,
 				City: "İstanbul", District: "Kadıköy",
-				Sports: &corev1.SportsDetails{Sport: corev1.Sport_SPORT_VOLLEYBALL, VenueName: "Moda sahili"},
+				Fields: map[string]string{"sport": `"volleyball"`, "venue_name": `"Moda sahili"`},
 				RSVPs: []rsvpSpec{
 					{Person: "sinan", Status: going}, {Person: "hakan", Status: going}, {Person: "ipek", Status: going},
 					{Person: "defne", Status: going}, {Person: "erdem", Status: notGoing},
@@ -154,7 +154,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Abant Gölü Kamp Demo",
 		Description: "Abant Gölü çevresinde aile dostu, sakin kamplar. Kamp alanının kurallarına uyulur. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_CAMP},
+		Interests: []string{"nature"},
 		Founder:   "tuncay",
 		Members: []memberSpec{
 			{Person: "sevgi", Role: moderator}, {Person: "arda", Role: member}, {Person: "eda", Role: member},
@@ -169,9 +169,9 @@ var discoverTayfas = []tayfaSpec{
 				Start:       at{Days: 11, Hour: 12}, Hours: 26,
 				PlaceName: "Abant Gölü Milli Parkı kamp alanı", Lat: 40.6058, Lng: 31.2813,
 				City: "Bolu", District: "Merkez",
-				Camp: &corev1.CampDetails{
-					SiteName: "Abant kamp alanı", HasWater: ptr(true), HasToilet: ptr(true),
-					Notes: "Gece hava soğuk; kalın uyku tulumu getirin.",
+				Fields: map[string]string{
+					"site_name": `"Abant kamp alanı"`, "has_water": `true`, "has_toilet": `true`,
+					"notes": `"Gece hava soğuk; kalın uyku tulumu getirin."`,
 				},
 				RSVPs: []rsvpSpec{
 					{Person: "tuncay", Status: going}, {Person: "arda", Status: going}, {Person: "sevgi", Status: going},
@@ -185,7 +185,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Ankara Fotoğraf Yürüyüşü Demo",
 		Description: "Ankara'nın tarihi sokaklarında fotoğraf yürüyüşleri ve sonrasında kısa bir değerlendirme. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_GENERAL},
+		Interests: []string{"general"},
 		Founder:   "levent",
 		Members: []memberSpec{
 			{Person: "buse", Role: moderator}, {Person: "orhan", Role: member}, {Person: "yasemin", Role: member},
@@ -212,7 +212,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Bodrum Kıyı Balıkçıları Demo",
 		Description: "Bodrum kıyılarında akşam olta balıkçılığı. Kurallara ve av yasaklarına uyulur. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_FISHING},
+		Interests: []string{"water"},
 		Founder:   "riza",
 		Members: []memberSpec{
 			{Person: "esra", Role: moderator}, {Person: "taner", Role: member}, {Person: "dilek", Role: member},
@@ -227,7 +227,6 @@ var discoverTayfas = []tayfaSpec{
 				Start:       at{Days: 9, Hour: 18}, Hours: 4,
 				PlaceName: "Gümbet iskelesi", Lat: 37.0326, Lng: 27.4110,
 				City: "Muğla", District: "Bodrum",
-				Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS},
 				RSVPs: []rsvpSpec{
 					{Person: "riza", Status: going}, {Person: "taner", Status: going}, {Person: "dilek", Status: going},
 					{Person: "batu", Status: going}, {Person: "sena", Status: maybe},
@@ -243,7 +242,7 @@ var discoverTayfas = []tayfaSpec{
 		Name: "Kapadokya Klasik Konvoy Demo",
 		Description: "Kapadokya vadilerinde klasik otomobillerle sakin tempolu konvoy turları. " +
 			demoNote,
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_CONVOY},
+		Interests: []string{"automotive"},
 		Founder:   "ozan",
 		Members: []memberSpec{
 			{Person: "ebru", Role: moderator}, {Person: "cihan", Role: member}, {Person: "irem", Role: member},
@@ -258,9 +257,9 @@ var discoverTayfas = []tayfaSpec{
 				Start:       at{Days: 14, Hour: 9}, Hours: 6,
 				PlaceName: "Göreme otogarı önü", Lat: 38.6431, Lng: 34.8289,
 				City: "Nevşehir", District: "Merkez",
-				Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{
+				Route: []*corev1.LatLng{
 					{Lat: 38.6431, Lng: 34.8289}, {Lat: 38.6310, Lng: 34.8046}, {Lat: 38.6250, Lng: 34.8640},
-				}},
+				},
 				RSVPs: []rsvpSpec{
 					{Person: "ozan", Status: going}, {Person: "ebru", Status: going}, {Person: "cihan", Status: going},
 					{Person: "kerem", Status: maybe},

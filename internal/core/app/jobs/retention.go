@@ -32,8 +32,20 @@ func purgeSteps() []purgeStep {
 		{"anketler", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
 			return q.PurgePolls(ctx, store.PurgePollsParams(p))
 		}},
-		{"av kayıtları", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
-			return q.PurgeFishingCatches(ctx, store.PurgeFishingCatchesParams(p))
+		{"günlük kayıtları", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
+			return q.PurgeLogEntries(ctx, store.PurgeLogEntriesParams(p))
+		}},
+		{"etkinlik soruları", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
+			return q.PurgeEventQuestions(ctx, store.PurgeEventQuestionsParams(p))
+		}},
+		{"günün içerikleri", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
+			return q.PurgeDailyItems(ctx, store.PurgeDailyItemsParams(p))
+		}},
+		{"materyaller", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
+			return q.PurgeMaterials(ctx, store.PurgeMaterialsParams(p))
+		}},
+		{"garaj araçları", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
+			return q.PurgeGarageVehicles(ctx, store.PurgeGarageVehiclesParams(p))
 		}},
 		{"albüm fotoğrafları", func(ctx context.Context, q *store.Queries, p store.PurgeAnnouncementsParams) (int64, error) {
 			return q.PurgeEventPhotos(ctx, store.PurgeEventPhotosParams(p))
@@ -54,7 +66,8 @@ func purgeSteps() []purgeStep {
 // tayfa.purged tells chat to delete the tayfa's channels for good
 // (ADR-0009) while its channel photos are queued for deletion (ADR-0031).
 // Then announcements, questions (with their answers), answers,
-// polls, fishing catches, album photos and events go in batches of
+// polls, log entries (fishing catches among them), event questions (with
+// their votes), daily content items, materials, garage vehicles, album photos and events go in batches of
 // contentBatch.
 // Activity records stay (SET NULL).
 func (s *Service) Purge(ctx context.Context) (int, error) {

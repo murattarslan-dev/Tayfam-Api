@@ -254,6 +254,9 @@ func (f *fakeLive) TayfaPurged(id.ID)  { f.calls = append(f.calls, "purged") }
 func (f *fakeLive) MessageDeleted(_, _, m id.ID) {
 	f.calls = append(f.calls, "deleted "+m.String())
 }
+func (f *fakeLive) ComponentChanged(tayfa, event id.ID, key string) {
+	f.calls = append(f.calls, "component "+tayfa.String()+" "+event.String()+" "+key)
+}
 func (f *fakeLive) Notified(r notification.Request) {
 	f.calls = append(f.calls, "notified")
 	f.notice = append(f.notice, r)
@@ -401,4 +404,39 @@ func TestPlatformRemovesReportedMessage(t *testing.T) {
 	if len(live.calls) != 1 || live.calls[0] != "deleted "+msg.String() {
 		t.Fatalf("canlı katman = %v", live.calls)
 	}
+}
+
+// A component change is passed on to the live layer with its IDs and
+// stored nowhere (issue #238, ADR-0025 §6).
+func TestComponentChanged(t *testing.T) {
+	pool := dbtest.New(t, "chat", chatdb.Migrations())
+	live := &fakeLive{cache: &fakeCache{}}
+	svc, err := New(Config{Pool: pool, Live: live})
+	must(t, err)
+	tf, ev := id.New(), id.New()
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Component: &ComponentChanged{Event: ev, Key: "scoreboard"}}))
+	// The selections or referees changed: no key.
+	must(t, svc.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Component: &ComponentChanged{Event: ev}}))
+	want := []string{"component " + tf.String() + " " + ev.String() + " scoreboard", "component " + tf.String() + " " + ev.String() + " "}
+	if len(live.calls) != 2 || live.calls[0] != want[0] || live.calls[1] != want[1] {
+		t.Fatalf("canlı katman: %v", live.calls)
+	}
+	for name, e := range map[string]Event{
+		"tayfasız":      {ID: id.New(), Component: &ComponentChanged{Event: ev, Key: "draw"}},
+		"etkinliksiz":   {ID: id.New(), Tayfa: tf, Component: &ComponentChanged{Key: "draw"}},
+		"bozuk anahtar": {ID: id.New(), Tayfa: tf, Component: &ComponentChanged{Event: ev, Key: "Draw!"}},
+		"iki tür":       {ID: id.New(), Tayfa: tf, StatusChanged: true, Component: &ComponentChanged{Event: ev, Key: "draw"}},
+	} {
+		var v *apperr.ValidationError
+		if err := svc.Apply(ctx, e); !errors.As(err, &v) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if len(live.calls) != 2 {
+		t.Fatalf("reddedilen olay iletildi: %v", live.calls)
+	}
+	// Without a live layer the event is applied and dropped.
+	bare, err := New(Config{Pool: pool})
+	must(t, err)
+	must(t, bare.Apply(ctx, Event{ID: id.New(), Tayfa: tf, Component: &ComponentChanged{Event: ev, Key: "draw"}}))
 }

@@ -79,6 +79,7 @@ func (s *AdminAuditServer) ListPlatformAuditLogs(ctx context.Context, req *ident
 			ActorId: e.Actor.String(), ActorDisplayName: e.ActorName,
 			Action: e.Action, TargetType: e.TargetType, TargetId: idOrEmpty(e.TargetID), Reason: e.Reason,
 			TayfaId: idOrEmpty(e.Tayfa), UserId: idOrEmpty(e.User), ReportId: idOrEmpty(e.Report),
+			CatalogKey: e.CatalogKey,
 		})
 	}
 	return out, nil

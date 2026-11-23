@@ -32,18 +32,25 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0022](0022-uygulama-butunlugu.md) | Uygulama bütünlüğü (Play Integrity / App Attest) oturuma bağlanır | Kabul edildi |
 | [0023](0023-demo-verisi.md) | Prod'da kalıcı demo tayfaları ve sahte hesaplar | Kabul edildi; kısmen 0035 |
 | [0024](0024-kanal-kitlesi.md) | Kanal kitlesi: etkinlik ve seçili üye kanalları | Kabul edildi |
-| [0025](0025-etkinlik-turu-katalogu-ve-bilesenler.md) | Etkinlik türü kataloğu ve bileşen modeli (v3) | Kabul edildi |
-| [0026](0026-tayfa-istatistikleri-ve-vitrin.md) | Tayfa istatistikleri, kişisel istatistik ve Keşfet vitrini (v3) | Kabul edildi |
+| [0025](0025-etkinlik-turu-katalogu-ve-bilesenler.md) | Etkinlik türü kataloğu ve bileşen modeli (v3) | Kabul edildi; kısmen 0037, 0041, 0042, 0043 |
+| [0026](0026-tayfa-istatistikleri-ve-vitrin.md) | Tayfa istatistikleri, kişisel istatistik ve Keşfet vitrini (v3) | Kabul edildi; kısmen 0037 |
 | [0027](0027-tayfa-ana-sayfa-bilesenleri.md) | Tayfa ana sayfa bileşenleri ve günün içeriği (v3) | Kabul edildi |
 | [0028](0028-etkinlik-fotograf-albumu.md) | Etkinlik fotoğraf albümü | Kabul edildi |
 | [0029](0029-bosum-bos-vakit.md) | "Boşum": arkadaşlara görünen boş vakit (v2) | Kabul edildi |
 | [0030](0030-arkadaslik-puani-ve-arkadas-onerisi.md) | Arkadaşlık puanı ve arkadaş önerisi (v2) | Kabul edildi |
 | [0031](0031-sohbet-ekleri-fotograf-ve-yer.md) | Sohbet ekleri: fotoğraf ve yer (kanal ve uçtan uca birebir) | Kabul edildi |
-| [0032](0032-anlik-etkinlik.md) | Anlık (bireysel) etkinlik: gizli, tek etkinlikli tayfa (v2) | Kabul edildi |
+| [0032](0032-anlik-etkinlik.md) | Anlık (bireysel) etkinlik: gizli, tek etkinlikli tayfa (v2) | Kabul edildi; kısmen 0038 |
 | [0033](0033-kesfet-ilk-asama.md) | Keşfet ilk aşama: arkadaş ağı ve güvenlik ağı (v2) | Kabul edildi; kısmen 0035 |
 | [0034](0034-dev-main-dal-modeli-ve-otomatik-surum.md) | dev/main dal modeli ve otomatik sürüm | Önerildi |
 | [0035](0035-kesfet-herkese-acik-ve-demo-temizligi.md) | Keşfet herkese açık, Keşfet demo verisi ve demo temizleme komutu | Kabul edildi |
 | [0036](0036-push-firebase-installation-id.md) | Push hedefi olarak Firebase Installation ID (FID) | Kabul edildi |
+| [0037](0037-katalog-ayrintilari-ve-sema-ekleri.md) | Katalog ayrıntıları ve şema ekleri (v3) | Kabul edildi |
+| [0038](0038-simdi-baslat.md) | Şimdi başlat: doğaçlama etkinlik, QR ile katılım ve şimdi bildirimi (v3) | Kabul edildi |
+| [0039](0039-rozetler.md) | Rozetler (v3) | Kabul edildi |
+| [0040](0040-tayfa-modulleri-v3.md) | v3 tayfa modülleri: ortak kütüphane, soru havuzu, materyal kütüphanesi, üye garajı, ders-konu listesi | Kabul edildi |
+| [0041](0041-v3-tek-seferde-gecis-ve-yayin.md) | v3'e tek seferde geçiş ve yayın | Kabul edildi |
+| [0042](0042-katalog-degisikligi-olayi.md) | Katalog değişikliği olayı (`catalog.changed`) ve identity'deki kopya | Kabul edildi |
+| [0043](0043-ders-konu-alan-turu.md) | Ders/konu listesine bağlı tür alanı (`study_tags`) | Kabul edildi |
 
 Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
 yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu

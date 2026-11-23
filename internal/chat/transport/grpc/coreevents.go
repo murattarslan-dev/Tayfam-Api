@@ -56,6 +56,17 @@ var notificationTypes = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED:          notification.TypeFriendAccepted,
 	chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_SUGGESTION:        notification.TypeFriendSuggestion,
 	chatv1.NotificationType_NOTIFICATION_TYPE_SAFETY_ALERT:             notification.TypeSafetyAlert,
+	chatv1.NotificationType_NOTIFICATION_TYPE_CELEBRATION:              notification.TypeCelebration,
+	chatv1.NotificationType_NOTIFICATION_TYPE_BADGE_EARNED:             notification.TypeBadgeEarned,
+	chatv1.NotificationType_NOTIFICATION_TYPE_NOW_STARTED:              notification.TypeNowStarted,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_DUE:              notification.TypeLibraryDue,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED:    notification.TypeLibraryLoanOrphaned,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED:   notification.TypeLibraryLoanRequested,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED:     notification.TypeLibraryQueueJoined,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED:    notification.TypeLibraryLoanApproved,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED:    notification.TypeLibraryLoanDeclined,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER: notification.TypeLibraryLoanHandedOver,
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN:       notification.TypeLibraryQueueTurn,
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         notification.TypeTayfaInvitation,
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          notification.TypeReportResolved,
 }
@@ -68,6 +79,7 @@ var targetTypes = map[chatv1.NotificationTargetType]string{
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER:       notification.TargetAnswer,
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER:         notification.TargetUser,
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:       notification.TargetReport,
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM: notification.TargetLibraryItem,
 }
 
 // listedTypes and listedTargets add chat's own direct message notices to
@@ -169,6 +181,13 @@ func coreEventFromProto(req *chatv1.ApplyCoreEventRequest) (coreevents.Event, er
 			return e, validation("channel_message_removed.message_id")
 		}
 		e.RemovedMessage, e.RemovedBy = m, actor
+	case *chatv1.ApplyCoreEventRequest_EventComponentChanged:
+		evID, ok := id.Parse(ev.EventComponentChanged.GetEventId())
+		if !ok {
+			return e, validation("event_component_changed.event_id")
+		}
+		// The key's form is checked in the app layer.
+		e.Component = &coreevents.ComponentChanged{Event: evID, Key: ev.EventComponentChanged.GetComponentKey()}
 	default:
 		return e, validation("event")
 	}

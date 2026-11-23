@@ -4,6 +4,8 @@ package tayfam.core.v1;
 
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/badge.proto";
+import "tayfam/core/v1/home.proto";
 import "tayfam/core/v1/membership.proto";
 
 // TayfaService creates tayfas and manages their settings, modules, join
@@ -104,7 +106,11 @@ enum JoinPolicy {
   JOIN_POLICY_OPEN = 2;
 }
 
-// Event types; a tayfa's interests use the same values as events.type.
+// The seven Faz 1 event types. Event types are catalog keys now (ADR-0025):
+// new code uses the string key fields (Event.type_key,
+// DiscoverEvent.type_key, ActivityRecord.event_type_key). A tayfa's
+// interests are catalog interest keys (Tayfa.interest_keys), not event
+// types. The enum stays because fields that used it cannot be removed.
 enum EventType {
   EVENT_TYPE_UNSPECIFIED = 0;
   EVENT_TYPE_CONVOY = 1;
@@ -123,6 +129,23 @@ enum Module {
   MODULE_EVENTS = 2;
   MODULE_QA = 3;
   MODULE_POLLS = 4;
+  // Günün içeriği (issue #269; ADR-0027 §5): the tayfa's daily content
+  // pool (TayfaDailyService) and its home widget.
+  MODULE_DAILY = 5;
+  // Ortak kütüphane (issue #270; ADR-0040 §1): the tayfa's shared items
+  // and their loans (TayfaLibraryService) and its home widget.
+  MODULE_LIBRARY = 6;
+  // Soru havuzu (issue #271; ADR-0040 §2): the Eğitim question pool
+  // (QAService with QUESTION_POOL_QUESTION_POOL), its home widget and the
+  // pool_link event component.
+  MODULE_QUESTION_POOL = 7;
+  // Materyal kütüphanesi (issue #261; ADR-0040 §3): the Eğitim study
+  // material — links and note photos (TayfaMaterialService) — and its home
+  // widget.
+  MODULE_MATERIALS = 8;
+  // Üye garajı (issue #272; ADR-0040 §4): the members' garages that show
+  // in the tayfa (MemberGarageService) and its home widget.
+  MODULE_GARAGE = 9;
 }
 
 // Lifecycle of an inactive tayfa (tayfas.status).
@@ -159,7 +182,7 @@ message Tayfa {
   string name = 2;
   // Up to 500 characters; may be empty.
   string description = 3;
-  // Distinct values, in EventType order.
+  // Faz 1; never filled. See interest_keys.
   repeated EventType interests = 4;
   JoinPolicy join_policy = 5;
   // One entry per Module value, in Module order.
@@ -194,6 +217,15 @@ message Tayfa {
   // TAYFA_KIND_STANDARD ("Bu ekiple tayfa kur"): when it was converted
   // (ADR-0032 §7). Unset for every other tayfa.
   google.protobuf.Timestamp convert_time = 19;
+  // The tayfa's interests: keys of the catalog's interests
+  // (CatalogInterest.key; ADR-0025 §2), distinct, in catalog order. A
+  // retired interest stays on the tayfas that chose it.
+  repeated string interest_keys = 20;
+  // The lowest role that may start an event now (CreateEventRequest
+  // .starts_now; ADR-0038 §2): ROLE_MEMBER (the default), ROLE_MODERATOR
+  // or ROLE_ADMIN. Independent of members_can_create_events. Instant
+  // tayfas never start a now event inside (POST /v1/instant-events does).
+  Role now_create_min_role = 21;
 }
 
 message CreateTayfaRequest {
@@ -201,14 +233,16 @@ message CreateTayfaRequest {
   string name = 1;
   // Up to 500 characters; may be empty.
   string description = 2;
-  // 0–7 distinct values; UNSPECIFIED or a repeated value is
-  // ERROR_REASON_VALIDATION.
+  // Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
   repeated EventType interests = 3;
   // UNSPECIFIED means JOIN_POLICY_APPROVAL.
   JoinPolicy join_policy = 4;
   // Required. A UUID the client generates once per create attempt and
   // reuses on retry (offline write protection).
   string client_request_id = 5;
+  // 0–20 distinct keys of ACTIVE catalog interests (CatalogInterest.key).
+  // An unknown, retired or repeated key is ERROR_REASON_VALIDATION.
+  repeated string interest_keys = 6;
 }
 
 message CreateTayfaResponse {
@@ -224,6 +258,13 @@ message GetTayfaResponse {
   // The caller's role in this tayfa, so the client can show the right
   // actions. The server checks permissions again on every call.
   Role caller_role = 2;
+  // The tayfa's badges in the order earned, for its members (issue #258;
+  // ADR-0039 §3).
+  repeated EarnedBadge badges = 3;
+  // The widgets the home page shows after "Sıradaki", in order (issue
+  // #268; ADR-0027 §3): only those on, their module on, a countdown not
+  // past its moment. A client skips a key it does not know.
+  repeated HomeWidget home_widgets = 4;
 }
 
 message ListMyTayfasRequest {
@@ -256,13 +297,13 @@ message UpdateTayfaRequest {
   string name = 2;
   // Same rules as CreateTayfaRequest.description.
   string description = 3;
-  // Replaces all interests. Same rules as CreateTayfaRequest.interests.
+  // Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
   repeated EventType interests = 4;
   // Must not be UNSPECIFIED when named in update_mask.
   JoinPolicy join_policy = 5;
   // Required, non-empty. Allowed paths: "name", "description", "interests",
-  // "join_policy", "members_can_create_events", "cover_upload_id". Any
-  // other path is ERROR_REASON_VALIDATION.
+  // "join_policy", "members_can_create_events", "now_create_min_role",
+  // "cover_upload_id". Any other path is ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 6;
   // See Tayfa.members_can_create_events.
   bool members_can_create_events = 7;
@@ -271,6 +312,13 @@ message UpdateTayfaRequest {
   // ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE); empty
   // removes the cover. The previous cover is deleted.
   string cover_upload_id = 8;
+  // With "interests" in update_mask: replaces all interests. Same rules as
+  // CreateTayfaRequest.interest_keys, except that a retired interest the
+  // tayfa already has may be kept.
+  repeated string interest_keys = 9;
+  // With "now_create_min_role" in update_mask: see
+  // Tayfa.now_create_min_role; UNSPECIFIED is ERROR_REASON_VALIDATION.
+  Role now_create_min_role = 10;
 }
 
 message UpdateTayfaResponse {
@@ -316,10 +364,12 @@ message ConvertInstantTayfaRequest {
   string name = 2;
   // Same rules as CreateTayfaRequest.description.
   string description = 3;
-  // Same rules as CreateTayfaRequest.interests.
+  // Faz 1; must be empty (ERROR_REASON_VALIDATION). See interest_keys.
   repeated EventType interests = 4;
   // UNSPECIFIED means JOIN_POLICY_APPROVAL.
   JoinPolicy join_policy = 5;
+  // Same rules as CreateTayfaRequest.interest_keys.
+  repeated string interest_keys = 6;
 }
 
 message ConvertInstantTayfaResponse {

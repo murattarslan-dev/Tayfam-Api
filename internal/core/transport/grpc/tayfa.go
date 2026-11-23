@@ -46,7 +46,7 @@ func (s *TayfaServer) CreateTayfa(ctx context.Context, req *corev1.CreateTayfaRe
 	if err != nil {
 		return nil, err
 	}
-	interests, ok := interestsFromProto(req.GetInterests())
+	interests, ok := interestKeysFromProto(req.GetInterestKeys(), req.GetInterests())
 	if !ok {
 		return nil, validation("interests")
 	}
@@ -76,7 +76,7 @@ func (s *TayfaServer) ConvertInstantTayfa(ctx context.Context, req *corev1.Conve
 	if err != nil {
 		return nil, err
 	}
-	interests, ok := interestsFromProto(req.GetInterests())
+	interests, ok := interestKeysFromProto(req.GetInterestKeys(), req.GetInterests())
 	if !ok {
 		return nil, validation("interests")
 	}
@@ -109,7 +109,10 @@ func (s *TayfaServer) GetTayfa(ctx context.Context, req *corev1.GetTayfaRequest)
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
-	return &corev1.GetTayfaResponse{Tayfa: tayfaToProto(v), CallerRole: roleToProto(role)}, nil
+	return &corev1.GetTayfaResponse{
+		Tayfa: tayfaToProto(v), CallerRole: roleToProto(role), Badges: earnedBadgesPB(v.Badges),
+		HomeWidgets: homeWidgetsPB(v.HomeWidgets),
+	}, nil
 }
 
 // ListMyTayfas implements corev1.TayfaServiceServer.
@@ -151,13 +154,18 @@ func (s *TayfaServer) UpdateTayfa(ctx context.Context, req *corev1.UpdateTayfaRe
 		switch f {
 		case tayfa.FieldInterests:
 			var ok bool
-			if in.Interests, ok = interestsFromProto(req.GetInterests()); !ok {
+			if in.Interests, ok = interestKeysFromProto(req.GetInterestKeys(), req.GetInterests()); !ok {
 				return nil, validation("interests")
 			}
 		case tayfa.FieldJoinPolicy:
 			var ok bool
 			if in.JoinPolicy, ok = joinPolicyFromProto(req.GetJoinPolicy()); !ok {
 				return nil, validation("join_policy")
+			}
+		case tayfa.FieldNowCreateMinRole:
+			var ok bool
+			if in.NowCreateMinRole, ok = roleFromPB(req.GetNowCreateMinRole()); !ok {
+				return nil, validation("now_create_min_role")
 			}
 		case tayfa.FieldCover:
 			if c := req.GetCoverUploadId(); c != "" {
@@ -252,6 +260,7 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 		MemberCount:            int32(min(v.MemberCount, 1<<31-1)), //nolint:gosec // clamped above
 		JoinCode:               v.JoinCode,
 		MembersCanCreateEvents: v.MembersCanCreateEvents,
+		NowCreateMinRole:       roleToProto(v.NowCreateMinRole),
 		CreateTime:             timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
 		CoverUploadId: optionalID(v.CoverUploadID),
 		Kind:          tayfaKindToProto(v.Kind), InstantEventId: optionalID(v.InstantEventID),
@@ -260,9 +269,7 @@ func tayfaToProto(v tayfa.View) *corev1.Tayfa {
 		n := int32(min(*v.PendingJoinRequests, 1<<31-1)) //nolint:gosec // clamped above
 		out.PendingJoinRequestCount = &n
 	}
-	for _, i := range v.Interests {
-		out.Interests = append(out.Interests, interestToProto(i))
-	}
+	out.InterestKeys = append(out.InterestKeys, v.Interests...)
 	for _, m := range v.Modules {
 		out.Modules = append(out.Modules, &corev1.ModuleState{Module: moduleToProto(m.Module), Enabled: m.Enabled})
 	}

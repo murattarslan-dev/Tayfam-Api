@@ -51,7 +51,7 @@ func TestProfileServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	r0, r1 := l.GetRecords()[0], l.GetRecords()[1]
-	if r0.GetEventType() != corev1.EventType_EVENT_TYPE_HIKE || r0.GetMode() != corev1.EventMode_EVENT_MODE_IN_PERSON || r0.GetTayfaMember() || r0.GetTayfaId() != "" || r0.GetEventId() != "" {
+	if r0.GetEventTypeKey() != "hike" || r0.GetEventType() != corev1.EventType_EVENT_TYPE_UNSPECIFIED || r0.GetMode() != corev1.EventMode_EVENT_MODE_IN_PERSON || r0.GetTayfaMember() || r0.GetTayfaId() != "" || r0.GetEventId() != "" {
 		t.Fatalf("üye olmayan kaydı: %v", r0)
 	}
 	if r1.GetMode() != corev1.EventMode_EVENT_MODE_ONLINE || !r1.GetTayfaMember() || r1.GetTayfaId() != tf.String() || r1.GetEventId() != ev.String() || r1.GetDurationMinutes() != 90 {

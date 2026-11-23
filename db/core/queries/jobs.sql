@@ -169,9 +169,36 @@ DELETE FROM polls WHERE id IN (
   SELECT x.id FROM polls x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
--- name: PurgeFishingCatches :execrows
-DELETE FROM fishing_catches WHERE id IN (
-  SELECT x.id FROM fishing_catches x WHERE x.deleted_at <= @deleted_before
+-- Günlük kaydı (issue #243); fotoğrafı uploads_release_ref ile silme
+-- kuyruğuna girer.
+-- name: PurgeLogEntries :execrows
+DELETE FROM event_log_entries WHERE id IN (
+  SELECT x.id FROM event_log_entries x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
+-- Etkinlik sorusu (issue #256); oyları cascade ile gider.
+-- name: PurgeEventQuestions :execrows
+DELETE FROM event_questions WHERE id IN (
+  SELECT x.id FROM event_questions x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
+-- Günün içeriği (issue #269).
+-- name: PurgeDailyItems :execrows
+DELETE FROM tayfa_daily_items WHERE id IN (
+  SELECT x.id FROM tayfa_daily_items x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
+-- Materyal kütüphanesi (issue #261).
+-- name: PurgeMaterials :execrows
+DELETE FROM materials WHERE id IN (
+  SELECT x.id FROM materials x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
+-- Üye garajı (issue #272): fotoğraflar silme kuyruğuna girer, etkinlik
+-- kayıtlarındaki garaj bağı boşalır.
+-- name: PurgeGarageVehicles :execrows
+DELETE FROM garage_vehicles WHERE id IN (
+  SELECT x.id FROM garage_vehicles x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
 -- Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
@@ -189,39 +216,42 @@ DELETE FROM events WHERE id IN (
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
 -- ---------------------------------------------------------------------------
--- Yürüyüş dönmeme alarmı (v14 "Yürüyüşte beklenen dönüş")
+-- Dönmeme alarmı (v14 "Yürüyüşte beklenen dönüş"; `roll_call` bileşeni,
+-- issue #242)
 -- ---------------------------------------------------------------------------
 
 -- Yola çıkmış (satır var = started_at dolu), dönmemiş, alarmı gönderilmemiş
--- ve beklenen dönüş + tolerans süresi @now'dan önce dolmuş yürüyüşçüler.
--- Etkinlik iptal ya da silinmiş olsa da alarm gider: kişi hâlâ dağda
--- olabilir.
+-- ve beklenen dönüş + tolerans süresi @now'dan önce dolmuş katılımcılar.
+-- Alarm ve tolerans, etkinliğin tür sürümündeki bileşenin parametreleridir
+-- (`alarm`, `return_grace_minutes`; tolerans yoksa 30 dakika); alarmsız
+-- yoklamada make_interval NULL olur ve satır seçilmez. Etkinlik iptal ya da
+-- silinmiş olsa da alarm gider: kişi hâlâ dağda olabilir.
 -- name: LockOverdueHikers :many
-SELECT c.event_id, c.user_id, e.tayfa_id, e.created_by
-FROM event_hike_checkins c
-JOIN event_hike h ON h.event_id = c.event_id
+SELECT c.event_id, c.component_key, c.user_id, e.tayfa_id, e.created_by
+FROM event_roll_call_checkins c
+JOIN event_roll_calls p ON p.event_id = c.event_id AND p.component_key = c.component_key
 JOIN events e ON e.id = c.event_id
 WHERE c.returned_at IS NULL AND c.alert_sent_at IS NULL
-  AND h.expected_return_at IS NOT NULL
-  AND h.expected_return_at + make_interval(mins => h.return_grace_minutes) <= @now
-ORDER BY c.event_id, c.user_id
+  AND p.expected_return_at + make_interval(mins => roll_call_alarm_minutes(event_component_definition(c.event_id, c.component_key))) <= @now
+ORDER BY c.event_id, c.component_key, c.user_id
 LIMIT @n
 FOR UPDATE OF c SKIP LOCKED;
 
 -- name: MarkHikeAlertSent :execrows
-UPDATE event_hike_checkins SET alert_sent_at = @now
-WHERE event_id = @event_id AND user_id = @user_id
+UPDATE event_roll_call_checkins SET alert_sent_at = @now
+WHERE event_id = @event_id AND component_key = @component_key AND user_id = @user_id
   AND returned_at IS NULL AND alert_sent_at IS NULL;
 
 -- ---------------------------------------------------------------------------
--- Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri")
+-- Plaka temizliği (v14 "Konvoy aracı", "Saklama süreleri"; `vehicles`
+-- bileşeni, issue #240, ADR-0025 "Plaka kuralı")
 -- ---------------------------------------------------------------------------
 
 -- Bitişi @ended_before'dan önce olan etkinliklerin plakaları boşaltılır.
 -- name: ClearOldPlates :execrows
-UPDATE event_convoy_vehicles SET plate = NULL
+UPDATE event_vehicles SET plate = NULL
 WHERE id IN (
-    SELECT v.id FROM event_convoy_vehicles v
+    SELECT v.id FROM event_vehicles v
     JOIN events e ON e.id = v.event_id
     WHERE v.plate IS NOT NULL AND e.ends_at <= @ended_before
     ORDER BY v.id
@@ -252,3 +282,37 @@ SET finished_at = EXCLUDED.finished_at,
     changed = EXCLUDED.changed,
     last_succeeded_at = COALESCE(EXCLUDED.last_succeeded_at, job_runs.last_succeeded_at)
 WHERE job_runs.finished_at < EXCLUDED.finished_at;
+
+-- Ortak kütüphane (issue #270; ADR-0040 §1): iade tarihi geçen teslim
+-- edilmiş ödünçte borç alana tek hatırlatma.
+-- name: MarkDueLibraryLoans :many
+UPDATE library_loans SET reminded_at = @now
+WHERE id IN (
+  SELECT x.id FROM library_loans x
+  WHERE x.state = 'handed_over' AND x.due_at IS NOT NULL AND x.due_at <= @now AND x.reminded_at IS NULL
+  ORDER BY x.due_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED)
+RETURNING id, tayfa_id, borrower_id;
+
+-- Taraflardan biri ayrıldıktan 30 gün sonra kapanmamış ödünç kapanır.
+-- name: CloseOrphanedLibraryLoans :many
+UPDATE library_loans SET state = 'closed', ended_at = @now
+WHERE id IN (
+  SELECT x.id FROM library_loans x
+  WHERE x.state = 'handed_over' AND x.orphaned_at IS NOT NULL AND x.orphaned_at <= @orphaned_before
+  ORDER BY x.orphaned_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED)
+RETURNING item_id;
+
+-- Ödünç geçmişi 1 yıl tutulur.
+-- name: PurgeLibraryLoans :execrows
+DELETE FROM library_loans WHERE id IN (
+  SELECT x.id FROM library_loans x WHERE x.ended_at <= @ended_before
+  ORDER BY x.ended_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
+-- Geri çekilmiş kalem 30 gün sonra, ödünç kaydı kalmadıysa kalıcı silinir
+-- (sıra yerleri cascade ile; fotoğrafı geri çekilirken bırakılmıştır).
+-- name: PurgeLibraryItems :execrows
+DELETE FROM library_items WHERE id IN (
+  SELECT x.id FROM library_items x
+  WHERE x.status = 'withdrawn' AND x.withdrawn_at <= @withdrawn_before
+    AND NOT EXISTS (SELECT 1 FROM library_loans l WHERE l.item_id = x.id)
+  ORDER BY x.withdrawn_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);

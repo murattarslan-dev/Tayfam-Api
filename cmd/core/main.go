@@ -22,10 +22,13 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/admin"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/announcement"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/availability"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalogrelay"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/channelaccess"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatdm"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/chatrelay"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/directmessage"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/discover"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
@@ -34,6 +37,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/identityminor"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/instant"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/jobs"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/joinqr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/poll"
@@ -41,6 +45,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/qa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/social"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/stats"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/userevents"
 	grpcapi "github.com/murattarslan-dev/tayfam-api/internal/core/transport/grpc"
@@ -56,6 +61,10 @@ import (
 // joinCodeAttemptsPerHour limits JoinByCode per user against code guessing
 // (issue #32). In memory; core runs one replica.
 const joinCodeAttemptsPerHour = 10
+
+// joinQRAttemptsPerMinute limits JoinEventByQr per user against token
+// guessing (ADR-0038 §3).
+const joinQRAttemptsPerMinute = 5
 
 func main() {
 	service.MainWithMigrations("core", coredb.Migrations(), setup)
@@ -115,6 +124,14 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
+	// QR ile katılım (issue #264, ADR-0038 §3).
+	joinQRs, err := joinqr.New(joinqr.Config{
+		Pool: pool, Events: events, Memberships: memberships,
+		JoinLimiter: ratelimit.NewPer(joinQRAttemptsPerMinute, time.Minute),
+	})
+	if err != nil {
+		return err
+	}
 	announcements, err := announcement.New(announcement.Config{Pool: pool})
 	if err != nil {
 		return err
@@ -133,6 +150,17 @@ func setup(rt *service.Runtime) error {
 	}
 	// "Boşum" (issue #207, ADR-0029).
 	availabilities, err := availability.New(availability.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
+	// Etkinlik türü kataloğu (issue #237, ADR-0025).
+	catalogs, err := catalog.New(catalog.Config{Pool: pool})
+	if err != nil {
+		return err
+	}
+	// Bileşen çerçevesi (issue #238, ADR-0025 §4–§6): seçimler, hakemler ve
+	// her bileşenin üstüne kurulduğu ortak katman.
+	components, err := component.New(component.Config{Pool: pool, Log: rt.Log})
 	if err != nil {
 		return err
 	}
@@ -243,11 +271,17 @@ func setup(rt *service.Runtime) error {
 	corev1.RegisterUserEventServiceServer(srv, grpcapi.NewUserEventServer(userEvents, rt.Log))
 	corev1.RegisterChatEventServiceServer(srv, grpcapi.NewChatEventServer(chatEvents, rt.Log))
 	corev1.RegisterAnnouncementServiceServer(srv, grpcapi.NewAnnouncementServer(announcements, rt.Log))
-	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log).WithInstant(instants))
+	corev1.RegisterEventServiceServer(srv, grpcapi.NewEventServer(events, rt.Log).WithInstant(instants).WithJoinQR(joinQRs))
 	corev1.RegisterQAServiceServer(srv, grpcapi.NewQAServer(questions, rt.Log))
 	corev1.RegisterPollServiceServer(srv, grpcapi.NewPollServer(polls, rt.Log))
 	corev1.RegisterSocialServiceServer(srv, grpcapi.NewSocialServer(socials, rt.Log))
 	corev1.RegisterAvailabilityServiceServer(srv, grpcapi.NewAvailabilityServer(availabilities, rt.Log))
+	corev1.RegisterCatalogServiceServer(srv, grpcapi.NewCatalogServer(catalogs, rt.Log))
+	// EventComponentService ve kayıtlı her bileşenin servisi
+	// (grpcapi.componentRegistrars).
+	if err := grpcapi.RegisterComponents(srv, components, rt.Log); err != nil {
+		return err
+	}
 	corev1.RegisterDiscoverServiceServer(srv, grpcapi.NewDiscoverServer(discovers, memberships, rt.Log))
 	corev1.RegisterProfileServiceServer(srv, grpcapi.NewProfileServer(profiles, rt.Log))
 	corev1.RegisterReportServiceServer(srv, grpcapi.NewReportServer(reports, rt.Log))
@@ -445,10 +479,16 @@ func addRelay(rt *service.Runtime, pool *pgxpool.Pool) error {
 		if err != nil {
 			return err
 		}
-		consumers = append(consumers, identityadmin.AuditConsumer(identityv1.NewPlatformAuditServiceClient(idConn)))
+		consumers = append(consumers, identityadmin.AuditConsumer(identityv1.NewPlatformAuditServiceClient(idConn)),
+			// Katalog değişince identity'deki katalog kopyası (issue #280,
+			// ADR-0042); denetim kayıtlarından ayrı tüketici.
+			catalogrelay.Consumer(identityv1.NewCatalogCopyServiceClient(idConn)))
 	} else {
-		rt.Log.Warn("identity servis token'ı yok; platform denetim kayıtları outbox'ta bekler (yalnızca yerel ortam)")
+		rt.Log.Warn("identity servis token'ı yok; platform denetim kayıtları ve katalog olayları outbox'ta bekler (yalnızca yerel ortam)")
 	}
+	// Sözlük birleştirmeleri istatistiği yeniden hesaplatır (issue #266);
+	// core'un kendi veritabanına yazar.
+	consumers = append(consumers, stats.Consumer(pool, time.Now))
 	relay, err := outbox.NewRelay(outbox.RelayConfig{Pool: pool, Log: rt.Log, Consumers: consumers})
 	if err != nil {
 		return err

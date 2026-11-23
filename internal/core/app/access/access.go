@@ -115,6 +115,13 @@ const (
 	ModuleEvents        = "events"
 	ModuleQA            = "qa"
 	ModulePolls         = "polls"
+	ModuleDaily         = "daily"
+	ModuleLibrary       = "library"
+	ModuleMaterials     = "materials"
+	// ModuleGarage is the member garage (issue #272).
+	ModuleGarage = "garage"
+	// ModuleQuestionPool is the Eğitim question pool (issue #271).
+	ModuleQuestionPool = "question_pool"
 )
 
 // RequireModule returns apperr.ErrModuleDisabled unless module is enabled
@@ -154,7 +161,21 @@ const (
 
 // Settings returns the tayfa settings the permission table depends on.
 func Settings(t Tayfa) authz.Settings {
-	return authz.Settings{MembersCanCreateEvents: t.MembersCanCreateEvents, Instant: t.Kind == KindInstant}
+	return authz.Settings{
+		MembersCanCreateEvents: t.MembersCanCreateEvents, Instant: t.Kind == KindInstant,
+		NowCreateMinRole: NowCreateMinRole(t.NowCreateMinRole),
+	}
+}
+
+// NowCreateMinRole converts tayfas.now_create_min_role (ADR-0038 §2). The
+// column's CHECK allows only valid roles; anything else falls back to the
+// strictest, admin.
+func NowCreateMinRole(s string) authz.Role {
+	r, err := authz.ParseRole(s)
+	if err != nil {
+		return authz.Admin
+	}
+	return r
 }
 
 // Instant reports whether t is the hidden tayfa of an instant event.

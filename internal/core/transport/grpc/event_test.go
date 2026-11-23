@@ -4,20 +4,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"math"
 	"net"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/event"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/auth"
@@ -35,14 +40,10 @@ type fakeEvents struct {
 	in       event.Input
 	fields   []string
 	status   string
-	vehicle  event.VehicleInput
-	assigned id.ID
 	view     event.Event
 	at       *event.Point
-	when     time.Time
 	target   id.ID
 	attended bool
-	catch    event.CatchInput
 	photo    event.PhotoInput
 	photoID  id.ID
 }
@@ -60,6 +61,10 @@ func (f *fakeEvents) Update(_ context.Context, u, t, e id.ID, fields []string, i
 	return f.view, f.err
 }
 func (f *fakeEvents) Cancel(_ context.Context, u, t, e id.ID, _ string) (event.Event, error) {
+	f.rec(u, t, e)
+	return f.view, f.err
+}
+func (f *fakeEvents) Finish(_ context.Context, u, t, e id.ID) (event.Event, error) {
 	f.rec(u, t, e)
 	return f.view, f.err
 }
@@ -81,29 +86,6 @@ func (f *fakeEvents) ListAttendees(_ context.Context, u, t, e id.ID, st string, 
 	f.status = st
 	return []event.Attendee{{UserID: u, Status: event.RSVPGoing, UpdatedAt: time.Now()}}, "", f.err
 }
-func (f *fakeEvents) AddCampItem(_ context.Context, u, t, e id.ID, name string, q int32, a id.ID) (event.CampItem, error) {
-	f.rec(u, t, e)
-	f.assigned = a
-	return event.CampItem{ID: id.New(), Name: name, Quantity: q, AssignedUserID: a}, f.err
-}
-func (f *fakeEvents) RemoveCampItem(_ context.Context, u, t, e, _ id.ID) error {
-	f.rec(u, t, e)
-	return f.err
-}
-func (f *fakeEvents) AssignCampItem(_ context.Context, u, t, e, item, a id.ID) (event.CampItem, error) {
-	f.rec(u, t, e)
-	f.assigned = a
-	return event.CampItem{ID: item, Name: "Çadır", Quantity: 1, AssignedUserID: a}, f.err
-}
-func (f *fakeEvents) SetVehicle(_ context.Context, u, t, e id.ID, in event.VehicleInput) (event.Vehicle, error) {
-	f.rec(u, t, e)
-	f.vehicle = in
-	return event.Vehicle{ID: id.New(), UserID: u, Make: in.Make, Plate: in.Plate}, f.err
-}
-func (f *fakeEvents) RemoveVehicle(_ context.Context, u, t, e, _ id.ID) error {
-	f.rec(u, t, e)
-	return f.err
-}
 func (f *fakeEvents) GetSeries(_ context.Context, u, t, sr id.ID) (event.Series, error) {
 	f.rec(u, t, sr)
 	return event.Series{ID: sr, TayfaID: t, RRule: "FREQ=WEEKLY", TimeZone: "Europe/Istanbul", CreatedBy: u}, f.err
@@ -122,32 +104,9 @@ func (f *fakeEvents) CheckIn(_ context.Context, u, t, e id.ID, at *event.Point) 
 	f.at = at
 	return event.Attendance{Status: event.AttendanceAttended, Method: event.MethodLocation}, f.err
 }
-func (f *fakeEvents) StartHike(_ context.Context, u, t, e id.ID, at time.Time) (event.HikeCheckin, error) {
-	f.rec(u, t, e)
-	f.when = at
-	return event.HikeCheckin{StartedAt: time.Now()}, f.err
-}
-func (f *fakeEvents) FinishHike(_ context.Context, u, t, e id.ID, at time.Time) (event.HikeCheckin, error) {
-	f.rec(u, t, e)
-	f.when = at
-	return event.HikeCheckin{StartedAt: time.Now().Add(-time.Hour), ReturnedAt: time.Now()}, f.err
-}
 func (f *fakeEvents) SetAttendance(_ context.Context, u, t, e, target id.ID, attended bool) error {
 	f.rec(u, t, e)
 	f.target, f.attended = target, attended
-	return f.err
-}
-func (f *fakeEvents) AddCatch(_ context.Context, u, t, e id.ID, in event.CatchInput) (event.Catch, error) {
-	f.rec(u, t, e)
-	f.catch = in
-	return event.Catch{ID: id.New(), UserID: u, Species: in.Species, LengthCm: in.LengthCm, Location: in.Location, Visibility: event.CatchTayfa}, f.err
-}
-func (f *fakeEvents) ListCatches(_ context.Context, u, t, e id.ID, _ int32, _ string) ([]event.Catch, string, error) {
-	f.rec(u, t, e)
-	return []event.Catch{{ID: id.New(), UserID: u, Species: "Levrek", LengthCm: 42.5, Visibility: event.CatchSelf}}, "", f.err
-}
-func (f *fakeEvents) RemoveCatch(_ context.Context, u, t, e, _ id.ID) error {
-	f.rec(u, t, e)
 	return f.err
 }
 func (f *fakeEvents) AddPhoto(_ context.Context, u, t, e id.ID, in event.PhotoInput) (event.Photo, error) {
@@ -186,22 +145,13 @@ func callAllEvents(ctx context.Context, c corev1.EventServiceServer, tayfaID, ev
 	_, out["CreateEvent"] = c.CreateEvent(ctx, createReq(tayfaID))
 	_, out["UpdateEvent"] = c.UpdateEvent(ctx, &corev1.UpdateEventRequest{TayfaId: tayfaID, EventId: eventID, Title: "x", UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}}})
 	_, out["CancelEvent"] = c.CancelEvent(ctx, &corev1.CancelEventRequest{TayfaId: tayfaID, EventId: eventID})
+	_, out["FinishEvent"] = c.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["GetEvent"] = c.GetEvent(ctx, &corev1.GetEventRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["ListUpcomingEvents"] = c.ListUpcomingEvents(ctx, &corev1.ListUpcomingEventsRequest{TayfaId: tayfaID})
 	_, out["SetRsvp"] = c.SetRsvp(ctx, &corev1.SetRsvpRequest{TayfaId: tayfaID, EventId: eventID, Status: corev1.RsvpStatus_RSVP_STATUS_GOING})
 	_, out["ListAttendees"] = c.ListAttendees(ctx, &corev1.ListAttendeesRequest{TayfaId: tayfaID, EventId: eventID})
-	_, out["AddCampItem"] = c.AddCampItem(ctx, &corev1.AddCampItemRequest{TayfaId: tayfaID, EventId: eventID, Name: "Çadır"})
-	_, out["RemoveCampItem"] = c.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: id.New().String()})
-	_, out["AssignCampItem"] = c.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: tayfaID, EventId: eventID, ItemId: id.New().String()})
-	_, out["AddConvoyVehicle"] = c.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, Make: "Ford"})
-	_, out["RemoveConvoyVehicle"] = c.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: tayfaID, EventId: eventID, VehicleId: id.New().String()})
 	_, out["CheckIn"] = c.CheckIn(ctx, &corev1.CheckInRequest{TayfaId: tayfaID, EventId: eventID, Location: &corev1.LatLng{Lat: 38.42, Lng: 27.14}})
-	_, out["StartHike"] = c.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: tayfaID, EventId: eventID})
-	_, out["FinishHike"] = c.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: tayfaID, EventId: eventID})
 	_, out["SetAttendance"] = c.SetAttendance(ctx, &corev1.SetAttendanceRequest{TayfaId: tayfaID, EventId: eventID, UserId: id.New().String(), Attended: true})
-	_, out["AddFishingCatch"] = c.AddFishingCatch(ctx, &corev1.AddFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, Species: "Levrek", LengthCm: 40, ClientRequestId: id.New().String()})
-	_, out["ListFishingCatches"] = c.ListFishingCatches(ctx, &corev1.ListFishingCatchesRequest{TayfaId: tayfaID, EventId: eventID})
-	_, out["RemoveFishingCatch"] = c.RemoveFishingCatch(ctx, &corev1.RemoveFishingCatchRequest{TayfaId: tayfaID, EventId: eventID, CatchId: id.New().String()})
 	// Series methods take the same ID as series_id.
 	_, out["GetEventSeries"] = c.GetEventSeries(ctx, &corev1.GetEventSeriesRequest{TayfaId: tayfaID, SeriesId: eventID})
 	_, out["EndEventSeries"] = c.EndEventSeries(ctx, &corev1.EndEventSeriesRequest{TayfaId: tayfaID, SeriesId: eventID})
@@ -270,24 +220,30 @@ func TestEventServerValidatesRequest(t *testing.T) {
 		"belirsiz biçim": {func(r *corev1.CreateEventRequest) { r.Mode = 0 }, "mode"},
 		"NaN enlem":      {func(r *corev1.CreateEventRequest) { r.MeetingPoint.Lat = math.NaN() }, "meeting_point"},
 		"sonsuz boylam":  {func(r *corev1.CreateEventRequest) { r.MeetingPoint.Lng = math.Inf(1) }, "meeting_point"},
-		"NaN rota noktası": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{{Lat: math.NaN()}}}}
-		}, "route"},
-		"boş rota noktası": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{nil, nil}}}
-		}, "route"},
-		"belirsiz platform": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "x"}}
-		}, "platform"},
-		"belirsiz spor": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Sports{Sports: &corev1.SportsDetails{}}
-		}, "sport"},
-		"NaN mesafe": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{DistanceKm: math.NaN()}}
-		}, "distance_km"},
-		"bozuk görünürlük": {func(r *corev1.CreateEventRequest) {
-			r.Details = &corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: 9}}
-		}, "spot_visibility"},
+		"oyun detayı": {func(r *corev1.CreateEventRequest) {
+			r.Details = &corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "x", Platform: corev1.GamingPlatform_GAMING_PLATFORM_PC}}
+		}, "details"},
+		"spor detayı": {func(r *corev1.CreateEventRequest) {
+			r.Details = &corev1.CreateEventRequest_Sports{Sports: &corev1.SportsDetails{Sport: corev1.Sport_SPORT_FOOTBALL}}
+		}, "details"},
+		"bozuk alan anahtarı": {func(r *corev1.CreateEventRequest) { r.Fields = map[string]string{"Game": `"x"`} }, "fields"},
+		"boş alan değeri":     {func(r *corev1.CreateEventRequest) { r.Fields = map[string]string{"game": ""} }, "fields"},
+		"dev alan değeri": {func(r *corev1.CreateEventRequest) {
+			r.Fields = map[string]string{"game": `"` + strings.Repeat("a", 9000) + `"`}
+		}, "fields"},
+		"çok fazla alan": {func(r *corev1.CreateEventRequest) {
+			r.Fields = map[string]string{}
+			for i := range 21 {
+				r.Fields["f"+strings.Repeat("x", i+1)] = `1`
+			}
+		}, "fields"},
+		"yürüyüş ayrıntısı": {func(r *corev1.CreateEventRequest) {
+			r.Details = &corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{Difficulty: 3}}
+		}, "details"},
+		// No type has Faz 1 details any more (issue #243).
+		"balık ayrıntısı": {func(r *corev1.CreateEventRequest) {
+			r.Details = &corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS}}
+		}, "details"},
 	} {
 		r := createReq(good)
 		tc.edit(r)
@@ -306,25 +262,23 @@ func TestEventServerValidatesRequest(t *testing.T) {
 	if field(err) != "status" {
 		t.Error("bilinmeyen liste durumu")
 	}
-	_, err = srv.AddCampItem(ctx, &corev1.AddCampItemRequest{TayfaId: good, EventId: good, AssignedUserId: "x"})
-	if field(err) != "assigned_user_id" {
-		t.Error("bozuk atanan")
+	// A convoy has no details any more (issues #239, #240): a request that
+	// still sends them is refused.
+	convoy := createReq(good)
+	convoy.Type = corev1.EventType_EVENT_TYPE_CONVOY
+	convoy.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{Vehicles: []*corev1.ConvoyVehicle{{Make: "sızma"}}}}
+	_, err = srv.CreateEvent(ctx, convoy)
+	if field(err) != "details" {
+		t.Error("konvoy ayrıntısı kabul edildi")
 	}
-	_, err = srv.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: good, EventId: good, ItemId: "x"})
-	if field(err) != "item_id" {
-		t.Error("bozuk malzeme kimliği")
-	}
-	_, err = srv.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: good, EventId: good, ItemId: "x"})
-	if field(err) != "item_id" {
-		t.Error("atamada bozuk malzeme kimliği")
-	}
-	_, err = srv.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: good, EventId: good, ItemId: good, AssignedUserId: "x"})
-	if field(err) != "assigned_user_id" {
-		t.Error("atamada bozuk kişi")
-	}
-	_, err = srv.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: good, EventId: good, VehicleId: "x"})
-	if field(err) != "vehicle_id" {
-		t.Error("bozuk araç kimliği")
+	// Nor does a camp (issue #241): its list is a component, its site
+	// details are fields.
+	camp := createReq(good)
+	camp.Type = corev1.EventType_EVENT_TYPE_CAMP
+	camp.Details = &corev1.CreateEventRequest_Camp{Camp: &corev1.CampDetails{SiteName: "Assos"}}
+	_, err = srv.CreateEvent(ctx, camp)
+	if field(err) != "details" {
+		t.Error("kamp ayrıntısı kabul edildi")
 	}
 	if f.calls != 0 {
 		t.Fatal("geçersiz istek app katmanına ulaştı")
@@ -344,13 +298,12 @@ func TestEventServerValidatesRequest(t *testing.T) {
 func TestEventServerConverts(t *testing.T) {
 	user := id.New()
 	start := time.Now().Add(time.Hour).UTC()
-	water := true
 	view := event.Event{
 		ID: id.New(), TayfaID: id.New(), Type: event.TypeCamp, Title: "Kamp", StartsAt: start, EndsAt: start.Add(time.Hour),
 		Location: event.Location{Mode: event.ModeInPerson, MeetingPoint: &event.Point{Lat: 1, Lng: 2}, City: "Çanakkale", District: "Ayvacık"},
 		Capacity: 4, Status: event.StatusCancelled, CancelledAt: start, CancelReason: "yağmur", CreatedBy: user,
 		Going: 3, Waitlist: 1, CallerRSVP: event.RSVPWaitlist, CallerCanManage: true,
-		Details: event.Details{Camp: &event.Camp{SiteName: "Assos", HasWater: &water, Items: []event.CampItem{{ID: id.New(), Name: "Çadır", Quantity: 2}}}},
+		Fields: map[string]json.RawMessage{"site_name": json.RawMessage(`"Assos"`), "has_water": json.RawMessage(`true`)},
 	}
 	f := &fakeEvents{view: view}
 	srv := NewEventServer(f, discard)
@@ -366,60 +319,78 @@ func TestEventServerConverts(t *testing.T) {
 	if p.GetType() != corev1.EventType_EVENT_TYPE_CAMP || p.GetMode() != corev1.EventMode_EVENT_MODE_IN_PERSON ||
 		p.GetStatus() != corev1.EventStatus_EVENT_STATUS_CANCELLED || p.GetCancelTime() == nil || p.GetMeetingPoint().GetLng() != 2 ||
 		p.GetCallerRsvp() != corev1.RsvpStatus_RSVP_STATUS_WAITLIST || !p.GetCallerCanManage() || p.GetGoingCount() != 3 ||
-		p.GetCreatedBy() != user.String() || p.GetCamp().GetSiteName() != "Assos" || !p.GetCamp().GetHasWater() ||
-		p.GetCamp().HasToilet != nil || len(p.GetCamp().GetItems()) != 1 || p.GetCamp().GetItems()[0].GetAssignedUserId() != "" {
+		p.GetCreatedBy() != user.String() || p.GetCamp() != nil || p.GetFields()["site_name"] != `"Assos"` ||
+		p.GetFields()["has_water"] != `true` || len(p.GetFields()) != 2 {
 		t.Fatalf("dönüştürme = %v", p)
 	}
 
-	// Request details reach the app layer; output-only fields are dropped.
+	// A convoy is created without details: its route and vehicles are
+	// components (issues #239, #240).
 	r := createReq(view.TayfaID.String())
 	r.Type = corev1.EventType_EVENT_TYPE_CONVOY
-	r.Details = &corev1.CreateEventRequest_Convoy{Convoy: &corev1.ConvoyDetails{
-		Route:    []*corev1.LatLng{{Lat: 1, Lng: 2}, {Lat: 3, Lng: 4}},
-		Vehicles: []*corev1.ConvoyVehicle{{Make: "sızma"}},
-	}}
 	if _, err := srv.CreateEvent(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if f.in.Type != event.TypeConvoy || f.in.Details.Convoy == nil || len(f.in.Details.Convoy.Route) != 2 || len(f.in.Details.Convoy.Vehicles) != 0 ||
+	if f.in.Type != event.TypeConvoy ||
 		f.in.Location.MeetingPoint == nil || !f.in.StartsAt.Equal(r.GetStartTime().AsTime()) {
 		t.Fatalf("girdi = %+v", f.in)
 	}
-	for _, tc := range []struct {
-		d     any
-		check func(event.Details) bool
-	}{
-		{&corev1.CreateEventRequest_Gaming{Gaming: &corev1.GamingDetails{Game: "CS2", Platform: corev1.GamingPlatform_GAMING_PLATFORM_SWITCH}},
-			func(d event.Details) bool { return d.Gaming != nil && d.Gaming.Platform == "switch" }},
-		{&corev1.CreateEventRequest_Sports{Sports: &corev1.SportsDetails{Sport: corev1.Sport_SPORT_TABLE_FOOTBALL}},
-			func(d event.Details) bool { return d.Sports != nil && d.Sports.Sport == "table_football" }},
-		{&corev1.CreateEventRequest_Fishing{Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS}},
-			func(d event.Details) bool {
-				return d.Fishing != nil && d.Fishing.SpotVisibility == event.SpotParticipants
-			}},
-		{&corev1.CreateEventRequest_Hike{Hike: &corev1.HikeDetails{Difficulty: 4, ExpectedReturnTime: timestamppb.New(start)}},
-			func(d event.Details) bool {
-				return d.Hike != nil && d.Hike.Difficulty == 4 && d.Hike.ExpectedReturnAt.Equal(start)
-			}},
-	} {
-		r := createReq(view.TayfaID.String())
-		switch d := tc.d.(type) {
-		case *corev1.CreateEventRequest_Gaming:
-			r.Details = d
-		case *corev1.CreateEventRequest_Sports:
-			r.Details = d
-		case *corev1.CreateEventRequest_Fishing:
-			r.Details = d
-		case *corev1.CreateEventRequest_Hike:
-			r.Details = d
-		}
-		if _, err := srv.CreateEvent(ctx, r); err != nil {
-			t.Fatal(err)
-		}
-		if !tc.check(f.in.Details) {
-			t.Errorf("detay = %+v", f.in.Details)
-		}
+	// The retired hike roll call methods are not served (issue #242).
+	if _, err := srv.StartHike(ctx, &corev1.StartHikeRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan StartHike: %v", err)
 	}
+	if _, err := srv.FinishHike(ctx, &corev1.FinishHikeRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan FinishHike: %v", err)
+	}
+	// The retired vehicle methods are not served.
+	if _, err := srv.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Make: "Ford"}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan AddConvoyVehicle: %v", err)
+	}
+	if _, err := srv.RemoveConvoyVehicle(ctx, &corev1.RemoveConvoyVehicleRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), VehicleId: id.New().String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan RemoveConvoyVehicle: %v", err)
+	}
+	// So are the retired camp item methods (issue #241).
+	if _, err := srv.AddCampItem(ctx, &corev1.AddCampItemRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Name: "Çadır"}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan AddCampItem: %v", err)
+	}
+	if _, err := srv.RemoveCampItem(ctx, &corev1.RemoveCampItemRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), ItemId: id.New().String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan RemoveCampItem: %v", err)
+	}
+	if _, err := srv.AssignCampItem(ctx, &corev1.AssignCampItemRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), ItemId: id.New().String()}); status.Code(err) != codes.Unimplemented {
+		t.Fatalf("kaldırılan AssignCampItem: %v", err)
+	}
+	// The type is a catalog key and the type's data its field values
+	// (issue #237); the key wins over the Faz 1 enum.
+	r = createReq(view.TayfaID.String())
+	r.TypeKey, r.Fields = "board_game_night", map[string]string{"game": `"Tavla"`, "players": `4`}
+	if _, err := srv.CreateEvent(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	if f.in.Type != "board_game_night" || len(f.in.Fields) != 2 || string(f.in.Fields["game"]) != `"Tavla"` || string(f.in.Fields["players"]) != `4` {
+		t.Fatalf("girdi = %+v", f.in)
+	}
+	up := &corev1.UpdateEventRequest{
+		TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Fields: map[string]string{"game": `"Okey"`},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{event.FieldFields}},
+	}
+	if _, err := srv.UpdateEvent(ctx, up); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.fields, []string{event.FieldFields}) || string(f.in.Fields["game"]) != `"Okey"` {
+		t.Fatalf("güncelleme girdisi = %v %+v", f.fields, f.in)
+	}
+	// ... and comes back the same way, with the type version.
+	f.view.Type, f.view.TypeVersion = "board_game_night", 3
+	f.view.Fields = map[string]json.RawMessage{"game": json.RawMessage(`"Okey"`), "players": json.RawMessage(`4`)}
+	resp, err = srv.GetEvent(ctx, &corev1.GetEventRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := resp.GetEvent(); p.GetTypeKey() != "board_game_night" || p.GetTypeVersion() != 3 || p.GetType() != corev1.EventType_EVENT_TYPE_UNSPECIFIED ||
+		len(p.GetFields()) != 2 || p.GetFields()["game"] != `"Okey"` || p.GetFields()["players"] != `4` {
+		t.Fatalf("alanlar = %v", p)
+	}
+	f.view = view
 
 	rs, err := srv.SetRsvp(ctx, &corev1.SetRsvpRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Status: corev1.RsvpStatus_RSVP_STATUS_NOT_GOING})
 	if err != nil || f.status != event.RSVPNotGoing || rs.GetStatus() != corev1.RsvpStatus_RSVP_STATUS_WAITLIST {
@@ -427,10 +398,6 @@ func TestEventServerConverts(t *testing.T) {
 	}
 	if _, err := srv.ListAttendees(ctx, &corev1.ListAttendeesRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String()}); err != nil || f.status != "" {
 		t.Fatalf("belirsiz durum app'e %q olarak gitti: %v", f.status, err)
-	}
-	v, err := srv.AddConvoyVehicle(ctx, &corev1.AddConvoyVehicleRequest{TayfaId: view.TayfaID.String(), EventId: view.ID.String(), Make: "Ford", Plate: "35 ABC 1"})
-	if err != nil || f.vehicle.Plate != "35 ABC 1" || v.GetVehicle().GetUserId() != user.String() {
-		t.Fatalf("araç = %v %v", v, err)
 	}
 	list, err := srv.ListUpcomingEvents(ctx, &corev1.ListUpcomingEventsRequest{TayfaId: view.TayfaID.String()})
 	if err != nil || len(list.GetEvents()) != 1 || list.GetNextPageToken() != "sonraki" {
@@ -611,4 +578,40 @@ func codeOf(t *testing.T, err error) codes.Code {
 	t.Helper()
 	code, _ := infoOf(t, err)
 	return code
+}
+
+// Şimdi başlat (issue #263): starts_now reaches the app without times, the
+// view's open_ended flag reaches the client, FinishEvent passes the IDs and
+// maps its errors.
+func TestEventServerStartsNow(t *testing.T) {
+	user, tayfaID, eventID := id.New(), id.New(), id.New()
+	f := &fakeEvents{view: event.Event{ID: eventID, TayfaID: tayfaID, Title: "Batak", OpenEnded: true}}
+	srv := NewEventServer(f, discard)
+	ctx := callerCtx(user)
+	r := createReq(tayfaID.String())
+	r.StartTime, r.EndTime, r.StartsNow = nil, nil, true
+	resp, err := srv.CreateEvent(ctx, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !f.in.StartsNow || !f.in.StartsAt.IsZero() || !f.in.EndsAt.IsZero() || !resp.GetEvent().GetOpenEnded() {
+		t.Fatalf("şimdi başlat aktarılmadı: %+v", f.in)
+	}
+	fin, err := srv.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: tayfaID.String(), EventId: eventID.String()})
+	if err != nil || f.user != user || f.tayfa != tayfaID || f.event != eventID || fin.GetEvent().GetId() != eventID.String() {
+		t.Fatalf("bitir: %v", err)
+	}
+	if _, err := srv.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: tayfaID.String(), EventId: "x"}); err == nil {
+		t.Fatal("geçersiz etkinlik kimliği kabul edildi")
+	}
+	f.err = apperr.ErrEventNotOpenEnded
+	_, err = srv.FinishEvent(ctx, &corev1.FinishEventRequest{TayfaId: tayfaID.String(), EventId: eventID.String()})
+	if code, info := infoOf(t, err); code != codes.FailedPrecondition || info.GetReason() != corev1.ErrorReason_ERROR_REASON_EVENT_NOT_OPEN_ENDED.String() {
+		t.Fatalf("açık uçlu değil: %v", err)
+	}
+	f.err = apperr.ErrNowLimitReached
+	_, err = srv.CreateEvent(ctx, r)
+	if code, info := infoOf(t, err); code != codes.ResourceExhausted || info.GetReason() != corev1.ErrorReason_ERROR_REASON_NOW_LIMIT_REACHED.String() {
+		t.Fatalf("sınır: %v", err)
+	}
 }

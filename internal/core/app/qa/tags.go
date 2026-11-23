@@ -19,7 +19,7 @@ import (
 // ListTags returns all tags of the tayfa by name, with the number of
 // visible questions carrying each.
 func (s *Service) ListTags(ctx context.Context, user, tayfa id.ID) ([]Tag, error) {
-	if err := s.read(ctx, user, tayfa); err != nil {
+	if err := s.read(ctx, user, tayfa, inPool(PoolQA)); err != nil {
 		return nil, err
 	}
 	rows, err := s.q.ListTags(ctx, tayfa.PG())
@@ -36,7 +36,7 @@ func (s *Service) ListTags(ctx context.Context, user, tayfa id.ID) ([]Tag, error
 // DeleteTag removes a tag from the tayfa and from every question.
 // Moderator and above.
 func (s *Service) DeleteTag(ctx context.Context, user, tayfa, tag id.ID) error {
-	return s.write(ctx, user, tayfa, authz.TagDelete, func(w writer) error {
+	return s.write(ctx, user, tayfa, inPool(PoolQA), authz.TagDelete, func(w writer) error {
 		n, err := w.q.DeleteTag(ctx, store.DeleteTagParams{TayfaID: tayfa.PG(), ID: tag.PG()})
 		if err != nil {
 			return fmt.Errorf("etiket silme: %w", err)

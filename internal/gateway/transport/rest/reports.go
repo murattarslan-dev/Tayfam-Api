@@ -48,10 +48,15 @@ var (
 		"user": corev1.ReportTargetType_REPORT_TARGET_TYPE_USER, "tayfa": corev1.ReportTargetType_REPORT_TARGET_TYPE_TAYFA,
 		"announcement": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANNOUNCEMENT, "event": corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT,
 		"question": corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION, "answer": corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER,
-		"poll": corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL, "fishing_catch": corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH,
+		"poll": corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL, "log_entry": corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH,
 		"event_photo":     corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO,
 		"channel_message": corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE,
 		"dm_message":      corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE,
+		"event_question":  corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_QUESTION,
+		"daily_item":      corev1.ReportTargetType_REPORT_TARGET_TYPE_DAILY_ITEM,
+		"library_item":    corev1.ReportTargetType_REPORT_TARGET_TYPE_LIBRARY_ITEM,
+		"material":        corev1.ReportTargetType_REPORT_TARGET_TYPE_MATERIAL,
+		"garage_vehicle":  corev1.ReportTargetType_REPORT_TARGET_TYPE_GARAGE_VEHICLE,
 	})
 	reportReasons = newEnum(map[string]corev1.ReportReason{
 		"harassment":         corev1.ReportReason_REPORT_REASON_HARASSMENT,
@@ -70,6 +75,7 @@ var (
 		"copyright":          corev1.ReportReason_REPORT_REASON_COPYRIGHT,
 		"staff_conduct":      corev1.ReportReason_REPORT_REASON_STAFF_CONDUCT,
 		"other":              corev1.ReportReason_REPORT_REASON_OTHER,
+		"paid_tutoring":      corev1.ReportReason_REPORT_REASON_PAID_TUTORING,
 	})
 	reportStatuses = newEnum(map[string]corev1.ReportStatus{
 		"open": corev1.ReportStatus_REPORT_STATUS_OPEN, "resolved": corev1.ReportStatus_REPORT_STATUS_RESOLVED,

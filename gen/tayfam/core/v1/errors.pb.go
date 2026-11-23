@@ -128,17 +128,17 @@ const (
 	// a convoy vehicle, checking in; online check-in also needs it given
 	// before the start).
 	ErrorReason_ERROR_REASON_EVENT_NOT_GOING ErrorReason = 33
-	// NOT_FOUND. No camp item, convoy vehicle, fishing catch or album photo
+	// NOT_FOUND. No list item, vehicle, fishing catch or album photo
 	// with this ID on this event that the caller may remove.
 	ErrorReason_ERROR_REASON_EVENT_ITEM_NOT_FOUND ErrorReason = 34
-	// RESOURCE_EXHAUSTED. The event's list is full (200 camp items; 30 album
+	// RESOURCE_EXHAUSTED. The event's list is full (200 list items; 30 album
 	// photos per person or 500 per album).
 	ErrorReason_ERROR_REASON_EVENT_LIMIT ErrorReason = 35
 	// FAILED_PRECONDITION. The method is for another event type (for example
-	// AddCampItem on a convoy event).
+	// ListFishingCatches on a convoy event).
 	ErrorReason_ERROR_REASON_EVENT_TYPE_MISMATCH ErrorReason = 36
-	// ABORTED. Someone else took the camp item; reload the event (issue
-	// #198).
+	// ABORTED. Someone else took the list item; reload the list (issues
+	// #198, #241).
 	ErrorReason_ERROR_REASON_EVENT_ITEM_TAKEN ErrorReason = 37
 	// FAILED_PRECONDITION. Outside the check-in window: from 30 minutes
 	// before the start until the end.
@@ -152,7 +152,9 @@ const (
 	// FAILED_PRECONDITION. Outside the organizer's correction window: the
 	// seven days after the end.
 	ErrorReason_ERROR_REASON_CORRECTION_CLOSED ErrorReason = 43
-	// FAILED_PRECONDITION. FinishHike without StartHike.
+	// FAILED_PRECONDITION. A roll call return without a start
+	// (RollCallComponentService.ReturnRollCall; the name is from the Faz 1
+	// hike roll call).
 	ErrorReason_ERROR_REASON_HIKE_NOT_STARTED ErrorReason = 44
 	// FAILED_PRECONDITION. The action needs the caller's verified attendance
 	// (AddFishingCatch, AddEventPhoto).
@@ -277,173 +279,524 @@ const (
 	ErrorReason_ERROR_REASON_SAFETY_CONTACT_CLOSED ErrorReason = 129
 	// NOT_FOUND. The caller chose no safety contact for this event.
 	ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND ErrorReason = 131
+	// NOT_FOUND. The catalog has no event type with this key and version.
+	ErrorReason_ERROR_REASON_CATALOG_TYPE_NOT_FOUND ErrorReason = 132
+	// NOT_FOUND. The event's type version has no component with this key, or
+	// the component is of another kind than the method.
+	ErrorReason_ERROR_REASON_COMPONENT_NOT_FOUND ErrorReason = 133
+	// FAILED_PRECONDITION. The component is optional and turned off for this
+	// event. Reads are refused too.
+	ErrorReason_ERROR_REASON_COMPONENT_DISABLED ErrorReason = 134
+	// FAILED_PRECONDITION. The organizer's selections (optional components,
+	// chosen parameters) cannot change once the event has started.
+	ErrorReason_ERROR_REASON_COMPONENT_LOCKED ErrorReason = 135
+	// FAILED_PRECONDITION. Component data cannot change from seven days after
+	// the event's end.
+	ErrorReason_ERROR_REASON_COMPONENT_FROZEN ErrorReason = 136
+	// FAILED_PRECONDITION. The vehicle has no free seat: every seat the
+	// owner offers is taken by an approved rider, or it offers none.
+	ErrorReason_ERROR_REASON_VEHICLE_FULL ErrorReason = 2400
+	// FAILED_PRECONDITION. The owner cannot offer fewer seats than the riders
+	// already approved; a rider is removed first.
+	ErrorReason_ERROR_REASON_VEHICLE_SEATS_TAKEN ErrorReason = 2401
+	// FAILED_PRECONDITION. Someone who has a vehicle of their own in the
+	// component cannot ask for a seat.
+	ErrorReason_ERROR_REASON_SEAT_REQUEST_DRIVER ErrorReason = 2402
+	// NOT_FOUND. The tayfa has no such value in this namespace.
+	ErrorReason_ERROR_REASON_VOCABULARY_NOT_FOUND ErrorReason = 2440
+	// FAILED_PRECONDITION. The value or the merge target is already merged
+	// into another value; undo that merge or choose its target.
+	ErrorReason_ERROR_REASON_VOCABULARY_MERGED ErrorReason = 2441
+	// FAILED_PRECONDITION. The value is not merged; there is nothing to undo.
+	ErrorReason_ERROR_REASON_VOCABULARY_NOT_MERGED ErrorReason = 2442
+	// FAILED_PRECONDITION. A measurement is entered once the event has
+	// started.
+	ErrorReason_ERROR_REASON_MEASUREMENT_NOT_STARTED ErrorReason = 2450
+	// FAILED_PRECONDITION. The person is not a participant of the event: they
+	// did not answer "going" and their attendance was not verified.
+	ErrorReason_ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT ErrorReason = 2451
+	// FAILED_PRECONDITION. The measure is of the other scope: a total measure
+	// has no per-person values, a personal one no total.
+	ErrorReason_ERROR_REASON_MEASUREMENT_SCOPE ErrorReason = 2452
+	// FAILED_PRECONDITION. The component's mode is manual: teams are formed
+	// by hand (ReplaceTeams), not generated.
+	ErrorReason_ERROR_REASON_TEAMS_MANUAL ErrorReason = 2480
+	// FAILED_PRECONDITION. Too few participants for the teams: at least two,
+	// and at least one per team.
+	ErrorReason_ERROR_REASON_TEAMS_TOO_FEW ErrorReason = 2481
+	// FAILED_PRECONDITION. A person put in a team is not a participant of the
+	// event: an active member who answered "going" or whose attendance was
+	// verified.
+	ErrorReason_ERROR_REASON_TEAMS_NOT_PARTICIPANT ErrorReason = 2482
+	// FAILED_PRECONDITION. The component's draw was made; its result is fixed
+	// and cannot be drawn again.
+	ErrorReason_ERROR_REASON_DRAW_ALREADY_MADE ErrorReason = 2490
+	// FAILED_PRECONDITION. Fewer than two to draw: participants, or teams
+	// with people when the type forms teams.
+	ErrorReason_ERROR_REASON_DRAW_TOO_FEW ErrorReason = 2491
+	// FAILED_PRECONDITION. The preset is not one the component offers or is
+	// retired; or the component offers presets and the table names none, or
+	// offers none and the table names one.
+	ErrorReason_ERROR_REASON_SCORE_PRESET_UNAVAILABLE ErrorReason = 2500
+	// NOT_FOUND. No such table in the component.
+	ErrorReason_ERROR_REASON_SCORE_TABLE_NOT_FOUND ErrorReason = 2501
+	// FAILED_PRECONDITION. The table is finished; a manager reopens it
+	// before a new round is entered.
+	ErrorReason_ERROR_REASON_SCORE_TABLE_FINISHED ErrorReason = 2502
+	// FAILED_PRECONDITION. The table has scores; its players no longer
+	// change.
+	ErrorReason_ERROR_REASON_SCORE_TABLE_STARTED ErrorReason = 2503
+	// FAILED_PRECONDITION. A player is not a participant of the event (an
+	// active member who answered "going" or whose attendance was verified),
+	// or a team is not a team of the named teams component.
+	ErrorReason_ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT ErrorReason = 2504
+	// FAILED_PRECONDITION. Scores are entered once the event has started.
+	ErrorReason_ERROR_REASON_SCORE_NOT_STARTED ErrorReason = 2505
+	// FAILED_PRECONDITION. The bracket seeds from the type's draw component:
+	// its draw was not made, or the type has none.
+	ErrorReason_ERROR_REASON_BRACKET_DRAW_REQUIRED ErrorReason = 2510
+	// FAILED_PRECONDITION. The bracket was started; a manager resets it
+	// before starting again.
+	ErrorReason_ERROR_REASON_BRACKET_STARTED ErrorReason = 2511
+	// FAILED_PRECONDITION. The bracket has not been started.
+	ErrorReason_ERROR_REASON_BRACKET_NOT_STARTED ErrorReason = 2512
+	// FAILED_PRECONDITION. Fewer than two entrants in the draw.
+	ErrorReason_ERROR_REASON_BRACKET_TOO_FEW ErrorReason = 2513
+	// NOT_FOUND. No such match in the bracket.
+	ErrorReason_ERROR_REASON_BRACKET_MATCH_NOT_FOUND ErrorReason = 2514
+	// NOT_FOUND. No such game in the match; only the last game is deleted.
+	ErrorReason_ERROR_REASON_BRACKET_GAME_NOT_FOUND ErrorReason = 2515
+	// FAILED_PRECONDITION. The match is decided (or a bye): no more games.
+	ErrorReason_ERROR_REASON_BRACKET_MATCH_DECIDED ErrorReason = 2516
+	// FAILED_PRECONDITION. A match of the current round is not decided yet.
+	ErrorReason_ERROR_REASON_BRACKET_ROUND_OPEN ErrorReason = 2517
+	// FAILED_PRECONDITION. A later round was paired from the match's round;
+	// its games no longer change (reset the bracket instead).
+	ErrorReason_ERROR_REASON_BRACKET_ROUND_CLOSED ErrorReason = 2518
+	// FAILED_PRECONDITION. The bracket has no next round.
+	ErrorReason_ERROR_REASON_BRACKET_FINISHED ErrorReason = 2519
+	// FAILED_PRECONDITION. The scoreboard component does not take guest
+	// players (its `guests` parameter is off).
+	ErrorReason_ERROR_REASON_GUEST_PLAYERS_DISABLED ErrorReason = 2520
+	// NOT_FOUND. No such guest player in the event.
+	ErrorReason_ERROR_REASON_GUEST_PLAYER_NOT_FOUND ErrorReason = 2521
+	// FAILED_PRECONDITION. The guest has a seat at a table or a place in a
+	// draw; it is not removed.
+	ErrorReason_ERROR_REASON_GUEST_PLAYER_IN_USE ErrorReason = 2522
+	// FAILED_PRECONDITION. A ranking is entered once the event has started.
+	ErrorReason_ERROR_REASON_RANKING_NOT_STARTED ErrorReason = 2530
+	// FAILED_PRECONDITION. The person is not a participant of the event: they
+	// did not answer "going" and their attendance was not verified.
+	ErrorReason_ERROR_REASON_RANKING_NOT_PARTICIPANT ErrorReason = 2531
+	// FAILED_PRECONDITION. The ranking is computed from a measure (its
+	// `source` parameter); the measure's values are entered instead.
+	ErrorReason_ERROR_REASON_RANKING_FROM_MEASURE ErrorReason = 2532
+	// FAILED_PRECONDITION. The organizer closed the vote: no votes and no
+	// option changes.
+	ErrorReason_ERROR_REASON_VOTE_CLOSED ErrorReason = 2540
+	// FAILED_PRECONDITION. The option is the caller: themselves, their own
+	// vehicle or their own photo.
+	ErrorReason_ERROR_REASON_VOTE_OWN_OPTION ErrorReason = 2541
+	// FAILED_PRECONDITION. The vote's options come from its source
+	// (participants, vehicles, album); only a free vote takes options
+	// written by the organizer.
+	ErrorReason_ERROR_REASON_VOTE_OPTIONS_FIXED ErrorReason = 2542
+	// ALREADY_EXISTS. A free option with the same label (Turkish lower case)
+	// is already in the vote.
+	ErrorReason_ERROR_REASON_VOTE_OPTION_EXISTS ErrorReason = 2543
+	// FAILED_PRECONDITION. A winner is announced once the event has started.
+	ErrorReason_ERROR_REASON_CELEBRATION_NOT_STARTED ErrorReason = 2550
+	// FAILED_PRECONDITION. The source component has no winner yet: a table
+	// that is still open, a bracket that has not finished, an empty ranking
+	// or one hidden from everyone (a sensitive measure).
+	ErrorReason_ERROR_REASON_CELEBRATION_NO_WINNER ErrorReason = 2551
+	// FAILED_PRECONDITION. A winner chosen by hand is not a participant of
+	// the event: they did not answer "going" and their attendance was not
+	// verified.
+	ErrorReason_ERROR_REASON_CELEBRATION_NOT_PARTICIPANT ErrorReason = 2552
+	// PERMISSION_DENIED. The attendee list of an event whose type's
+	// attendance is sensitive (sensitive_attendance) is the organizer's,
+	// moderators' and admins' only; the others see the counts on the event.
+	ErrorReason_ERROR_REASON_ATTENDEES_HIDDEN ErrorReason = 2570
+	// INVALID_ARGUMENT. An album photo of a type with album_notice needs the
+	// uploader's acknowledgement that the people in it (a child's guardian)
+	// agreed: consent_ack true.
+	ErrorReason_ERROR_REASON_ALBUM_CONSENT_REQUIRED ErrorReason = 2571
+	// RESOURCE_EXHAUSTED. The caller already organizes an open now event (a
+	// starts_now event that is not finished, ended or cancelled), in a
+	// tayfa or as an instant event: at most one at a time.
+	ErrorReason_ERROR_REASON_NOW_LIMIT_REACHED ErrorReason = 2630
+	// FAILED_PRECONDITION. FinishEvent on an event that was not started now
+	// (Event.open_ended false): a planned event ends at its end_time.
+	ErrorReason_ERROR_REASON_EVENT_NOT_OPEN_ENDED ErrorReason = 2631
+	// NOT_FOUND. The join QR token is malformed, unknown or expired, its
+	// event is cancelled, ended, deleted or online, its tayfa is read-only
+	// or gone, or the caller may not join: banned in the tayfa, blocked
+	// with the organizer either way, deleted or banned on the platform.
+	// These cases are indistinguishable on purpose (ADR-0011).
+	ErrorReason_ERROR_REASON_INVALID_JOIN_QR ErrorReason = 2640
+	// RESOURCE_EXHAUSTED. The event already had 30 joins by QR.
+	ErrorReason_ERROR_REASON_JOIN_QR_LIMIT_REACHED ErrorReason = 2641
+	// RESOURCE_EXHAUSTED. CreateInstantEvent with now_recipient_ids when the
+	// caller already sent 2 now broadcasts to friends today (Europe/Istanbul
+	// day). Nothing is created; without now_recipient_ids the event can be
+	// started.
+	ErrorReason_ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED ErrorReason = 2650
+	// NOT_FOUND. GetHomeWidgetData for a widget the tayfa's home page does
+	// not show (unknown key, switched off, its module off, a countdown past
+	// its date) or whose data is not read through this method (sections and
+	// module widgets read their own endpoints).
+	ErrorReason_ERROR_REASON_HOME_WIDGET_NOT_FOUND ErrorReason = 2680
+	// NOT_FOUND. A daily content item that is not in the tayfa's pool: never
+	// there, deleted (for anything but RestoreDailyItem), or deleted more
+	// than 30 days ago (RestoreDailyItem).
+	ErrorReason_ERROR_REASON_DAILY_ITEM_NOT_FOUND ErrorReason = 2690
+	// FAILED_PRECONDITION. The pool already has 1000 items; nothing is
+	// added or restored.
+	ErrorReason_ERROR_REASON_DAILY_ITEM_LIMIT ErrorReason = 2691
+	// NOT_FOUND. A library item that is not in the tayfa's library (never
+	// there or withdrawn), or, for an owner's step, not the caller's.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_NOT_FOUND ErrorReason = 2700
+	// NOT_FOUND. A loan that is not the caller's to act on: the owner's steps
+	// need the caller to own the item.
+	ErrorReason_ERROR_REASON_LIBRARY_LOAN_NOT_FOUND ErrorReason = 2701
+	// FAILED_PRECONDITION. The caller asked for their own item.
+	ErrorReason_ERROR_REASON_LIBRARY_OWN_ITEM ErrorReason = 2702
+	// FAILED_PRECONDITION. The loan is not in a state the step follows
+	// (approve: requested; hand over: approved; take back: handed over;
+	// decline: requested or approved).
+	ErrorReason_ERROR_REASON_LIBRARY_LOAN_STATE ErrorReason = 2703
+	// FAILED_PRECONDITION. The item is handed over; the owner takes it back
+	// before withdrawing it.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_ON_LOAN ErrorReason = 2704
+	// FAILED_PRECONDITION. The caller already has 100 items in the tayfa's
+	// library.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_LIMIT ErrorReason = 2705
+	// FAILED_PRECONDITION. 20 members already wait for the item.
+	ErrorReason_ERROR_REASON_LIBRARY_QUEUE_FULL ErrorReason = 2706
+	// NOT_FOUND. A material that is not visible in the tayfa's material
+	// library (never there, deleted, or linking to a blocked domain), or,
+	// for an author's step, not the caller's.
+	ErrorReason_ERROR_REASON_MATERIAL_NOT_FOUND ErrorReason = 2720
+	// INVALID_ARGUMENT. The link's domain, or a domain above it, is on the
+	// platform's blocked domain list.
+	ErrorReason_ERROR_REASON_BLOCKED_LINK ErrorReason = 2721
+	// FAILED_PRECONDITION. The caller already has 200 materials in the
+	// tayfa's material library.
+	ErrorReason_ERROR_REASON_MATERIAL_LIMIT ErrorReason = 2722
+	// NOT_FOUND. A vehicle that is not in the caller's garage (for the
+	// owner's steps and the vehicles component), or that does not show in
+	// the tayfa (a moderator's removal).
+	ErrorReason_ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND ErrorReason = 2730
+	// FAILED_PRECONDITION. The caller already has 10 vehicles in the garage.
+	ErrorReason_ERROR_REASON_GARAGE_LIMIT ErrorReason = 2731
 )
 
 // Enum value maps for ErrorReason.
 var (
 	ErrorReason_name = map[int32]string{
-		0:   "ERROR_REASON_UNSPECIFIED",
-		1:   "ERROR_REASON_VALIDATION",
-		2:   "ERROR_REASON_TAYFA_NOT_FOUND",
-		3:   "ERROR_REASON_PERMISSION_DENIED",
-		4:   "ERROR_REASON_MUTED",
-		5:   "ERROR_REASON_TAYFA_READ_ONLY",
-		6:   "ERROR_REASON_TAYFA_CREATE_LIMIT",
-		7:   "ERROR_REASON_RATE_LIMITED",
-		8:   "ERROR_REASON_INVALID_JOIN_CODE",
-		9:   "ERROR_REASON_INVITE_INVALID",
-		10:  "ERROR_REASON_INVITE_EXPIRED",
-		11:  "ERROR_REASON_INVITE_REVOKED",
-		12:  "ERROR_REASON_INVITE_EXHAUSTED",
-		13:  "ERROR_REASON_INVITE_NOT_FOUND",
-		14:  "ERROR_REASON_ALREADY_MEMBER",
-		15:  "ERROR_REASON_ALREADY_PENDING",
-		16:  "ERROR_REASON_BANNED",
-		17:  "ERROR_REASON_MEMBER_NOT_FOUND",
-		18:  "ERROR_REASON_ROLE_HIERARCHY",
-		19:  "ERROR_REASON_LAST_ADMIN",
-		20:  "ERROR_REASON_DELETION_ALREADY_REQUESTED",
-		21:  "ERROR_REASON_DELETION_NOT_REQUESTED",
-		22:  "ERROR_REASON_MODULE_DISABLED",
-		23:  "ERROR_REASON_ANNOUNCEMENT_NOT_FOUND",
-		30:  "ERROR_REASON_EVENT_NOT_FOUND",
-		31:  "ERROR_REASON_EVENT_CANCELLED",
-		32:  "ERROR_REASON_EVENT_ENDED",
-		33:  "ERROR_REASON_EVENT_NOT_GOING",
-		34:  "ERROR_REASON_EVENT_ITEM_NOT_FOUND",
-		35:  "ERROR_REASON_EVENT_LIMIT",
-		36:  "ERROR_REASON_EVENT_TYPE_MISMATCH",
-		37:  "ERROR_REASON_EVENT_ITEM_TAKEN",
-		40:  "ERROR_REASON_CHECK_IN_CLOSED",
-		41:  "ERROR_REASON_CHECK_IN_TOO_FAR",
-		42:  "ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED",
-		43:  "ERROR_REASON_CORRECTION_CLOSED",
-		44:  "ERROR_REASON_HIKE_NOT_STARTED",
-		45:  "ERROR_REASON_NOT_ATTENDED",
-		46:  "ERROR_REASON_ALBUM_CLOSED",
-		50:  "ERROR_REASON_EVENT_SERIES_NOT_FOUND",
-		51:  "ERROR_REASON_EVENT_SERIES_ENDED",
-		60:  "ERROR_REASON_QUESTION_NOT_FOUND",
-		61:  "ERROR_REASON_ANSWER_NOT_FOUND",
-		62:  "ERROR_REASON_TAG_NOT_FOUND",
-		63:  "ERROR_REASON_OWN_ANSWER_VOTE",
-		64:  "ERROR_REASON_TAG_LIMIT",
-		70:  "ERROR_REASON_POLL_NOT_FOUND",
-		71:  "ERROR_REASON_POLL_CLOSED",
-		72:  "ERROR_REASON_POLL_ANONYMOUS",
-		90:  "ERROR_REASON_USER_NOT_FOUND",
-		91:  "ERROR_REASON_FRIEND_REQUEST_LIMIT",
-		92:  "ERROR_REASON_FRIEND_REQUEST_NOT_FOUND",
-		93:  "ERROR_REASON_ALREADY_FRIENDS",
-		94:  "ERROR_REASON_FRIEND_REQUEST_PENDING",
-		95:  "ERROR_REASON_NOT_FRIENDS",
-		96:  "ERROR_REASON_DIRECT_INVITE_LIMIT",
-		97:  "ERROR_REASON_INVITATION_NOT_FOUND",
-		98:  "ERROR_REASON_ALREADY_INVITED",
-		99:  "ERROR_REASON_INVITE_NOT_ALLOWED",
-		100: "ERROR_REASON_REPORT_NOT_FOUND",
-		101: "ERROR_REASON_REPORT_TARGET_NOT_FOUND",
-		102: "ERROR_REASON_REPORT_LIMIT",
-		103: "ERROR_REASON_REPORT_ALREADY_RESOLVED",
-		104: "ERROR_REASON_REPORT_ACTION_MISSING",
-		110: "ERROR_REASON_REAUTHENTICATION_REQUIRED",
-		111: "ERROR_REASON_REASON_REQUIRED",
-		112: "ERROR_REASON_DECISION_NOT_APPLICABLE",
-		113: "ERROR_REASON_TAYFA_STATE_CONFLICT",
-		120: "ERROR_REASON_UPLOAD_NOT_FOUND",
-		121: "ERROR_REASON_UPLOAD_NOT_READY",
-		122: "ERROR_REASON_UPLOAD_IN_USE",
-		123: "ERROR_REASON_UPLOAD_NOT_RECEIVED",
-		124: "ERROR_REASON_UPLOAD_RATE_LIMITED",
-		125: "ERROR_REASON_UPLOAD_QUOTA_EXCEEDED",
-		130: "ERROR_REASON_INSTANT_EVENT_LIMIT",
-		126: "ERROR_REASON_FEATURE_DISABLED",
-		127: "ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS",
-		128: "ERROR_REASON_FEEDBACK_CLOSED",
-		129: "ERROR_REASON_SAFETY_CONTACT_CLOSED",
-		131: "ERROR_REASON_SAFETY_CONTACT_NOT_FOUND",
+		0:    "ERROR_REASON_UNSPECIFIED",
+		1:    "ERROR_REASON_VALIDATION",
+		2:    "ERROR_REASON_TAYFA_NOT_FOUND",
+		3:    "ERROR_REASON_PERMISSION_DENIED",
+		4:    "ERROR_REASON_MUTED",
+		5:    "ERROR_REASON_TAYFA_READ_ONLY",
+		6:    "ERROR_REASON_TAYFA_CREATE_LIMIT",
+		7:    "ERROR_REASON_RATE_LIMITED",
+		8:    "ERROR_REASON_INVALID_JOIN_CODE",
+		9:    "ERROR_REASON_INVITE_INVALID",
+		10:   "ERROR_REASON_INVITE_EXPIRED",
+		11:   "ERROR_REASON_INVITE_REVOKED",
+		12:   "ERROR_REASON_INVITE_EXHAUSTED",
+		13:   "ERROR_REASON_INVITE_NOT_FOUND",
+		14:   "ERROR_REASON_ALREADY_MEMBER",
+		15:   "ERROR_REASON_ALREADY_PENDING",
+		16:   "ERROR_REASON_BANNED",
+		17:   "ERROR_REASON_MEMBER_NOT_FOUND",
+		18:   "ERROR_REASON_ROLE_HIERARCHY",
+		19:   "ERROR_REASON_LAST_ADMIN",
+		20:   "ERROR_REASON_DELETION_ALREADY_REQUESTED",
+		21:   "ERROR_REASON_DELETION_NOT_REQUESTED",
+		22:   "ERROR_REASON_MODULE_DISABLED",
+		23:   "ERROR_REASON_ANNOUNCEMENT_NOT_FOUND",
+		30:   "ERROR_REASON_EVENT_NOT_FOUND",
+		31:   "ERROR_REASON_EVENT_CANCELLED",
+		32:   "ERROR_REASON_EVENT_ENDED",
+		33:   "ERROR_REASON_EVENT_NOT_GOING",
+		34:   "ERROR_REASON_EVENT_ITEM_NOT_FOUND",
+		35:   "ERROR_REASON_EVENT_LIMIT",
+		36:   "ERROR_REASON_EVENT_TYPE_MISMATCH",
+		37:   "ERROR_REASON_EVENT_ITEM_TAKEN",
+		40:   "ERROR_REASON_CHECK_IN_CLOSED",
+		41:   "ERROR_REASON_CHECK_IN_TOO_FAR",
+		42:   "ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED",
+		43:   "ERROR_REASON_CORRECTION_CLOSED",
+		44:   "ERROR_REASON_HIKE_NOT_STARTED",
+		45:   "ERROR_REASON_NOT_ATTENDED",
+		46:   "ERROR_REASON_ALBUM_CLOSED",
+		50:   "ERROR_REASON_EVENT_SERIES_NOT_FOUND",
+		51:   "ERROR_REASON_EVENT_SERIES_ENDED",
+		60:   "ERROR_REASON_QUESTION_NOT_FOUND",
+		61:   "ERROR_REASON_ANSWER_NOT_FOUND",
+		62:   "ERROR_REASON_TAG_NOT_FOUND",
+		63:   "ERROR_REASON_OWN_ANSWER_VOTE",
+		64:   "ERROR_REASON_TAG_LIMIT",
+		70:   "ERROR_REASON_POLL_NOT_FOUND",
+		71:   "ERROR_REASON_POLL_CLOSED",
+		72:   "ERROR_REASON_POLL_ANONYMOUS",
+		90:   "ERROR_REASON_USER_NOT_FOUND",
+		91:   "ERROR_REASON_FRIEND_REQUEST_LIMIT",
+		92:   "ERROR_REASON_FRIEND_REQUEST_NOT_FOUND",
+		93:   "ERROR_REASON_ALREADY_FRIENDS",
+		94:   "ERROR_REASON_FRIEND_REQUEST_PENDING",
+		95:   "ERROR_REASON_NOT_FRIENDS",
+		96:   "ERROR_REASON_DIRECT_INVITE_LIMIT",
+		97:   "ERROR_REASON_INVITATION_NOT_FOUND",
+		98:   "ERROR_REASON_ALREADY_INVITED",
+		99:   "ERROR_REASON_INVITE_NOT_ALLOWED",
+		100:  "ERROR_REASON_REPORT_NOT_FOUND",
+		101:  "ERROR_REASON_REPORT_TARGET_NOT_FOUND",
+		102:  "ERROR_REASON_REPORT_LIMIT",
+		103:  "ERROR_REASON_REPORT_ALREADY_RESOLVED",
+		104:  "ERROR_REASON_REPORT_ACTION_MISSING",
+		110:  "ERROR_REASON_REAUTHENTICATION_REQUIRED",
+		111:  "ERROR_REASON_REASON_REQUIRED",
+		112:  "ERROR_REASON_DECISION_NOT_APPLICABLE",
+		113:  "ERROR_REASON_TAYFA_STATE_CONFLICT",
+		120:  "ERROR_REASON_UPLOAD_NOT_FOUND",
+		121:  "ERROR_REASON_UPLOAD_NOT_READY",
+		122:  "ERROR_REASON_UPLOAD_IN_USE",
+		123:  "ERROR_REASON_UPLOAD_NOT_RECEIVED",
+		124:  "ERROR_REASON_UPLOAD_RATE_LIMITED",
+		125:  "ERROR_REASON_UPLOAD_QUOTA_EXCEEDED",
+		130:  "ERROR_REASON_INSTANT_EVENT_LIMIT",
+		126:  "ERROR_REASON_FEATURE_DISABLED",
+		127:  "ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS",
+		128:  "ERROR_REASON_FEEDBACK_CLOSED",
+		129:  "ERROR_REASON_SAFETY_CONTACT_CLOSED",
+		131:  "ERROR_REASON_SAFETY_CONTACT_NOT_FOUND",
+		132:  "ERROR_REASON_CATALOG_TYPE_NOT_FOUND",
+		133:  "ERROR_REASON_COMPONENT_NOT_FOUND",
+		134:  "ERROR_REASON_COMPONENT_DISABLED",
+		135:  "ERROR_REASON_COMPONENT_LOCKED",
+		136:  "ERROR_REASON_COMPONENT_FROZEN",
+		2400: "ERROR_REASON_VEHICLE_FULL",
+		2401: "ERROR_REASON_VEHICLE_SEATS_TAKEN",
+		2402: "ERROR_REASON_SEAT_REQUEST_DRIVER",
+		2440: "ERROR_REASON_VOCABULARY_NOT_FOUND",
+		2441: "ERROR_REASON_VOCABULARY_MERGED",
+		2442: "ERROR_REASON_VOCABULARY_NOT_MERGED",
+		2450: "ERROR_REASON_MEASUREMENT_NOT_STARTED",
+		2451: "ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT",
+		2452: "ERROR_REASON_MEASUREMENT_SCOPE",
+		2480: "ERROR_REASON_TEAMS_MANUAL",
+		2481: "ERROR_REASON_TEAMS_TOO_FEW",
+		2482: "ERROR_REASON_TEAMS_NOT_PARTICIPANT",
+		2490: "ERROR_REASON_DRAW_ALREADY_MADE",
+		2491: "ERROR_REASON_DRAW_TOO_FEW",
+		2500: "ERROR_REASON_SCORE_PRESET_UNAVAILABLE",
+		2501: "ERROR_REASON_SCORE_TABLE_NOT_FOUND",
+		2502: "ERROR_REASON_SCORE_TABLE_FINISHED",
+		2503: "ERROR_REASON_SCORE_TABLE_STARTED",
+		2504: "ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT",
+		2505: "ERROR_REASON_SCORE_NOT_STARTED",
+		2510: "ERROR_REASON_BRACKET_DRAW_REQUIRED",
+		2511: "ERROR_REASON_BRACKET_STARTED",
+		2512: "ERROR_REASON_BRACKET_NOT_STARTED",
+		2513: "ERROR_REASON_BRACKET_TOO_FEW",
+		2514: "ERROR_REASON_BRACKET_MATCH_NOT_FOUND",
+		2515: "ERROR_REASON_BRACKET_GAME_NOT_FOUND",
+		2516: "ERROR_REASON_BRACKET_MATCH_DECIDED",
+		2517: "ERROR_REASON_BRACKET_ROUND_OPEN",
+		2518: "ERROR_REASON_BRACKET_ROUND_CLOSED",
+		2519: "ERROR_REASON_BRACKET_FINISHED",
+		2520: "ERROR_REASON_GUEST_PLAYERS_DISABLED",
+		2521: "ERROR_REASON_GUEST_PLAYER_NOT_FOUND",
+		2522: "ERROR_REASON_GUEST_PLAYER_IN_USE",
+		2530: "ERROR_REASON_RANKING_NOT_STARTED",
+		2531: "ERROR_REASON_RANKING_NOT_PARTICIPANT",
+		2532: "ERROR_REASON_RANKING_FROM_MEASURE",
+		2540: "ERROR_REASON_VOTE_CLOSED",
+		2541: "ERROR_REASON_VOTE_OWN_OPTION",
+		2542: "ERROR_REASON_VOTE_OPTIONS_FIXED",
+		2543: "ERROR_REASON_VOTE_OPTION_EXISTS",
+		2550: "ERROR_REASON_CELEBRATION_NOT_STARTED",
+		2551: "ERROR_REASON_CELEBRATION_NO_WINNER",
+		2552: "ERROR_REASON_CELEBRATION_NOT_PARTICIPANT",
+		2570: "ERROR_REASON_ATTENDEES_HIDDEN",
+		2571: "ERROR_REASON_ALBUM_CONSENT_REQUIRED",
+		2630: "ERROR_REASON_NOW_LIMIT_REACHED",
+		2631: "ERROR_REASON_EVENT_NOT_OPEN_ENDED",
+		2640: "ERROR_REASON_INVALID_JOIN_QR",
+		2641: "ERROR_REASON_JOIN_QR_LIMIT_REACHED",
+		2650: "ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED",
+		2680: "ERROR_REASON_HOME_WIDGET_NOT_FOUND",
+		2690: "ERROR_REASON_DAILY_ITEM_NOT_FOUND",
+		2691: "ERROR_REASON_DAILY_ITEM_LIMIT",
+		2700: "ERROR_REASON_LIBRARY_ITEM_NOT_FOUND",
+		2701: "ERROR_REASON_LIBRARY_LOAN_NOT_FOUND",
+		2702: "ERROR_REASON_LIBRARY_OWN_ITEM",
+		2703: "ERROR_REASON_LIBRARY_LOAN_STATE",
+		2704: "ERROR_REASON_LIBRARY_ITEM_ON_LOAN",
+		2705: "ERROR_REASON_LIBRARY_ITEM_LIMIT",
+		2706: "ERROR_REASON_LIBRARY_QUEUE_FULL",
+		2720: "ERROR_REASON_MATERIAL_NOT_FOUND",
+		2721: "ERROR_REASON_BLOCKED_LINK",
+		2722: "ERROR_REASON_MATERIAL_LIMIT",
+		2730: "ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND",
+		2731: "ERROR_REASON_GARAGE_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
-		"ERROR_REASON_UNSPECIFIED":                 0,
-		"ERROR_REASON_VALIDATION":                  1,
-		"ERROR_REASON_TAYFA_NOT_FOUND":             2,
-		"ERROR_REASON_PERMISSION_DENIED":           3,
-		"ERROR_REASON_MUTED":                       4,
-		"ERROR_REASON_TAYFA_READ_ONLY":             5,
-		"ERROR_REASON_TAYFA_CREATE_LIMIT":          6,
-		"ERROR_REASON_RATE_LIMITED":                7,
-		"ERROR_REASON_INVALID_JOIN_CODE":           8,
-		"ERROR_REASON_INVITE_INVALID":              9,
-		"ERROR_REASON_INVITE_EXPIRED":              10,
-		"ERROR_REASON_INVITE_REVOKED":              11,
-		"ERROR_REASON_INVITE_EXHAUSTED":            12,
-		"ERROR_REASON_INVITE_NOT_FOUND":            13,
-		"ERROR_REASON_ALREADY_MEMBER":              14,
-		"ERROR_REASON_ALREADY_PENDING":             15,
-		"ERROR_REASON_BANNED":                      16,
-		"ERROR_REASON_MEMBER_NOT_FOUND":            17,
-		"ERROR_REASON_ROLE_HIERARCHY":              18,
-		"ERROR_REASON_LAST_ADMIN":                  19,
-		"ERROR_REASON_DELETION_ALREADY_REQUESTED":  20,
-		"ERROR_REASON_DELETION_NOT_REQUESTED":      21,
-		"ERROR_REASON_MODULE_DISABLED":             22,
-		"ERROR_REASON_ANNOUNCEMENT_NOT_FOUND":      23,
-		"ERROR_REASON_EVENT_NOT_FOUND":             30,
-		"ERROR_REASON_EVENT_CANCELLED":             31,
-		"ERROR_REASON_EVENT_ENDED":                 32,
-		"ERROR_REASON_EVENT_NOT_GOING":             33,
-		"ERROR_REASON_EVENT_ITEM_NOT_FOUND":        34,
-		"ERROR_REASON_EVENT_LIMIT":                 35,
-		"ERROR_REASON_EVENT_TYPE_MISMATCH":         36,
-		"ERROR_REASON_EVENT_ITEM_TAKEN":            37,
-		"ERROR_REASON_CHECK_IN_CLOSED":             40,
-		"ERROR_REASON_CHECK_IN_TOO_FAR":            41,
-		"ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED": 42,
-		"ERROR_REASON_CORRECTION_CLOSED":           43,
-		"ERROR_REASON_HIKE_NOT_STARTED":            44,
-		"ERROR_REASON_NOT_ATTENDED":                45,
-		"ERROR_REASON_ALBUM_CLOSED":                46,
-		"ERROR_REASON_EVENT_SERIES_NOT_FOUND":      50,
-		"ERROR_REASON_EVENT_SERIES_ENDED":          51,
-		"ERROR_REASON_QUESTION_NOT_FOUND":          60,
-		"ERROR_REASON_ANSWER_NOT_FOUND":            61,
-		"ERROR_REASON_TAG_NOT_FOUND":               62,
-		"ERROR_REASON_OWN_ANSWER_VOTE":             63,
-		"ERROR_REASON_TAG_LIMIT":                   64,
-		"ERROR_REASON_POLL_NOT_FOUND":              70,
-		"ERROR_REASON_POLL_CLOSED":                 71,
-		"ERROR_REASON_POLL_ANONYMOUS":              72,
-		"ERROR_REASON_USER_NOT_FOUND":              90,
-		"ERROR_REASON_FRIEND_REQUEST_LIMIT":        91,
-		"ERROR_REASON_FRIEND_REQUEST_NOT_FOUND":    92,
-		"ERROR_REASON_ALREADY_FRIENDS":             93,
-		"ERROR_REASON_FRIEND_REQUEST_PENDING":      94,
-		"ERROR_REASON_NOT_FRIENDS":                 95,
-		"ERROR_REASON_DIRECT_INVITE_LIMIT":         96,
-		"ERROR_REASON_INVITATION_NOT_FOUND":        97,
-		"ERROR_REASON_ALREADY_INVITED":             98,
-		"ERROR_REASON_INVITE_NOT_ALLOWED":          99,
-		"ERROR_REASON_REPORT_NOT_FOUND":            100,
-		"ERROR_REASON_REPORT_TARGET_NOT_FOUND":     101,
-		"ERROR_REASON_REPORT_LIMIT":                102,
-		"ERROR_REASON_REPORT_ALREADY_RESOLVED":     103,
-		"ERROR_REASON_REPORT_ACTION_MISSING":       104,
-		"ERROR_REASON_REAUTHENTICATION_REQUIRED":   110,
-		"ERROR_REASON_REASON_REQUIRED":             111,
-		"ERROR_REASON_DECISION_NOT_APPLICABLE":     112,
-		"ERROR_REASON_TAYFA_STATE_CONFLICT":        113,
-		"ERROR_REASON_UPLOAD_NOT_FOUND":            120,
-		"ERROR_REASON_UPLOAD_NOT_READY":            121,
-		"ERROR_REASON_UPLOAD_IN_USE":               122,
-		"ERROR_REASON_UPLOAD_NOT_RECEIVED":         123,
-		"ERROR_REASON_UPLOAD_RATE_LIMITED":         124,
-		"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED":       125,
-		"ERROR_REASON_INSTANT_EVENT_LIMIT":         130,
-		"ERROR_REASON_FEATURE_DISABLED":            126,
-		"ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS":    127,
-		"ERROR_REASON_FEEDBACK_CLOSED":             128,
-		"ERROR_REASON_SAFETY_CONTACT_CLOSED":       129,
-		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND":    131,
+		"ERROR_REASON_UNSPECIFIED":                  0,
+		"ERROR_REASON_VALIDATION":                   1,
+		"ERROR_REASON_TAYFA_NOT_FOUND":              2,
+		"ERROR_REASON_PERMISSION_DENIED":            3,
+		"ERROR_REASON_MUTED":                        4,
+		"ERROR_REASON_TAYFA_READ_ONLY":              5,
+		"ERROR_REASON_TAYFA_CREATE_LIMIT":           6,
+		"ERROR_REASON_RATE_LIMITED":                 7,
+		"ERROR_REASON_INVALID_JOIN_CODE":            8,
+		"ERROR_REASON_INVITE_INVALID":               9,
+		"ERROR_REASON_INVITE_EXPIRED":               10,
+		"ERROR_REASON_INVITE_REVOKED":               11,
+		"ERROR_REASON_INVITE_EXHAUSTED":             12,
+		"ERROR_REASON_INVITE_NOT_FOUND":             13,
+		"ERROR_REASON_ALREADY_MEMBER":               14,
+		"ERROR_REASON_ALREADY_PENDING":              15,
+		"ERROR_REASON_BANNED":                       16,
+		"ERROR_REASON_MEMBER_NOT_FOUND":             17,
+		"ERROR_REASON_ROLE_HIERARCHY":               18,
+		"ERROR_REASON_LAST_ADMIN":                   19,
+		"ERROR_REASON_DELETION_ALREADY_REQUESTED":   20,
+		"ERROR_REASON_DELETION_NOT_REQUESTED":       21,
+		"ERROR_REASON_MODULE_DISABLED":              22,
+		"ERROR_REASON_ANNOUNCEMENT_NOT_FOUND":       23,
+		"ERROR_REASON_EVENT_NOT_FOUND":              30,
+		"ERROR_REASON_EVENT_CANCELLED":              31,
+		"ERROR_REASON_EVENT_ENDED":                  32,
+		"ERROR_REASON_EVENT_NOT_GOING":              33,
+		"ERROR_REASON_EVENT_ITEM_NOT_FOUND":         34,
+		"ERROR_REASON_EVENT_LIMIT":                  35,
+		"ERROR_REASON_EVENT_TYPE_MISMATCH":          36,
+		"ERROR_REASON_EVENT_ITEM_TAKEN":             37,
+		"ERROR_REASON_CHECK_IN_CLOSED":              40,
+		"ERROR_REASON_CHECK_IN_TOO_FAR":             41,
+		"ERROR_REASON_CHECK_IN_ATTEMPTS_EXHAUSTED":  42,
+		"ERROR_REASON_CORRECTION_CLOSED":            43,
+		"ERROR_REASON_HIKE_NOT_STARTED":             44,
+		"ERROR_REASON_NOT_ATTENDED":                 45,
+		"ERROR_REASON_ALBUM_CLOSED":                 46,
+		"ERROR_REASON_EVENT_SERIES_NOT_FOUND":       50,
+		"ERROR_REASON_EVENT_SERIES_ENDED":           51,
+		"ERROR_REASON_QUESTION_NOT_FOUND":           60,
+		"ERROR_REASON_ANSWER_NOT_FOUND":             61,
+		"ERROR_REASON_TAG_NOT_FOUND":                62,
+		"ERROR_REASON_OWN_ANSWER_VOTE":              63,
+		"ERROR_REASON_TAG_LIMIT":                    64,
+		"ERROR_REASON_POLL_NOT_FOUND":               70,
+		"ERROR_REASON_POLL_CLOSED":                  71,
+		"ERROR_REASON_POLL_ANONYMOUS":               72,
+		"ERROR_REASON_USER_NOT_FOUND":               90,
+		"ERROR_REASON_FRIEND_REQUEST_LIMIT":         91,
+		"ERROR_REASON_FRIEND_REQUEST_NOT_FOUND":     92,
+		"ERROR_REASON_ALREADY_FRIENDS":              93,
+		"ERROR_REASON_FRIEND_REQUEST_PENDING":       94,
+		"ERROR_REASON_NOT_FRIENDS":                  95,
+		"ERROR_REASON_DIRECT_INVITE_LIMIT":          96,
+		"ERROR_REASON_INVITATION_NOT_FOUND":         97,
+		"ERROR_REASON_ALREADY_INVITED":              98,
+		"ERROR_REASON_INVITE_NOT_ALLOWED":           99,
+		"ERROR_REASON_REPORT_NOT_FOUND":             100,
+		"ERROR_REASON_REPORT_TARGET_NOT_FOUND":      101,
+		"ERROR_REASON_REPORT_LIMIT":                 102,
+		"ERROR_REASON_REPORT_ALREADY_RESOLVED":      103,
+		"ERROR_REASON_REPORT_ACTION_MISSING":        104,
+		"ERROR_REASON_REAUTHENTICATION_REQUIRED":    110,
+		"ERROR_REASON_REASON_REQUIRED":              111,
+		"ERROR_REASON_DECISION_NOT_APPLICABLE":      112,
+		"ERROR_REASON_TAYFA_STATE_CONFLICT":         113,
+		"ERROR_REASON_UPLOAD_NOT_FOUND":             120,
+		"ERROR_REASON_UPLOAD_NOT_READY":             121,
+		"ERROR_REASON_UPLOAD_IN_USE":                122,
+		"ERROR_REASON_UPLOAD_NOT_RECEIVED":          123,
+		"ERROR_REASON_UPLOAD_RATE_LIMITED":          124,
+		"ERROR_REASON_UPLOAD_QUOTA_EXCEEDED":        125,
+		"ERROR_REASON_INSTANT_EVENT_LIMIT":          130,
+		"ERROR_REASON_FEATURE_DISABLED":             126,
+		"ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS":     127,
+		"ERROR_REASON_FEEDBACK_CLOSED":              128,
+		"ERROR_REASON_SAFETY_CONTACT_CLOSED":        129,
+		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND":     131,
+		"ERROR_REASON_CATALOG_TYPE_NOT_FOUND":       132,
+		"ERROR_REASON_COMPONENT_NOT_FOUND":          133,
+		"ERROR_REASON_COMPONENT_DISABLED":           134,
+		"ERROR_REASON_COMPONENT_LOCKED":             135,
+		"ERROR_REASON_COMPONENT_FROZEN":             136,
+		"ERROR_REASON_VEHICLE_FULL":                 2400,
+		"ERROR_REASON_VEHICLE_SEATS_TAKEN":          2401,
+		"ERROR_REASON_SEAT_REQUEST_DRIVER":          2402,
+		"ERROR_REASON_VOCABULARY_NOT_FOUND":         2440,
+		"ERROR_REASON_VOCABULARY_MERGED":            2441,
+		"ERROR_REASON_VOCABULARY_NOT_MERGED":        2442,
+		"ERROR_REASON_MEASUREMENT_NOT_STARTED":      2450,
+		"ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT":  2451,
+		"ERROR_REASON_MEASUREMENT_SCOPE":            2452,
+		"ERROR_REASON_TEAMS_MANUAL":                 2480,
+		"ERROR_REASON_TEAMS_TOO_FEW":                2481,
+		"ERROR_REASON_TEAMS_NOT_PARTICIPANT":        2482,
+		"ERROR_REASON_DRAW_ALREADY_MADE":            2490,
+		"ERROR_REASON_DRAW_TOO_FEW":                 2491,
+		"ERROR_REASON_SCORE_PRESET_UNAVAILABLE":     2500,
+		"ERROR_REASON_SCORE_TABLE_NOT_FOUND":        2501,
+		"ERROR_REASON_SCORE_TABLE_FINISHED":         2502,
+		"ERROR_REASON_SCORE_TABLE_STARTED":          2503,
+		"ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT": 2504,
+		"ERROR_REASON_SCORE_NOT_STARTED":            2505,
+		"ERROR_REASON_BRACKET_DRAW_REQUIRED":        2510,
+		"ERROR_REASON_BRACKET_STARTED":              2511,
+		"ERROR_REASON_BRACKET_NOT_STARTED":          2512,
+		"ERROR_REASON_BRACKET_TOO_FEW":              2513,
+		"ERROR_REASON_BRACKET_MATCH_NOT_FOUND":      2514,
+		"ERROR_REASON_BRACKET_GAME_NOT_FOUND":       2515,
+		"ERROR_REASON_BRACKET_MATCH_DECIDED":        2516,
+		"ERROR_REASON_BRACKET_ROUND_OPEN":           2517,
+		"ERROR_REASON_BRACKET_ROUND_CLOSED":         2518,
+		"ERROR_REASON_BRACKET_FINISHED":             2519,
+		"ERROR_REASON_GUEST_PLAYERS_DISABLED":       2520,
+		"ERROR_REASON_GUEST_PLAYER_NOT_FOUND":       2521,
+		"ERROR_REASON_GUEST_PLAYER_IN_USE":          2522,
+		"ERROR_REASON_RANKING_NOT_STARTED":          2530,
+		"ERROR_REASON_RANKING_NOT_PARTICIPANT":      2531,
+		"ERROR_REASON_RANKING_FROM_MEASURE":         2532,
+		"ERROR_REASON_VOTE_CLOSED":                  2540,
+		"ERROR_REASON_VOTE_OWN_OPTION":              2541,
+		"ERROR_REASON_VOTE_OPTIONS_FIXED":           2542,
+		"ERROR_REASON_VOTE_OPTION_EXISTS":           2543,
+		"ERROR_REASON_CELEBRATION_NOT_STARTED":      2550,
+		"ERROR_REASON_CELEBRATION_NO_WINNER":        2551,
+		"ERROR_REASON_CELEBRATION_NOT_PARTICIPANT":  2552,
+		"ERROR_REASON_ATTENDEES_HIDDEN":             2570,
+		"ERROR_REASON_ALBUM_CONSENT_REQUIRED":       2571,
+		"ERROR_REASON_NOW_LIMIT_REACHED":            2630,
+		"ERROR_REASON_EVENT_NOT_OPEN_ENDED":         2631,
+		"ERROR_REASON_INVALID_JOIN_QR":              2640,
+		"ERROR_REASON_JOIN_QR_LIMIT_REACHED":        2641,
+		"ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED":  2650,
+		"ERROR_REASON_HOME_WIDGET_NOT_FOUND":        2680,
+		"ERROR_REASON_DAILY_ITEM_NOT_FOUND":         2690,
+		"ERROR_REASON_DAILY_ITEM_LIMIT":             2691,
+		"ERROR_REASON_LIBRARY_ITEM_NOT_FOUND":       2700,
+		"ERROR_REASON_LIBRARY_LOAN_NOT_FOUND":       2701,
+		"ERROR_REASON_LIBRARY_OWN_ITEM":             2702,
+		"ERROR_REASON_LIBRARY_LOAN_STATE":           2703,
+		"ERROR_REASON_LIBRARY_ITEM_ON_LOAN":         2704,
+		"ERROR_REASON_LIBRARY_ITEM_LIMIT":           2705,
+		"ERROR_REASON_LIBRARY_QUEUE_FULL":           2706,
+		"ERROR_REASON_MATERIAL_NOT_FOUND":           2720,
+		"ERROR_REASON_BLOCKED_LINK":                 2721,
+		"ERROR_REASON_MATERIAL_LIMIT":               2722,
+		"ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND":     2730,
+		"ERROR_REASON_GARAGE_LIMIT":                 2731,
 	}
 )
 
@@ -478,7 +831,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xa9\x16\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xd0+\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -560,7 +913,77 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"%ERROR_REASON_DISCOVER_TOO_FEW_MEMBERS\x10\x7f\x12!\n" +
 	"\x1cERROR_REASON_FEEDBACK_CLOSED\x10\x80\x01\x12'\n" +
 	"\"ERROR_REASON_SAFETY_CONTACT_CLOSED\x10\x81\x01\x12*\n" +
-	"%ERROR_REASON_SAFETY_CONTACT_NOT_FOUND\x10\x83\x01B\xbd\x01\n" +
+	"%ERROR_REASON_SAFETY_CONTACT_NOT_FOUND\x10\x83\x01\x12(\n" +
+	"#ERROR_REASON_CATALOG_TYPE_NOT_FOUND\x10\x84\x01\x12%\n" +
+	" ERROR_REASON_COMPONENT_NOT_FOUND\x10\x85\x01\x12$\n" +
+	"\x1fERROR_REASON_COMPONENT_DISABLED\x10\x86\x01\x12\"\n" +
+	"\x1dERROR_REASON_COMPONENT_LOCKED\x10\x87\x01\x12\"\n" +
+	"\x1dERROR_REASON_COMPONENT_FROZEN\x10\x88\x01\x12\x1e\n" +
+	"\x19ERROR_REASON_VEHICLE_FULL\x10\xe0\x12\x12%\n" +
+	" ERROR_REASON_VEHICLE_SEATS_TAKEN\x10\xe1\x12\x12%\n" +
+	" ERROR_REASON_SEAT_REQUEST_DRIVER\x10\xe2\x12\x12&\n" +
+	"!ERROR_REASON_VOCABULARY_NOT_FOUND\x10\x88\x13\x12#\n" +
+	"\x1eERROR_REASON_VOCABULARY_MERGED\x10\x89\x13\x12'\n" +
+	"\"ERROR_REASON_VOCABULARY_NOT_MERGED\x10\x8a\x13\x12)\n" +
+	"$ERROR_REASON_MEASUREMENT_NOT_STARTED\x10\x92\x13\x12-\n" +
+	"(ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT\x10\x93\x13\x12#\n" +
+	"\x1eERROR_REASON_MEASUREMENT_SCOPE\x10\x94\x13\x12\x1e\n" +
+	"\x19ERROR_REASON_TEAMS_MANUAL\x10\xb0\x13\x12\x1f\n" +
+	"\x1aERROR_REASON_TEAMS_TOO_FEW\x10\xb1\x13\x12'\n" +
+	"\"ERROR_REASON_TEAMS_NOT_PARTICIPANT\x10\xb2\x13\x12#\n" +
+	"\x1eERROR_REASON_DRAW_ALREADY_MADE\x10\xba\x13\x12\x1e\n" +
+	"\x19ERROR_REASON_DRAW_TOO_FEW\x10\xbb\x13\x12*\n" +
+	"%ERROR_REASON_SCORE_PRESET_UNAVAILABLE\x10\xc4\x13\x12'\n" +
+	"\"ERROR_REASON_SCORE_TABLE_NOT_FOUND\x10\xc5\x13\x12&\n" +
+	"!ERROR_REASON_SCORE_TABLE_FINISHED\x10\xc6\x13\x12%\n" +
+	" ERROR_REASON_SCORE_TABLE_STARTED\x10\xc7\x13\x12.\n" +
+	")ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT\x10\xc8\x13\x12#\n" +
+	"\x1eERROR_REASON_SCORE_NOT_STARTED\x10\xc9\x13\x12'\n" +
+	"\"ERROR_REASON_BRACKET_DRAW_REQUIRED\x10\xce\x13\x12!\n" +
+	"\x1cERROR_REASON_BRACKET_STARTED\x10\xcf\x13\x12%\n" +
+	" ERROR_REASON_BRACKET_NOT_STARTED\x10\xd0\x13\x12!\n" +
+	"\x1cERROR_REASON_BRACKET_TOO_FEW\x10\xd1\x13\x12)\n" +
+	"$ERROR_REASON_BRACKET_MATCH_NOT_FOUND\x10\xd2\x13\x12(\n" +
+	"#ERROR_REASON_BRACKET_GAME_NOT_FOUND\x10\xd3\x13\x12'\n" +
+	"\"ERROR_REASON_BRACKET_MATCH_DECIDED\x10\xd4\x13\x12$\n" +
+	"\x1fERROR_REASON_BRACKET_ROUND_OPEN\x10\xd5\x13\x12&\n" +
+	"!ERROR_REASON_BRACKET_ROUND_CLOSED\x10\xd6\x13\x12\"\n" +
+	"\x1dERROR_REASON_BRACKET_FINISHED\x10\xd7\x13\x12(\n" +
+	"#ERROR_REASON_GUEST_PLAYERS_DISABLED\x10\xd8\x13\x12(\n" +
+	"#ERROR_REASON_GUEST_PLAYER_NOT_FOUND\x10\xd9\x13\x12%\n" +
+	" ERROR_REASON_GUEST_PLAYER_IN_USE\x10\xda\x13\x12%\n" +
+	" ERROR_REASON_RANKING_NOT_STARTED\x10\xe2\x13\x12)\n" +
+	"$ERROR_REASON_RANKING_NOT_PARTICIPANT\x10\xe3\x13\x12&\n" +
+	"!ERROR_REASON_RANKING_FROM_MEASURE\x10\xe4\x13\x12\x1d\n" +
+	"\x18ERROR_REASON_VOTE_CLOSED\x10\xec\x13\x12!\n" +
+	"\x1cERROR_REASON_VOTE_OWN_OPTION\x10\xed\x13\x12$\n" +
+	"\x1fERROR_REASON_VOTE_OPTIONS_FIXED\x10\xee\x13\x12$\n" +
+	"\x1fERROR_REASON_VOTE_OPTION_EXISTS\x10\xef\x13\x12)\n" +
+	"$ERROR_REASON_CELEBRATION_NOT_STARTED\x10\xf6\x13\x12'\n" +
+	"\"ERROR_REASON_CELEBRATION_NO_WINNER\x10\xf7\x13\x12-\n" +
+	"(ERROR_REASON_CELEBRATION_NOT_PARTICIPANT\x10\xf8\x13\x12\"\n" +
+	"\x1dERROR_REASON_ATTENDEES_HIDDEN\x10\x8a\x14\x12(\n" +
+	"#ERROR_REASON_ALBUM_CONSENT_REQUIRED\x10\x8b\x14\x12#\n" +
+	"\x1eERROR_REASON_NOW_LIMIT_REACHED\x10\xc6\x14\x12&\n" +
+	"!ERROR_REASON_EVENT_NOT_OPEN_ENDED\x10\xc7\x14\x12!\n" +
+	"\x1cERROR_REASON_INVALID_JOIN_QR\x10\xd0\x14\x12'\n" +
+	"\"ERROR_REASON_JOIN_QR_LIMIT_REACHED\x10\xd1\x14\x12-\n" +
+	"(ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED\x10\xda\x14\x12'\n" +
+	"\"ERROR_REASON_HOME_WIDGET_NOT_FOUND\x10\xf8\x14\x12&\n" +
+	"!ERROR_REASON_DAILY_ITEM_NOT_FOUND\x10\x82\x15\x12\"\n" +
+	"\x1dERROR_REASON_DAILY_ITEM_LIMIT\x10\x83\x15\x12(\n" +
+	"#ERROR_REASON_LIBRARY_ITEM_NOT_FOUND\x10\x8c\x15\x12(\n" +
+	"#ERROR_REASON_LIBRARY_LOAN_NOT_FOUND\x10\x8d\x15\x12\"\n" +
+	"\x1dERROR_REASON_LIBRARY_OWN_ITEM\x10\x8e\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_LOAN_STATE\x10\x8f\x15\x12&\n" +
+	"!ERROR_REASON_LIBRARY_ITEM_ON_LOAN\x10\x90\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_ITEM_LIMIT\x10\x91\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_QUEUE_FULL\x10\x92\x15\x12$\n" +
+	"\x1fERROR_REASON_MATERIAL_NOT_FOUND\x10\xa0\x15\x12\x1e\n" +
+	"\x19ERROR_REASON_BLOCKED_LINK\x10\xa1\x15\x12 \n" +
+	"\x1bERROR_REASON_MATERIAL_LIMIT\x10\xa2\x15\x12*\n" +
+	"%ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND\x10\xaa\x15\x12\x1e\n" +
+	"\x19ERROR_REASON_GARAGE_LIMIT\x10\xab\x15B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

@@ -291,6 +291,16 @@ func TestPreferences(t *testing.T) {
 		"mentions, yürüyüş alarmı":    {notification.TypeHikeOverdue, &pref{"mentions", time.Hour}, true},
 		"none, DM":                    {notification.TypeDMMessage, &pref{"none", 0}, false},
 		"none, DM isteği, süre geçti": {notification.TypeDMRequest, &pref{"none", -time.Minute}, true},
+		// Library loan steps (issue #321): pushed, personal.
+		"kütüphane isteği":              {notification.TypeLibraryLoanRequested, nil, true},
+		"mentions, kütüphane sırası":    {notification.TypeLibraryQueueJoined, &pref{"mentions", 0}, true},
+		"mentions, kütüphane teslimi":   {notification.TypeLibraryLoanHandedOver, &pref{"mentions", 0}, true},
+		"none, kütüphane onayı":         {notification.TypeLibraryLoanApproved, &pref{"none", 0}, false},
+		"none, kütüphane reddi, geçmiş": {notification.TypeLibraryLoanDeclined, &pref{"none", -time.Hour}, true},
+		// The queue turn (issue #332): pushed, personal, no actor.
+		"kütüphane sıra sende":           {notification.TypeLibraryQueueTurn, nil, true},
+		"mentions, kütüphane sıra sende": {notification.TypeLibraryQueueTurn, &pref{"mentions", 0}, true},
+		"none, kütüphane sıra sende":     {notification.TypeLibraryQueueTurn, &pref{"none", 0}, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := setup(t, true)
@@ -310,6 +320,11 @@ func TestPreferences(t *testing.T) {
 			case notification.TypeDMMessage, notification.TypeDMRequest:
 				r.TargetType, r.Tayfa, r.Unread = notification.TargetDMConversation, id.ID{}, 1
 				scopeType, scopeID = "dm_conversation", r.Target
+			case notification.TypeLibraryLoanRequested, notification.TypeLibraryQueueJoined, notification.TypeLibraryLoanApproved,
+				notification.TypeLibraryLoanDeclined, notification.TypeLibraryLoanHandedOver:
+				r.TargetType, r.Actor = notification.TargetLibraryItem, id.New()
+			case notification.TypeLibraryQueueTurn:
+				r.TargetType = notification.TargetLibraryItem
 			}
 			if tc.pref != nil {
 				var until any
@@ -741,5 +756,112 @@ func TestFIDRemovedWithSession(t *testing.T) {
 	must(t, push.Cleanup(ctx, store.New(e.pool), u))
 	if got := e.tokens(t, u); len(got) != 0 {
 		t.Fatalf("hesap silmede kaldı: %+v", got)
+	}
+}
+
+// A now notice (issue #265; ADR-0038 §4) is pushed with its translation
+// keys and IDs only, and passes the tayfa's preference and then the
+// tayfa's own "Şimdi bildirimleri".
+func TestNowStartedPush(t *testing.T) {
+	for name, tc := range map[string]struct {
+		tayfa, now string // "": no preference
+		want       bool
+	}{
+		"tercih yok":             {"", "", true},
+		"tayfa none":             {"none", "", false},
+		"tayfa mentions":         {"mentions", "", false},
+		"şimdi none":             {"", "none", false},
+		"tayfa all, şimdi none":  {"all", "none", false},
+		"başka tayfanın tercihi": {"", "other", true},
+		"tayfa none, şimdi all":  {"none", "all", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t, true)
+			u, org, ev := id.New(), id.New(), id.New()
+			must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u", push.TokenTypeRegistration))
+			set := func(scope, level string, tayfa id.ID) {
+				_, err := e.pool.Exec(ctx, `INSERT INTO notification_preferences (user_id, scope_type, scope_id, level) VALUES ($1, $2, $3, $4)`,
+					u.PG(), scope, tayfa.PG(), level)
+				must(t, err)
+			}
+			if tc.tayfa != "" {
+				set("tayfa", tc.tayfa, e.tayfa)
+			}
+			switch tc.now {
+			case "":
+			case "other":
+				set("tayfa_now", "none", id.New())
+			default:
+				set("tayfa_now", tc.now, e.tayfa)
+			}
+			e.notify(t, notification.Request{Type: notification.TypeNowStarted, Tayfa: e.tayfa, Actor: org, TargetType: notification.TargetEvent, Target: ev, Recipients: []id.ID{u}})
+			e.drain(t)
+			sent := e.fcm.Sent()
+			if got := len(sent) == 1; got != tc.want {
+				t.Fatalf("push gitti mi = %v, beklenen %v", got, tc.want)
+			}
+			if !tc.want {
+				return
+			}
+			data := sent[0]["data"].(map[string]any)
+			if data["type"] != "now_started" || data["target_type"] != "event" || data["target_id"] != ev.String() ||
+				data["tayfa_id"] != e.tayfa.String() || len(data) != 5 {
+				t.Fatalf("data = %v", data)
+			}
+			n := sent[0]["android"].(map[string]any)["notification"].(map[string]any)
+			if n["title_loc_key"] != "push_now_started_title" || n["body_loc_key"] != "push_now_started_body" || n["title_loc_args"] != nil || n["body_loc_args"] != nil {
+				t.Fatalf("android bildirimi = %v", n)
+			}
+		})
+	}
+}
+
+// A library loan step (issue #321; ADR-0040 §1) is pushed with its
+// translation keys and IDs only: the item is the target and the group.
+func TestLibraryLoanStepPush(t *testing.T) {
+	e := setup(t, true)
+	u, owner, item := id.New(), id.New(), id.New()
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u", push.TokenTypeRegistration))
+	e.notify(t, notification.Request{Type: notification.TypeLibraryLoanHandedOver, Tayfa: e.tayfa, Actor: owner,
+		TargetType: notification.TargetLibraryItem, Target: item, Recipients: []id.ID{u}})
+	e.drain(t)
+	sent := e.fcm.Sent()
+	if len(sent) != 1 {
+		t.Fatalf("gönderilen = %d", len(sent))
+	}
+	data := sent[0]["data"].(map[string]any)
+	if data["type"] != "library_loan_handed_over" || data["target_type"] != "library_item" || data["target_id"] != item.String() ||
+		data["tayfa_id"] != e.tayfa.String() || len(data) != 5 {
+		t.Fatalf("data = %v", data)
+	}
+	n := sent[0]["android"].(map[string]any)["notification"].(map[string]any)
+	if n["title_loc_key"] != "push_library_loan_handed_over_title" || n["body_loc_key"] != "push_library_loan_handed_over_body" ||
+		n["title_loc_args"] != nil || n["body_loc_args"] != nil || n["tag"] != item.String() {
+		t.Fatalf("android bildirimi = %v", n)
+	}
+}
+
+// The queue turn (issue #332; ADR-0040 §1) is pushed with its translation
+// keys and IDs only, grouped by the item.
+func TestLibraryQueueTurnPush(t *testing.T) {
+	e := setup(t, true)
+	u, item := id.New(), id.New()
+	must(t, e.svc.Register(ctx, caller(u), push.PlatformAndroid, "tok:u", push.TokenTypeRegistration))
+	e.notify(t, notification.Request{Type: notification.TypeLibraryQueueTurn, Tayfa: e.tayfa,
+		TargetType: notification.TargetLibraryItem, Target: item, Recipients: []id.ID{u}})
+	e.drain(t)
+	sent := e.fcm.Sent()
+	if len(sent) != 1 {
+		t.Fatalf("gönderilen = %d", len(sent))
+	}
+	data := sent[0]["data"].(map[string]any)
+	if data["type"] != "library_queue_turn" || data["target_type"] != "library_item" || data["target_id"] != item.String() ||
+		data["tayfa_id"] != e.tayfa.String() || len(data) != 5 {
+		t.Fatalf("data = %v", data)
+	}
+	n := sent[0]["android"].(map[string]any)["notification"].(map[string]any)
+	if n["title_loc_key"] != "push_library_queue_turn_title" || n["body_loc_key"] != "push_library_queue_turn_body" ||
+		n["title_loc_args"] != nil || n["body_loc_args"] != nil || n["tag"] != item.String() {
+		t.Fatalf("android bildirimi = %v", n)
 	}
 }

@@ -46,6 +46,13 @@ func (s *ProfileServer) GetUserProfile(ctx context.Context, req *corev1.GetUserP
 		Self: p.Self, FriendState: friendStates[p.Friend], ActivityVisible: p.ActivityVisible,
 		ActivityVisibility: visibilityToProto(p.ActivityVisibility),
 		MutualTayfas:       make([]*corev1.MutualTayfa, 0, len(p.MutualTayfas)),
+		BadgesVisible:      p.BadgesVisible,
+		Badges:             earnedBadgesPB(p.Badges),
+		StatsVisible:       p.StatsVisible,
+		Stats:              make([]*corev1.UserStat, 0, len(p.Stats)),
+	}
+	for _, st := range p.Stats {
+		out.Stats = append(out.Stats, &corev1.UserStat{MetricKey: st.Metric, Source: st.Source, Value: st.Value, EventCount: st.Events})
 	}
 	for _, t := range p.MutualTayfas {
 		out.MutualTayfas = append(out.MutualTayfas, &corev1.MutualTayfa{TayfaId: t.ID.String(), Name: t.Name})
@@ -66,7 +73,7 @@ func (s *ProfileServer) ListUserActivity(ctx context.Context, req *corev1.ListUs
 	out := &corev1.ListUserActivityResponse{Records: make([]*corev1.ActivityRecord, 0, len(p.Items)), NextPageToken: p.Next}
 	for _, a := range p.Items {
 		r := &corev1.ActivityRecord{
-			EventType: interestToProto(a.EventType), City: a.City, District: a.District,
+			EventTypeKey: a.EventType, City: a.City, District: a.District,
 			StartTime: timestamppb.New(a.StartedAt), TayfaMember: a.Member,
 		}
 		switch a.Mode {

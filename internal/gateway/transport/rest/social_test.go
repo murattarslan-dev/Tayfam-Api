@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -75,6 +76,9 @@ func (f *fakeCore) CancelInvitation(ctx context.Context, in *corev1.CancelInvita
 }
 
 func (f *fakeCore) GetUserProfile(ctx context.Context, in *corev1.GetUserProfileRequest, _ ...grpc.CallOption) (*corev1.GetUserProfileResponse, error) {
+	if f.profile != nil {
+		return &corev1.GetUserProfileResponse{Profile: f.profile}, f.record(ctx, in)
+	}
 	return &corev1.GetUserProfileResponse{Profile: &corev1.UserProfile{
 		UserId: userID, DisplayName: "Ece", ActivityVisible: true,
 		MutualTayfas: []*corev1.MutualTayfa{{TayfaId: tayfaID, Name: "Klasikçiler"}},
@@ -82,7 +86,7 @@ func (f *fakeCore) GetUserProfile(ctx context.Context, in *corev1.GetUserProfile
 }
 func (f *fakeCore) ListUserActivity(ctx context.Context, in *corev1.ListUserActivityRequest, _ ...grpc.CallOption) (*corev1.ListUserActivityResponse, error) {
 	return &corev1.ListUserActivityResponse{Records: []*corev1.ActivityRecord{
-		{EventType: corev1.EventType_EVENT_TYPE_HIKE, Mode: corev1.EventMode_EVENT_MODE_IN_PERSON, City: "Bursa", StartTime: timestamppb.New(time.Unix(1, 0))},
+		{EventTypeKey: "hike", Mode: corev1.EventMode_EVENT_MODE_IN_PERSON, City: "Bursa", StartTime: timestamppb.New(time.Unix(1, 0))},
 	}}, f.record(ctx, in)
 }
 
@@ -248,6 +252,10 @@ func TestProfileRoutes(t *testing.T) {
 	if w.Code != 200 || v.FriendState != "" || v.ActivityVisibility != "" || len(v.MutualTayfas) != 1 || !v.ActivityVisible {
 		t.Fatalf("profil: %d %+v", w.Code, v)
 	}
+	// Badges the caller may not see are absent, not empty (issue #258).
+	if v.Badges != nil || strings.Contains(w.Body.String(), `"badges"`) {
+		t.Fatalf("görünmeyen rozetler: %s", w.Body)
+	}
 	w = as(h, "GET", "/v1/users/"+userID+"/activity?page_size=10", "")
 	a := decodeBody[activityListJSON](t, w)
 	if w.Code != 200 || len(a.Records) != 1 || a.Records[0].EventType != "hike" || a.Records[0].Mode != "in_person" || a.Records[0].TayfaMember || strings.Contains(w.Body.String(), "tayfa_name") {
@@ -325,12 +333,15 @@ func TestProfileDetails(t *testing.T) {
 func TestProfileFieldRoutes(t *testing.T) {
 	f := &fakeCore{}
 	h := coreRouter(f)
-	w := as(h, "PATCH", "/v1/me/account", `{"interests":["hike","camp"],"team":"Bursaspor","languages":[],
+	w := as(h, "PATCH", "/v1/me/account", `{"interests":["nature","board_games_2"],"team":"Bursaspor","languages":[],
 		"social_accounts":[{"platform":"x","username":"ece"}],"declined_profile_fields":["about"],"about_visibility":"friends"}`)
 	got, _, _ := f.last()
 	req := got.(*identityv1.UpdateAccountRequest)
 	p := req.GetProfile()
-	if w.Code != 200 || len(p.GetInterests().GetValues()) != 2 || p.GetTeam() != "Bursaspor" || p.Languages == nil ||
+	// Interests are catalog keys: any key of the catalog's form goes on to
+	// identity, which checks it against its copy of the catalog.
+	if w.Code != 200 || !slices.Equal(p.GetInterests().GetKeys(), []string{"nature", "board_games_2"}) || len(p.GetInterests().GetValues()) != 0 ||
+		p.GetTeam() != "Bursaspor" || p.Languages == nil ||
 		p.GetSocialAccounts().GetValues()[0].GetPlatform() != identityv1.SocialPlatform_SOCIAL_PLATFORM_X ||
 		p.GetDeclined().GetValues()[0] != identityv1.ProfileField_PROFILE_FIELD_ABOUT || p.About != nil ||
 		req.GetAboutVisibility() != identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS || req.DisplayName != nil {
@@ -344,8 +355,9 @@ func TestProfileFieldRoutes(t *testing.T) {
 	}
 	n0 := func() int { _, _, n := f.last(); return n }()
 	for _, body := range []string{
-		`{"interests":["chess"]}`,
-		`{"interests":["hike","hike"]}`,
+		`{"interests":["Chess"]}`,
+		`{"interests":["nature","nature"]}`,
+		`{"interests":["` + strings.Join(manyInterestKeys(maxInterests+1), `","`) + `"]}`,
 		`{"social_accounts":[{"platform":"facebook","username":"ece"}]}`,
 		`{"declined_profile_fields":["birth_date"]}`,
 		`{"about_visibility":"public"}`,
@@ -370,9 +382,56 @@ func TestProfileFieldRoutes(t *testing.T) {
 	}
 }
 
+// TestStatsVisibilityRoutes (issue #267): stats_visibility goes to
+// identity by name, an unknown name never leaves gateway; Account carries
+// the setting.
+func TestStatsVisibilityRoutes(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "PATCH", "/v1/me/account", `{"stats_visibility":"friends"}`)
+	got, _, _ := f.last()
+	req := got.(*identityv1.UpdateAccountRequest)
+	if w.Code != 200 || req.GetStatsVisibility() != identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS || req.Profile != nil ||
+		req.GetAboutVisibility() != identityv1.AboutVisibility_ABOUT_VISIBILITY_UNSPECIFIED {
+		t.Fatalf("istatistik görünürlüğü: %d %v", w.Code, req)
+	}
+	_, _, n0 := f.last()
+	for _, body := range []string{`{"stats_visibility":"public"}`, `{"stats_visibility":""}`, `{"stats_visibility":1}`} {
+		if w := as(h, "PATCH", "/v1/me/account", body); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", body, w.Code)
+		}
+	}
+	if _, _, n := f.last(); n != n0 {
+		t.Fatal("geçersiz istek identity'ye ulaştı")
+	}
+	a := accountFrom(&identityv1.GetAccountResponse{StatsVisibility: identityv1.AboutVisibility_ABOUT_VISIBILITY_NONE})
+	if a.StatsVisibility != "none" {
+		t.Fatalf("hesap: %+v", a)
+	}
+}
+
+// TestProfileStatsJSON (issue #267): stats and badges come only when core
+// says the caller may see them; otherwise neither field exists.
+func TestProfileStatsJSON(t *testing.T) {
+	f := &fakeCore{profile: &corev1.UserProfile{
+		UserId: userID, DisplayName: "Ece", StatsVisible: true, BadgesVisible: true,
+		Stats: []*corev1.UserStat{{MetricKey: "attended", Source: "common", Value: 5, EventCount: 5}},
+	}}
+	w := as(coreRouter(f), "GET", "/v1/users/"+userID+"/profile", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"stats":[{"metric_key":"attended","source":"common","value":5,"event_count":5}]`) ||
+		!strings.Contains(w.Body.String(), `"badges":[]`) {
+		t.Fatalf("görünür istatistik: %d %s", w.Code, w.Body)
+	}
+	f.profile = &corev1.UserProfile{UserId: userID, DisplayName: "Ece"}
+	w = as(coreRouter(f), "GET", "/v1/users/"+userID+"/profile", "")
+	if w.Code != 200 || strings.Contains(w.Body.String(), `"stats"`) || strings.Contains(w.Body.String(), `"badges"`) {
+		t.Fatalf("gizli istatistik: %d %s", w.Code, w.Body)
+	}
+}
+
 func TestAccountProfileJSON(t *testing.T) {
 	a := accountFrom(&identityv1.GetAccountResponse{
-		Profile:               &identityv1.ProfileFields{Team: "Bursaspor", Interests: []identityv1.ProfileInterest{identityv1.ProfileInterest_PROFILE_INTEREST_HIKE}},
+		Profile:               &identityv1.ProfileFields{Team: "Bursaspor", InterestKeys: []string{"nature", "Bozuk Anahtar"}},
 		DeclinedProfileFields: []identityv1.ProfileField{identityv1.ProfileField_PROFILE_FIELD_ABOUT},
 		AboutVisibility:       identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS_AND_MUTUAL, ProfileCompletionPending: true,
 	})
@@ -380,7 +439,7 @@ func TestAccountProfileJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"team":"Bursaspor"`, `"interests":["hike"]`, `"languages":[]`, `"social_accounts":[]`,
+	for _, want := range []string{`"team":"Bursaspor"`, `"interests":["nature"]`, `"languages":[]`, `"social_accounts":[]`,
 		`"declined_profile_fields":["about"]`, `"about_visibility":"friends_and_mutual"`, `"profile_completion_pending":true`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("%s yok: %s", want, b)

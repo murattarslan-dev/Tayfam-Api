@@ -45,12 +45,20 @@ func registerMedia(mux *http.ServeMux, h coreHandlers) {
 
 var (
 	uploadPurposes = newEnum(map[string]corev1.UploadPurpose{
-		"avatar": corev1.UploadPurpose_UPLOAD_PURPOSE_AVATAR, "catch_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO,
+		"avatar": corev1.UploadPurpose_UPLOAD_PURPOSE_AVATAR, "log_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CATCH_PHOTO,
 		"event_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_EVENT_PHOTO,
 		"cover":       corev1.UploadPurpose_UPLOAD_PURPOSE_COVER,
 		// Issue #205 (ADR-0031).
 		"chat_photo": corev1.UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO, "dm_attachment": corev1.UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT,
 		"report_evidence": corev1.UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE,
+		// Issue #270 (ADR-0040 §1).
+		"library_item": corev1.UploadPurpose_UPLOAD_PURPOSE_LIBRARY_ITEM,
+		// Issue #271 (ADR-0040 §2).
+		"question_pool": corev1.UploadPurpose_UPLOAD_PURPOSE_QUESTION_POOL,
+		// Issue #261 (ADR-0040 §3).
+		"material_note": corev1.UploadPurpose_UPLOAD_PURPOSE_MATERIAL_NOTE,
+		// Issue #272 (ADR-0040 §4).
+		"garage_vehicle": corev1.UploadPurpose_UPLOAD_PURPOSE_GARAGE_VEHICLE,
 	})
 	uploadStatuses = newEnum(map[string]corev1.UploadStatus{
 		"pending": corev1.UploadStatus_UPLOAD_STATUS_PENDING, "ready": corev1.UploadStatus_UPLOAD_STATUS_READY,

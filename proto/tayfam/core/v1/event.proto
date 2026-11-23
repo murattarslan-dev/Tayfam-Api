@@ -4,11 +4,11 @@ package tayfam.core.v1;
 
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
 import "tayfam/core/v1/tayfa.proto";
 
 // EventService manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist, camp item lists and convoy vehicles (issue
-// #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
+// them and RSVPs with a waitlist (issue #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
 // "Etkinlik iptali", "Online etkinlik", "Konvoy aracı"). Only gateway calls
 // it, with the user's access token.
 //
@@ -27,10 +27,14 @@ import "tayfam/core/v1/tayfa.proto";
 //       read events and attendees: every active member (also when muted)
 //       create: moderators and admins; every active member when
 //         Tayfa.members_can_create_events is true
-//       edit, cancel, manage camp items and other people's vehicles: the
-//         organizer (the event's creator) for their own event, moderators
-//         and admins for every event
-//       RSVP, add or remove one's own convoy vehicle: every active member
+//       create with starts_now: Tayfa.now_create_min_role and above
+//         (every active member by default; ADR-0038 §2)
+//       finish: the organizer, for their own open-ended event
+//       join QR: the organizer for their own event, admins for every
+//         event (ADR-0038 §3)
+//       edit, cancel: the organizer (the event's creator) for their own
+//         event, moderators and admins for every event
+//       RSVP: every active member
 //   - Changes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
 //   - Changes to a cancelled event fail with ERROR_REASON_EVENT_CANCELLED,
 //     and to an event that has ended with ERROR_REASON_EVENT_ENDED.
@@ -47,7 +51,8 @@ service EventService {
   // with the same client_request_id by the same caller returns the event
   // created the first time and creates nothing.
   //
-  // Errors: common, ERROR_REASON_VALIDATION.
+  // Errors: common, ERROR_REASON_VALIDATION, ERROR_REASON_NOW_LIMIT_REACHED
+  // (starts_now).
   rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse);
 
   // CreateInstantEvent creates an instant event (ADR-0032): a hidden tayfa
@@ -62,7 +67,8 @@ service EventService {
   //
   // Errors: ERROR_REASON_VALIDATION, ERROR_REASON_INSTANT_EVENT_LIMIT,
   // ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_NOT_FRIENDS,
-  // ERROR_REASON_DIRECT_INVITE_LIMIT.
+  // ERROR_REASON_DIRECT_INVITE_LIMIT, ERROR_REASON_NOW_LIMIT_REACHED
+  // (event.starts_now).
   rpc CreateInstantEvent(CreateInstantEventRequest) returns (CreateInstantEventResponse);
 
   // UpdateEvent changes the fields named in update_mask. Raising the
@@ -72,6 +78,50 @@ service EventService {
   //
   // Errors: common, ERROR_REASON_VALIDATION.
   rpc UpdateEvent(UpdateEventRequest) returns (UpdateEventResponse);
+
+  // FinishEvent is the organizer's "Bitir" on their own open-ended event
+  // (Event.open_ended, ADR-0038 §1): the end becomes the server's now and
+  // open_ended false. Participants are not notified; the event's channel
+  // is archived from the new end like after any change of the end. An
+  // open-ended event that is not finished ends by itself at its end_time
+  // (12 hours after the start).
+  //
+  // Errors: common (ERROR_REASON_EVENT_ENDED once it has ended, also when
+  // already finished), ERROR_REASON_EVENT_NOT_OPEN_ENDED for an event that
+  // was not started now.
+  rpc FinishEvent(FinishEventRequest) returns (FinishEventResponse);
+
+  // CreateEventJoinQr returns a new short-lived join token for the event's
+  // QR (ADR-0038 §3; the client shows https://tayfam.app/q#<token>). Only
+  // the organizer for their own event and the tayfa's admins; only an
+  // in-person event that has not ended. The token is 128 random bits,
+  // returned only here; core keeps only its SHA-256 hash, and the token
+  // expires after 2 minutes (expire_time): the client asks for a new one
+  // before that. Earlier tokens stay valid until they expire.
+  //
+  // Errors: common, ERROR_REASON_VALIDATION (online event: field "mode"),
+  // ERROR_REASON_JOIN_QR_LIMIT_REACHED (30 QR joins already).
+  rpc CreateEventJoinQr(CreateEventJoinQrRequest) returns (CreateEventJoinQrResponse);
+
+  // JoinEventByQr joins the event behind a join QR token (ADR-0038 §3).
+  // Any signed-in user may call it; the token travels only in the body.
+  //   - Instant tayfa: the caller becomes an ACTIVE member at once
+  //     (joined_via qr) and answers GOING (WAITLIST when full).
+  //   - Standard tayfa: the join policy applies: OPEN → ACTIVE member and
+  //     GOING; APPROVAL → a join request (pending true) and nothing else.
+  //   - Already an ACTIVE member: GOING, and the attendance is checked in
+  //     with ATTENDANCE_METHOD_QR while the check-in window is open.
+  //   - A waiting join request: pending true again, nothing changes.
+  // At most 30 QR joins per event (a repeat that changes nothing does not
+  // count); 5 attempts per minute per user.
+  //
+  // Errors: ERROR_REASON_VALIDATION (token missing),
+  // ERROR_REASON_INVALID_JOIN_QR (all refusals, alike on purpose),
+  // ERROR_REASON_JOIN_QR_LIMIT_REACHED, ERROR_REASON_RATE_LIMITED,
+  // ERROR_REASON_ALREADY_PENDING (a direct invitation waiting for an
+  // answer), ERROR_REASON_MUTED and ERROR_REASON_PERMISSION_DENIED (a
+  // member who may not answer).
+  rpc JoinEventByQr(JoinEventByQrRequest) returns (JoinEventByQrResponse);
 
   // CancelEvent cancels a scheduled event. The event is not deleted: its
   // members still see it, with the cancellation time and reason. RSVPs
@@ -97,47 +147,37 @@ service EventService {
   rpc SetRsvp(SetRsvpRequest) returns (SetRsvpResponse);
 
   // ListAttendees lists the answers with one status, oldest first (for
-  // WAITLIST: the order in line).
+  // WAITLIST: the order in line). For an event whose type's attendance is
+  // sensitive (sensitive_attendance, ADR-0037 §1) only the organizer,
+  // moderators and admins get the list; the others get
+  // ERROR_REASON_ATTENDEES_HIDDEN and see the counts on the event.
   rpc ListAttendees(ListAttendeesRequest) returns (ListAttendeesResponse);
 
-  // AddCampItem adds an item to a camp event's list (at most 200).
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
-  // did not answer GOING or is not an active member),
-  // ERROR_REASON_VALIDATION.
+  // AddCampItem is not served any more: a camp's list is the list
+  // component's (ChecklistComponentService.AddChecklistItem,
+  // component_checklist.proto; issue #241). It answers UNIMPLEMENTED; the
+  // method stays because it cannot be removed.
   rpc AddCampItem(AddCampItemRequest) returns (AddCampItemResponse);
 
-  // RemoveCampItem removes an item from a camp event's list.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  // RemoveCampItem is not served any more
+  // (ChecklistComponentService.RemoveChecklistItem; issue #241). It
+  // answers UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc RemoveCampItem(RemoveCampItemRequest) returns (RemoveCampItemResponse);
 
-  // AssignCampItem sets or clears who brings a camp item (issue #198). The
-  // organizer, moderators and admins assign any participant who answered
-  // GOING or clear any assignment; a member who answered GOING takes a
-  // free item for themselves or drops their own. Setting the current value
-  // is a no-op.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
-  // ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+  // AssignCampItem is not served any more
+  // (ChecklistComponentService.AssignChecklistItem; issue #241). It
+  // answers UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc AssignCampItem(AssignCampItemRequest) returns (AssignCampItemResponse);
 
-  // AddConvoyVehicle sets the caller's vehicle on a convoy event; it
-  // replaces the caller's previous vehicle there. The caller must have
-  // answered GOING.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_VALIDATION.
+  // AddConvoyVehicle is not served any more: vehicles are the vehicles
+  // component's (VehiclesComponentService.SetVehicle,
+  // component_vehicles.proto; issue #240). It answers UNIMPLEMENTED; the
+  // method stays because it cannot be removed.
   rpc AddConvoyVehicle(AddConvoyVehicleRequest) returns (AddConvoyVehicleResponse);
 
-  // RemoveConvoyVehicle removes a vehicle: one's own, or any vehicle for the
-  // organizer, moderators and admins.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  // RemoveConvoyVehicle is not served any more
+  // (VehiclesComponentService.RemoveVehicle; issue #240). It answers
+  // UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc RemoveConvoyVehicle(RemoveConvoyVehicleRequest) returns (RemoveConvoyVehicleResponse);
 
   // Attendance (issue #50; data model v14 "Konumla check-in", "Online
@@ -166,20 +206,15 @@ service EventService {
   // in-person one).
   rpc CheckIn(CheckInRequest) returns (CheckInResponse);
 
-  // StartHike records that the caller set out on a hike; it counts as
-  // attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
-  // as CheckIn. A repeat returns the first start.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
-  // ERROR_REASON_VALIDATION (start_time).
+  // StartHike is not served any more: the hike roll call is the roll call
+  // component's (RollCallComponentService.StartRollCall,
+  // component_roll_call.proto; issue #242). It answers UNIMPLEMENTED; the
+  // method stays because it cannot be removed.
   rpc StartHike(StartHikeRequest) returns (StartHikeResponse);
 
-  // FinishHike records the caller's return. It also works after the end and
-  // on a cancelled event. A repeat returns the first return.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+  // FinishHike is not served any more
+  // (RollCallComponentService.ReturnRollCall; issue #242). It answers
+  // UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc FinishHike(FinishHikeRequest) returns (FinishHikeResponse);
 
   // SetAttendance is the organizer's correction: the organizer for their own
@@ -194,26 +229,20 @@ service EventService {
   // ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_VALIDATION (user_id).
   rpc SetAttendance(SetAttendanceRequest) returns (SetAttendanceResponse);
 
-  // AddFishingCatch logs a catch on a fishing event. The caller's attendance
-  // must be verified; catches are accepted until seven days after the end
-  // (ERROR_REASON_EVENT_ENDED afterwards). At most 100 per angler and event.
-  // A repeat with the same client_request_id returns the first catch.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
-  // ERROR_REASON_VALIDATION.
+  // AddFishingCatch is not served any more: the fishing catch log is the
+  // log component's (LogComponentService.AddLogEntry, component_log.proto;
+  // issue #243). It answers UNIMPLEMENTED; the method stays because it
+  // cannot be removed.
   rpc AddFishingCatch(AddFishingCatchRequest) returns (AddFishingCatchResponse);
 
-  // ListFishingCatches lists an event's catches, oldest first.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH.
+  // ListFishingCatches is not served any more
+  // (LogComponentService.ListLogEntries; issue #243). It answers
+  // UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc ListFishingCatches(ListFishingCatchesRequest) returns (ListFishingCatchesResponse);
 
-  // RemoveFishingCatch removes a catch: one's own, or anyone's for
-  // moderators and admins.
-  //
-  // Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  // RemoveFishingCatch is not served any more
+  // (LogComponentService.RemoveLogEntry; issue #243). It answers
+  // UNIMPLEMENTED; the method stays because it cannot be removed.
   rpc RemoveFishingCatch(RemoveFishingCatchRequest) returns (RemoveFishingCatchResponse);
 
   // AddEventPhoto adds the caller's own READY EVENT_PHOTO upload, opened
@@ -227,7 +256,9 @@ service EventService {
   // Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
   // ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
   // ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
-  // ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+  // ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION,
+  // ERROR_REASON_ALBUM_CONSENT_REQUIRED (a type with album_notice, ADR-0037
+  // §1, without consent_ack).
   rpc AddEventPhoto(AddEventPhotoRequest) returns (AddEventPhotoResponse);
 
   // ListEventPhotos lists the event's album, oldest first. Every active
@@ -316,14 +347,18 @@ enum AttendanceMethod {
   ATTENDANCE_METHOD_LOCATION = 1;
   // "Katıldım" on an online event.
   ATTENDANCE_METHOD_ONLINE = 2;
-  // Set out on a hike (StartHike).
+  // Set out with a roll call (RollCallComponentService.StartRollCall; the
+  // name is from the Faz 1 hike roll call).
   ATTENDANCE_METHOD_HIKE_START = 3;
   // The organizer's correction (SetAttendance).
   ATTENDANCE_METHOD_ORGANIZER = 4;
+  // A member scanned the organizer's join QR (JoinEventByQr, ADR-0038 §3).
+  ATTENDANCE_METHOD_QR = 5;
 }
 
-// Who gets a fishing catch's location. The catch itself (species, length)
-// is seen by every active member.
+// CatchVisibility is not used any more (LogLocationVisibility,
+// component_log.proto; issue #243). The enum stays because it cannot be
+// removed.
 enum CatchVisibility {
   // On create: CATCH_VISIBILITY_SELF.
   CATCH_VISIBILITY_UNSPECIFIED = 0;
@@ -333,7 +368,10 @@ enum CatchVisibility {
   CATCH_VISIBILITY_TAYFA = 2;
 }
 
-// Who sees a fishing event's meeting point (the spot).
+// SpotVisibility is not used any more: a fishing event's meeting point is
+// shown like every event's, and the spot rule became the log component's
+// location visibility (LogLocationVisibility, component_log.proto; issue
+// #243). The enum stays because it cannot be removed.
 enum SpotVisibility {
   // On create: SPOT_VISIBILITY_TAYFA.
   SPOT_VISIBILITY_UNSPECIFIED = 0;
@@ -373,13 +411,20 @@ message LatLng {
   double lng = 2;
 }
 
+// ConvoyDetails is not used any more: a convoy has no type details. Its
+// route is the route component's (RouteComponentService, issue #239) and
+// its vehicles are the vehicles component's (VehiclesComponentService,
+// component_vehicles.proto; issue #240). An event never carries it and a
+// request that sets it is refused (ERROR_REASON_VALIDATION, field
+// "details"). The message and its fields stay because they cannot be
+// removed.
 message ConvoyDetails {
-  // Empty, or 2–500 points.
   repeated LatLng route = 1;
-  // Output only, GetEvent only.
   repeated ConvoyVehicle vehicles = 2;
 }
 
+// ConvoyVehicle is not used any more (EventVehicle,
+// component_vehicles.proto; issue #240).
 message ConvoyVehicle {
   string id = 1;
   string user_id = 2;
@@ -398,29 +443,38 @@ message ConvoyVehicle {
   string plate = 7;
 }
 
+// CampDetails is not used any more: a camp has no type details. Its site
+// details are fields of the camp type (site_name, has_water, has_toilet,
+// notes; Event.fields) and its list is the list component's
+// (ChecklistComponentService, component_checklist.proto; issue #241). An
+// event never carries it and a request that sets it is refused
+// (ERROR_REASON_VALIDATION, field "details"). The message and its fields
+// stay because they cannot be removed.
 message CampDetails {
-  // Up to 120 characters; may be empty.
   string site_name = 1;
   optional bool has_water = 2;
   optional bool has_toilet = 3;
-  // Up to 1000 characters; may be empty.
   string notes = 4;
-  // Output only, GetEvent only. Changed with AddCampItem and
-  // RemoveCampItem.
   repeated CampItem items = 5;
 }
 
+// CampItem is not used any more (ChecklistItem,
+// component_checklist.proto; issue #241).
 message CampItem {
   string id = 1;
-  // 1–60 characters.
   string name = 2;
-  // 1–999.
   int32 quantity = 3;
-  // Optional: who brings it; an active member of the tayfa who answered
-  // GOING when assigned.
   string assigned_user_id = 4;
 }
 
+// HikeDetails is not used any more: a hike has no type details. Its
+// difficulty, distance and elevation are fields of the hike type
+// (difficulty, planned_distance, planned_elevation; Event.fields) and its
+// expected return and roll call are the roll call component's
+// (RollCallComponentService, component_roll_call.proto; issue #242). An
+// event never carries it and a request that sets it is refused
+// (ERROR_REASON_VALIDATION, field "details"). The message and its fields
+// stay because they cannot be removed.
 message HikeDetails {
   // 0 (not given) or 1–5.
   int32 difficulty = 1;
@@ -434,6 +488,12 @@ message HikeDetails {
   int32 return_grace_minutes = 5;
 }
 
+// FishingDetails is not used any more: a fishing event has no type
+// details (issue #243). Its catch log is the log component's
+// (LogComponentService, component_log.proto). An event never carries it and
+// a request that sets it is refused (ERROR_REASON_VALIDATION, field
+// "details"). The message and its fields stay because they cannot be
+// removed.
 message FishingDetails {
   SpotVisibility spot_visibility = 1;
 }
@@ -456,13 +516,14 @@ message SportsDetails {
 message Event {
   string id = 1;
   string tayfa_id = 2;
+  // The Faz 1 enum of type_key; UNSPECIFIED for any other type.
   EventType type = 3;
   EventMode mode = 4;
   string title = 5;
   string description = 6;
   google.protobuf.Timestamp start_time = 7;
   google.protobuf.Timestamp end_time = 8;
-  // In-person events (see SpotVisibility for fishing events).
+  // In-person events.
   string meeting_point_name = 9;
   LatLng meeting_point = 10;
   string city = 11;
@@ -494,8 +555,12 @@ message Event {
   // The event was edited on its own (UpdateEvent without series): changes
   // to the series and ending it leave it alone.
   bool series_override = 29;
-  // Set by GetEvent for every type except GENERAL; never by
-  // ListUpcomingEvents.
+  // Never set any more: no type has Faz 1 details (ADR-0041). A convoy's
+  // data is in its components (issues #239, #240), a camp's in its list
+  // component and fields (issue #241), a hike's in its roll call component
+  // and fields (issue #242), a fishing event's catches in its log
+  // component (issue #243), the others' in fields. The oneof stays because
+  // it cannot be removed.
   oneof details {
     ConvoyDetails convoy = 30;
     CampDetails camp = 31;
@@ -507,21 +572,47 @@ message Event {
   // The cover image (a READY COVER upload, MediaService); empty when there
   // is none. Events a series generates have no cover of their own.
   string cover_upload_id = 36;
+  // The event's type: a key of the catalog (CatalogService, ADR-0025),
+  // ^[a-z][a-z0-9_]{1,39}$. `type` above is the Faz 1 enum and is set only
+  // for the seven Faz 1 types; new code reads type_key.
+  string type_key = 37;
+  // The version of the type the event was created with; the event is shown
+  // with that version's definition
+  // (CatalogService.GetEventTypeVersion).
+  int32 type_version = 38;
+  // The values of the type's fields (the definition's "fields") by field
+  // key. Each value is the JSON text of the stored form: a string for text,
+  // long_text, choice and date ("YYYY-MM-DD"), a number for integer,
+  // decimal and duration (minutes), true or false for boolean, a list of
+  // strings for multi_choice, a list of study tag keys for study_tags
+  // (ADR-0043). A field without a value is not in the map.
+  // Set by GetEvent and the methods that return the event they changed;
+  // never by ListUpcomingEvents.
+  map<string, string> fields = 39;
+  // True for an event started with CreateEventRequest.starts_now that
+  // its organizer has not finished (FinishEvent; ADR-0038 §1): end_time is
+  // not a planned end but the latest one, 12 hours after the start, and
+  // the event ends by itself then. Stays true after that automatic end;
+  // whether the event is still running is end_time against now.
+  bool open_ended = 40;
 }
 
 message CreateEventRequest {
   string tayfa_id = 1;
-  // Must not be UNSPECIFIED.
+  // The Faz 1 enum; read only when type_key is empty. One of the two is
+  // required.
   EventType type = 2;
-  // Must not be UNSPECIFIED.
+  // Must not be UNSPECIFIED, and one of the modes the type allows.
   EventMode mode = 3;
   // 1–120 characters after trimming surrounding spaces.
   string title = 4;
   // Up to 5000 characters; may be empty.
   string description = 5;
-  // Required; in the future and at most two years ahead.
+  // Required; in the future and at most two years ahead. Must be unset
+  // with starts_now.
   google.protobuf.Timestamp start_time = 6;
-  // Required; after start_time, at most 30 days later.
+  // Required; after start_time, at most 30 days later. Must be unset with
+  // starts_now.
   google.protobuf.Timestamp end_time = 7;
   // In person: optional, up to 120 characters. Online: must be empty.
   string meeting_point_name = 8;
@@ -537,9 +628,11 @@ message CreateEventRequest {
   // 0: no limit; otherwise 1–10000.
   int32 capacity = 13;
   bool discoverable = 14;
-  // Must match type; may be unset for every type except GAMING and SPORTS,
-  // which need theirs. Must be unset for GENERAL. Output-only fields
-  // (vehicles, items) are ignored.
+  // Must be unset (ERROR_REASON_VALIDATION, field "details"): no type has
+  // Faz 1 details any more (issue #243). A convoy's data is in its
+  // components, a camp's in its list component and fields, a hike's in its
+  // roll call component and fields, a fishing event's catches in its log
+  // component, the others' goes in fields.
   oneof details {
     ConvoyDetails convoy = 20;
     CampDetails camp = 21;
@@ -560,6 +653,36 @@ message CreateEventRequest {
   // ERROR_REASON_UPLOAD_IN_USE). Only this event gets it, not the rest of a
   // series.
   string cover_upload_id = 17;
+  // The event's type: the key of an active type of the catalog
+  // (ERROR_REASON_VALIDATION, field "type", for an unknown or retired
+  // one). The event is created with the type's current version.
+  string type_key = 18;
+  // The values of the type's fields by field key, each as JSON text (see
+  // Event.fields). Checked against the type's current definition: every
+  // required field must be there, and nothing the type does not define. A
+  // bad value is ERROR_REASON_VALIDATION, field "fields.<key>"; an unknown
+  // key or too many values, field "fields".
+  map<string, string> fields = 19;
+  // The organizer's selections for the type's components (ADR-0037 §2):
+  // optional components on or off and options for the parameters the type
+  // leaves to the organizer. Components left out start with the type's
+  // defaults. Checked against the type's current definition; an unknown
+  // or repeated component, switching off a component that is not optional
+  // or a bad choice is ERROR_REASON_VALIDATION, field "components". Later
+  // changes: EventComponentService.SetEventComponent.
+  repeated ComponentSelection components = 26;
+  // Şimdi başlat (ADR-0038 §1): the event starts at the server's now (the
+  // client's clock is never used) and is open-ended (Event.open_ended):
+  // its end_time is set to 12 hours later and the organizer finishes it
+  // with FinishEvent. start_time and end_time must be unset (field
+  // "start_time" / "end_time"), recurrence must be unset (field
+  // "recurrence") and discoverable false (field "discoverable"). In a
+  // tayfa the caller needs Tayfa.now_create_min_role instead of the event
+  // creation permission; CreateInstantEvent accepts it too. A caller may
+  // organize at most one open now event at a time, in tayfas and instant
+  // events together (ERROR_REASON_NOW_LIMIT_REACHED); a repeat with the
+  // same client_request_id returns the first event instead.
+  bool starts_now = 27;
 }
 
 // Recurrence is how a series repeats (issue #51; data model v14
@@ -621,6 +744,19 @@ message CreateInstantEventRequest {
   // distinct IDs, not the caller. If one cannot be invited nothing is
   // created.
   repeated string invitee_user_ids = 2;
+  // Optional, with event.starts_now only (else ERROR_REASON_VALIDATION,
+  // field "now_recipient_ids"): the friends the organizer chose to tell
+  // that the now event started (ADR-0038 §4), at most 30 distinct IDs, not
+  // the caller and none of invitee_user_ids. Each is invited directly
+  // (accepting makes them an active member) and gets one NOW_STARTED
+  // notification instead of TAYFA_INVITATION. core checks every one again
+  // and silently leaves out who is not an accepted friend, is blocked
+  // either way, is deleted or banned, or whose now_from_friends setting
+  // does not allow the caller; the caller is never told who was left out.
+  // A caller sends at most 2 such broadcasts a day (Europe/Istanbul day),
+  // whoever is left out (ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED); they do
+  // not count toward the daily direct invitation limit.
+  repeated string now_recipient_ids = 3;
 }
 
 message CreateInstantEventResponse {
@@ -656,10 +792,11 @@ message UpdateEventRequest {
   // Required, non-empty. Allowed paths: "title", "description", "time"
   // (start_time and end_time together), "location" (mode,
   // meeting_point_name, meeting_point, city, district and online_url
-  // together), "capacity", "discoverable", "details" (replaces the type
-  // details; vehicles and camp items stay), "cover_upload_id" (not with
-  // series = true: ERROR_REASON_VALIDATION, field "update_mask"). Any
-  // other path is ERROR_REASON_VALIDATION.
+  // together), "capacity", "discoverable", "fields" (replaces the field
+  // values), "cover_upload_id" (not with series = true:
+  // ERROR_REASON_VALIDATION, field "update_mask"). Any other path, "details"
+  // included (no type has Faz 1 details any more, issue #243), is
+  // ERROR_REASON_VALIDATION.
   google.protobuf.FieldMask update_mask = 15;
   // Only for an event of a series (otherwise ERROR_REASON_VALIDATION, field
   // "series"). false: only this event changes and it is marked
@@ -667,20 +804,53 @@ message UpdateEventRequest {
   // the change is made to the series: this event and every event of the
   // series that has not started, is scheduled and was not edited on its
   // own, and the events generated later. "time" cannot be changed for a
-  // series (ERROR_REASON_VALIDATION, field "update_mask"); hike details'
-  // expected_return_time keeps its distance from each event's start.
+  // series (ERROR_REASON_VALIDATION, field "update_mask").
   // ERROR_REASON_EVENT_SERIES_ENDED if the series was ended.
   bool series = 16;
   // With "cover_upload_id" in update_mask: same rules as
   // CreateEventRequest.cover_upload_id; empty removes the cover. The
   // previous cover is deleted.
   string cover_upload_id = 17;
+  // With "fields" in update_mask: the complete new set of field values,
+  // with the rules of CreateEventRequest.fields. They are checked against
+  // the type version the event was created with, not the catalog's current
+  // one. The previous values are replaced.
+  map<string, string> fields = 18;
 }
 
 message UpdateEventResponse {
   Event event = 1;
 }
 
+message FinishEventRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+}
+message FinishEventResponse {
+  Event event = 1;
+}
+message CreateEventJoinQrRequest {
+  string tayfa_id = 1;
+  string event_id = 2;
+}
+message CreateEventJoinQrResponse {
+  // The join token (base64url, 22 characters). Never logged.
+  string token = 1;
+  google.protobuf.Timestamp expire_time = 2;
+}
+message JoinEventByQrRequest {
+  // Join token from the QR. Never logged.
+  string token = 1;
+}
+message JoinEventByQrResponse {
+  string tayfa_id = 1;
+  string event_id = 2;
+  // A join request was left (or was already waiting); rsvp and
+  // attendance are unset.
+  bool pending = 3;
+  RsvpStatus rsvp = 4;
+  AttendanceStatus attendance = 5;
+}
 message CancelEventRequest {
   string tayfa_id = 1;
   string event_id = 2;
@@ -747,14 +917,13 @@ message ListAttendeesResponse {
   string next_page_token = 2;
 }
 
+// AddCampItemRequest and the other camp item messages are not used any
+// more (issue #241); they stay because they cannot be removed.
 message AddCampItemRequest {
   string tayfa_id = 1;
   string event_id = 2;
-  // 1–60 characters.
   string name = 3;
-  // 0 means 1; otherwise 1–999.
   int32 quantity = 4;
-  // Optional; must be an active member of the tayfa who answered GOING.
   string assigned_user_id = 5;
 }
 
@@ -774,7 +943,6 @@ message AssignCampItemRequest {
   string tayfa_id = 1;
   string event_id = 2;
   string item_id = 3;
-  // Empty clears the assignment.
   string assigned_user_id = 4;
 }
 
@@ -819,7 +987,8 @@ message CheckInResponse {
   AttendanceMethod method = 2;
 }
 
-// HikeCheckin is the caller's hike roll call. Times are the client's.
+// HikeCheckin and the StartHike / FinishHike messages are not used any
+// more (RollCallEntry, component_roll_call.proto; issue #242).
 message HikeCheckin {
   google.protobuf.Timestamp start_time = 1;
   // Unset while out.
@@ -861,6 +1030,9 @@ message SetAttendanceRequest {
 
 message SetAttendanceResponse {}
 
+// FishingCatch and the fishing catch requests are not used any more
+// (LogEntry, component_log.proto; issue #243). The messages and their
+// fields stay because they cannot be removed.
 message FishingCatch {
   string id = 1;
   string user_id = 2;
@@ -947,6 +1119,10 @@ message AddEventPhotoRequest {
   // Required. A UUID the client generates once per photo and reuses on
   // retry.
   string client_request_id = 5;
+  // The uploader's acknowledgement that the people in the photo (for a
+  // child, the guardian) agreed. Required true when the event's type has
+  // album_notice (ADR-0037 §1); otherwise ignored. Not stored.
+  bool consent_ack = 6;
 }
 
 message AddEventPhotoResponse {

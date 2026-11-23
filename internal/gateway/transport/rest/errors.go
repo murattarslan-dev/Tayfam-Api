@@ -138,6 +138,98 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_FEEDBACK_CLOSED":          {http.StatusConflict, "feedback-closed"},
 		"ERROR_REASON_SAFETY_CONTACT_CLOSED":    {http.StatusConflict, "safety-contact-closed"},
 		"ERROR_REASON_SAFETY_CONTACT_NOT_FOUND": {http.StatusNotFound, "safety-contact-not-found"},
+		// Event type catalog (issue #237, ADR-0025).
+		"ERROR_REASON_CATALOG_TYPE_NOT_FOUND": {http.StatusNotFound, "catalog-type-not-found"},
+		// Event components (issue #238; ADR-0025 §4–§6, ADR-0037 §2).
+		"ERROR_REASON_COMPONENT_NOT_FOUND": {http.StatusNotFound, "component-not-found"},
+		"ERROR_REASON_COMPONENT_DISABLED":  {http.StatusConflict, "component-disabled"},
+		"ERROR_REASON_COMPONENT_LOCKED":    {http.StatusConflict, "component-locked"},
+		"ERROR_REASON_COMPONENT_FROZEN":    {http.StatusConflict, "component-frozen"},
+		// Vehicles component (issue #240; ADR-0037 §3).
+		"ERROR_REASON_VEHICLE_FULL":        {http.StatusConflict, "vehicle-full"},
+		"ERROR_REASON_VEHICLE_SEATS_TAKEN": {http.StatusConflict, "vehicle-seats-taken"},
+		"ERROR_REASON_SEAT_REQUEST_DRIVER": {http.StatusConflict, "seat-request-driver"},
+		// Tayfa vocabulary (issue #244; ADR-0037 §4).
+		"ERROR_REASON_VOCABULARY_NOT_FOUND":  {http.StatusNotFound, "vocabulary-not-found"},
+		"ERROR_REASON_VOCABULARY_MERGED":     {http.StatusConflict, "vocabulary-merged"},
+		"ERROR_REASON_VOCABULARY_NOT_MERGED": {http.StatusConflict, "vocabulary-not-merged"},
+		// Measure component (issue #245; ADR-0025 §4, §5).
+		"ERROR_REASON_MEASUREMENT_NOT_STARTED":     {http.StatusConflict, "measurement-not-started"},
+		"ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT": {http.StatusConflict, "measurement-not-participant"},
+		"ERROR_REASON_MEASUREMENT_SCOPE":           {http.StatusConflict, "measurement-scope"},
+		// Teams component (issue #248; ADR-0025 §4, §5).
+		"ERROR_REASON_TEAMS_MANUAL":          {http.StatusConflict, "teams-manual"},
+		"ERROR_REASON_TEAMS_TOO_FEW":         {http.StatusConflict, "teams-too-few"},
+		"ERROR_REASON_TEAMS_NOT_PARTICIPANT": {http.StatusConflict, "teams-not-participant"},
+		// Draw component (issue #249; ADR-0025 §4, §5).
+		"ERROR_REASON_DRAW_ALREADY_MADE": {http.StatusConflict, "draw-already-made"},
+		"ERROR_REASON_DRAW_TOO_FEW":      {http.StatusConflict, "draw-too-few"},
+		// Scoreboard component (issue #250; ADR-0025 §4, §5).
+		"ERROR_REASON_SCORE_PRESET_UNAVAILABLE":     {http.StatusConflict, "score-preset-unavailable"},
+		"ERROR_REASON_SCORE_TABLE_NOT_FOUND":        {http.StatusNotFound, "score-table-not-found"},
+		"ERROR_REASON_SCORE_TABLE_FINISHED":         {http.StatusConflict, "score-table-finished"},
+		"ERROR_REASON_SCORE_TABLE_STARTED":          {http.StatusConflict, "score-table-started"},
+		"ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT": {http.StatusConflict, "score-player-not-participant"},
+		"ERROR_REASON_SCORE_NOT_STARTED":            {http.StatusConflict, "score-not-started"},
+		// Bracket component (issue #251; ADR-0025 §4, §5, ADR-0037 §3).
+		"ERROR_REASON_BRACKET_DRAW_REQUIRED":   {http.StatusConflict, "bracket-draw-required"},
+		"ERROR_REASON_BRACKET_STARTED":         {http.StatusConflict, "bracket-started"},
+		"ERROR_REASON_BRACKET_NOT_STARTED":     {http.StatusConflict, "bracket-not-started"},
+		"ERROR_REASON_BRACKET_TOO_FEW":         {http.StatusConflict, "bracket-too-few"},
+		"ERROR_REASON_BRACKET_MATCH_NOT_FOUND": {http.StatusNotFound, "bracket-match-not-found"},
+		"ERROR_REASON_BRACKET_GAME_NOT_FOUND":  {http.StatusNotFound, "bracket-game-not-found"},
+		"ERROR_REASON_BRACKET_MATCH_DECIDED":   {http.StatusConflict, "bracket-match-decided"},
+		"ERROR_REASON_BRACKET_ROUND_OPEN":      {http.StatusConflict, "bracket-round-open"},
+		"ERROR_REASON_BRACKET_ROUND_CLOSED":    {http.StatusConflict, "bracket-round-closed"},
+		"ERROR_REASON_BRACKET_FINISHED":        {http.StatusConflict, "bracket-finished"},
+		// Guest players (issue #252; ADR-0037 §6).
+		"ERROR_REASON_GUEST_PLAYERS_DISABLED": {http.StatusConflict, "guest-players-disabled"},
+		"ERROR_REASON_GUEST_PLAYER_NOT_FOUND": {http.StatusNotFound, "guest-player-not-found"},
+		"ERROR_REASON_GUEST_PLAYER_IN_USE":    {http.StatusConflict, "guest-player-in-use"},
+		// Ranking component (issue #253; ADR-0037 §3).
+		"ERROR_REASON_RANKING_NOT_STARTED":     {http.StatusConflict, "ranking-not-started"},
+		"ERROR_REASON_RANKING_NOT_PARTICIPANT": {http.StatusConflict, "ranking-not-participant"},
+		"ERROR_REASON_RANKING_FROM_MEASURE":    {http.StatusConflict, "ranking-from-measure"},
+		// Vote component (issue #254).
+		"ERROR_REASON_VOTE_CLOSED":        {http.StatusConflict, "vote-closed"},
+		"ERROR_REASON_VOTE_OWN_OPTION":    {http.StatusConflict, "vote-own-option"},
+		"ERROR_REASON_VOTE_OPTIONS_FIXED": {http.StatusConflict, "vote-options-fixed"},
+		"ERROR_REASON_VOTE_OPTION_EXISTS": {http.StatusConflict, "vote-option-exists"},
+		// Celebration component (issue #255).
+		"ERROR_REASON_CELEBRATION_NOT_STARTED":     {http.StatusConflict, "celebration-not-started"},
+		"ERROR_REASON_CELEBRATION_NO_WINNER":       {http.StatusConflict, "celebration-no-winner"},
+		"ERROR_REASON_CELEBRATION_NOT_PARTICIPANT": {http.StatusConflict, "celebration-not-participant"},
+		// Type flags (issue #257; ADR-0037 §1).
+		"ERROR_REASON_ATTENDEES_HIDDEN":       {http.StatusForbidden, "attendees-hidden"},
+		"ERROR_REASON_ALBUM_CONSENT_REQUIRED": {http.StatusBadRequest, "album-consent-required"},
+		// Şimdi başlat (issue #263; ADR-0038 §1, §2).
+		"ERROR_REASON_NOW_LIMIT_REACHED":    {http.StatusTooManyRequests, "now-limit-reached"},
+		"ERROR_REASON_EVENT_NOT_OPEN_ENDED": {http.StatusConflict, "event-not-open-ended"},
+		// QR ile katılım (issue #264; ADR-0038 §3).
+		"ERROR_REASON_INVALID_JOIN_QR":       {http.StatusNotFound, "invalid-join-qr"},
+		"ERROR_REASON_JOIN_QR_LIMIT_REACHED": {http.StatusTooManyRequests, "join-qr-limit-reached"},
+		// Şimdi bildirimi (issue #265; ADR-0038 §4).
+		"ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED": {http.StatusTooManyRequests, "now-broadcast-limit-reached"},
+		// Ana sayfa (issue #268; ADR-0027 §3–§4).
+		"ERROR_REASON_HOME_WIDGET_NOT_FOUND": {http.StatusNotFound, "home-widget-not-found"},
+		// Günün içeriği (issue #269; ADR-0027 §5).
+		"ERROR_REASON_DAILY_ITEM_NOT_FOUND": {http.StatusNotFound, "daily-item-not-found"},
+		"ERROR_REASON_DAILY_ITEM_LIMIT":     {http.StatusConflict, "daily-item-limit"},
+		// Ortak kütüphane (issue #270; ADR-0040 §1).
+		"ERROR_REASON_LIBRARY_ITEM_NOT_FOUND": {http.StatusNotFound, "library-item-not-found"},
+		"ERROR_REASON_LIBRARY_LOAN_NOT_FOUND": {http.StatusNotFound, "library-loan-not-found"},
+		"ERROR_REASON_LIBRARY_OWN_ITEM":       {http.StatusConflict, "library-own-item"},
+		"ERROR_REASON_LIBRARY_LOAN_STATE":     {http.StatusConflict, "library-loan-state"},
+		"ERROR_REASON_LIBRARY_ITEM_ON_LOAN":   {http.StatusConflict, "library-item-on-loan"},
+		"ERROR_REASON_LIBRARY_ITEM_LIMIT":     {http.StatusConflict, "library-item-limit"},
+		"ERROR_REASON_LIBRARY_QUEUE_FULL":     {http.StatusConflict, "library-queue-full"},
+		// Materyal kütüphanesi (issue #261; ADR-0040 §3).
+		"ERROR_REASON_MATERIAL_NOT_FOUND": {http.StatusNotFound, "material-not-found"},
+		"ERROR_REASON_BLOCKED_LINK":       {http.StatusBadRequest, "blocked-link"},
+		"ERROR_REASON_MATERIAL_LIMIT":     {http.StatusConflict, "material-limit"},
+		// Üye garajı (issue #272; ADR-0040 §4).
+		"ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND": {http.StatusNotFound, "garage-vehicle-not-found"},
+		"ERROR_REASON_GARAGE_LIMIT":             {http.StatusConflict, "garage-limit"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

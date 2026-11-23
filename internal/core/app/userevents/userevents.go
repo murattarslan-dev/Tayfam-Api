@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/library/lending"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
@@ -72,7 +73,18 @@ type Profile struct {
 	// ActivityVisibility is who sees the user's attendance history on their
 	// profile; empty in older events, which keep the copy's current value.
 	ActivityVisibility string
+	// StatsVisibility is who sees the personal statistics and badges on
+	// the profile (issue #267); empty in older events, which keep the
+	// copy's current value.
+	StatsVisibility string
 }
+
+// StatsVisibility values (user_profiles_stats_visibility).
+const (
+	StatsNone             = "none"
+	StatsFriends          = "friends"
+	StatsFriendsAndMutual = "friends_and_mutual"
+)
 
 // ActivityVisibility values (user_profiles_activity_visibility).
 const (
@@ -154,6 +166,14 @@ func (s *Service) applyProfile(ctx context.Context, e Event) error {
 	default:
 		return apperr.Validation("profile_updated.activity_visibility")
 	}
+	stats := pgtype.Text{}
+	switch v := e.Profile.StatsVisibility; v {
+	case "":
+	case StatsNone, StatsFriends, StatsFriendsAndMutual:
+		stats = pgtype.Text{String: v, Valid: true}
+	default:
+		return apperr.Validation("profile_updated.stats_visibility")
+	}
 	avatar := pgtype.UUID{}
 	if e.Profile.AvatarUploadID != (id.ID{}) {
 		avatar = e.Profile.AvatarUploadID.PG()
@@ -165,6 +185,7 @@ func (s *Service) applyProfile(ctx context.Context, e Event) error {
 		n, err := q.UpsertUserProfile(ctx, store.UpsertUserProfileParams{
 			UserID: e.User.PG(), DisplayName: pgtype.Text{String: name, Valid: true},
 			AvatarUploadID: avatar, SourceEventID: e.ID.PG(), ActivityVisibility: vis,
+			StatsVisibility: stats,
 		})
 		if err != nil {
 			return fmt.Errorf("profil kopyası: %w", err)
@@ -201,7 +222,7 @@ func validDisplayName(s string) bool {
 //     after tayfa.DeletionDelay, requested by nobody (the system);
 //   - author and actor fields pointing at the user become NULL (questions,
 //     answers and polls stay, by a deleted user); the user's event RSVPs,
-//     convoy vehicles (plates), hike roll calls, fishing catches, activity
+//     convoy vehicles (plates), roll calls, log entries, activity
 //     records, helpful votes and poll votes are deleted, and the vote counts
 //     drop with them;
 //   - the user's uploaded files are deleted; covers attached to a tayfa or
@@ -238,6 +259,12 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 				return err
 			}
 		}
+		// Ortak kütüphane (ADR-0040 §1): the items are withdrawn, requests
+		// end, a handed-over loan stays open with a warning to the other
+		// side (ClearLibrary* below then drops the person from the rows).
+		if err := lending.Departed(ctx, q, id.ID{}, e.User, now, false); err != nil {
+			return fmt.Errorf("kütüphane: %w", err)
+		}
 		// Direct invitations the user sent and nobody answered go with the
 		// account (issue #71): the inviter, whose role decided the outcome,
 		// is gone.
@@ -262,10 +289,22 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			return fmt.Errorf("etkinlikler: %w", err)
 		}
 		for _, clear := range []func(context.Context, pgtype.UUID) error{
+			// Oylama (issue #254): before the vehicles and photos go, so
+			// that the votes for them go too.
+			q.DeleteUserEventVotes, q.ClearVoteOptionCreator, q.ClearVoteCloser,
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
-			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserConvoyVehicles, q.ClearCampItemUserFields,
-			q.DeleteUserHikeCheckins, q.DeleteUserCatches, q.ClearCatchDeleter,
+			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserVehicles, q.DeleteUserSeatRequests, q.ClearChecklistItemUserFields,
+			q.DeleteUserRollCallCheckins, q.DeleteUserLogEntries, q.ClearLogEntryDeleter, q.ClearVocabularyCreator,
+			q.DeleteUserMeasurements, q.ClearMeasurementEnteredBy, q.DeleteUserTeamMemberships, q.ClearUserDrawEntries, q.ClearUserScorePlayers, q.ClearGuestPlayerCreator,
+			q.DeleteUserRankingEntries, q.ClearRankingEntryEnteredBy, q.DeleteUserCelebrationWins, q.ClearCelebrationAnnouncer, q.DeleteUserBadges, q.DeleteUserStats,
+			q.DeleteUserEventQuestions, q.DeleteUserEventQuestionVotes, q.ClearEventQuestionUserFields,
+			q.ClearDailyItemUserFields,
+			q.ClearLibraryItemUserFields, q.ClearLibraryLoanBorrower, q.DeleteUserLibraryQueue,
+			q.ClearMaterialUserFields, q.ClearBlockedDomainCreator,
+			// Üye garajı (issue #272; ADR-0040 §4): the vehicles and the
+			// visibility choices go with the account.
+			q.DeleteUserGarageVehicles, q.ClearGarageVehicleDeleter, q.DeleteUserGarageVisibility,
 			q.DeleteUserEventPhotos, q.ClearEventPhotoDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,
@@ -276,6 +315,12 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			// person on an application or review, and the Keşfet joins.
 			q.DeleteUserEventFeedback, q.DeleteUserSafetyContacts, q.ClearTayfaDiscoverUser,
 			q.DeleteUserDiscoverJoins,
+			// Event components (issue #238): the user's referee assignments.
+			q.DeleteUserEventReferees,
+			// Join QR tokens the user opened (issue #264).
+			q.DeleteUserJoinQRTokens,
+			// Now broadcast counters of the user (issue #265).
+			q.DeleteUserNowCounters,
 			q.ClearAuditActor, q.ClearEventActor, q.ClearReportUserFields,
 		} {
 			if err := clear(ctx, e.User.PG()); err != nil {

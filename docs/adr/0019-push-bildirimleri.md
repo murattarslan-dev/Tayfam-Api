@@ -109,8 +109,17 @@ henüz yoktur.
   kişisel bildirimleri geçirir: `mention`, `answer_received` (kendi
   sorusu), `rsvp_promoted`, `join_approved`, `tayfa_invitation`,
   `report_resolved`, `dm_message`, `dm_request` (platform sahibi kabul
-  etti, 2026-11-11) ve `data_export_ready` (ADR-0021, 2026-11-11).
+  etti, 2026-11-11), `data_export_ready` (ADR-0021, 2026-11-11) ve ortak
+  kütüphanenin ödünç adımları `library_loan_requested`,
+  `library_queue_joined`, `library_loan_approved`, `library_loan_declined`,
+  `library_loan_handed_over` (ADR-0040 §1, #321; alıcının kendi kalemi ya
+  da kendi isteği) ve sıranın gelmesi `library_queue_turn` (#332).
 - `hike_overdue` hiçbir tercihle engellenemez (v14).
+- `now_started` (ADR-0038 §4, #265) önce tayfanın tercihinden, sonra
+  tayfanın "Şimdi bildirimleri" tercihinden (`tayfa_now`, yalnızca `all`
+  / `none`) geçer; ikisinden biri push'u durdurursa gitmez. Kişisel
+  sayılmaz (`mentions` geçirmez). Push'ta yalnızca
+  `push_now_started_title` / `_body` anahtarları ve kimlikler bulunur.
 
 ### 4. İçerik: çeviri anahtarı ve kimlikler
 

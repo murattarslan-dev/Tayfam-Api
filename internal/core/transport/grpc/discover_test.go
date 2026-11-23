@@ -14,14 +14,17 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/badge"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/discover"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/membership"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/stats"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
 )
 
 type fakeDiscover struct {
 	caller, tayfa, event, contact id.ID
 	answer                        string
+	showcase                      bool
 	err                           error
 }
 
@@ -34,6 +37,13 @@ func (f *fakeDiscover) Feed(_ context.Context, v id.ID) ([]discover.Item, error)
 		EventID: id.New(), Type: "hike", Title: "Yürüyüş", StartsAt: time.Unix(10, 0), EndsAt: time.Unix(20, 0),
 		TayfaID: id.New(), TayfaName: "Tayfa", EventCount: 3, AttendanceCount: 9, FriendCount: 2,
 		Friends: []discover.Person{{ID: id.New(), DisplayName: "Ayşe"}},
+		Showcase: &stats.Showcase{
+			Stats:  []stats.Stat{{Metric: "hike.distance", Source: stats.SourceMeasure, Value: 42.5, Events: 3}},
+			Badges: []badge.Earned{{Key: "tayfa_events_10", EarnedAt: time.Unix(30, 0)}},
+		},
+	}, {
+		EventID: id.New(), Type: "hike", Title: "Kart yok", StartsAt: time.Unix(10, 0), EndsAt: time.Unix(20, 0),
+		TayfaID: id.New(), TayfaName: "Yeni", EventCount: 1,
 	}}, nil
 }
 func (f *fakeDiscover) GetTayfa(_ context.Context, c, t id.ID) (discover.TayfaState, error) {
@@ -43,6 +53,10 @@ func (f *fakeDiscover) GetTayfa(_ context.Context, c, t id.ID) (discover.TayfaSt
 func (f *fakeDiscover) SetTayfa(_ context.Context, c, t id.ID, on bool) (discover.TayfaState, error) {
 	f.caller, f.tayfa = c, t
 	return discover.TayfaState{State: discover.StatePending, Enabled: on}, f.err
+}
+func (f *fakeDiscover) SetStatsShowcase(_ context.Context, c, t id.ID, on bool) (discover.TayfaState, error) {
+	f.caller, f.tayfa, f.showcase = c, t, on
+	return discover.TayfaState{State: discover.StateListed, Enabled: true, StatsShowcase: on}, f.err
 }
 func (f *fakeDiscover) GetFeedback(_ context.Context, c, t, e id.ID) (discover.Feedback, error) {
 	f.caller, f.tayfa, f.event = c, t, e
@@ -88,9 +102,26 @@ func TestDiscoverMethods(t *testing.T) {
 	ctx := callerCtx(u)
 
 	feed, err := srv.ListDiscoverFeed(ctx, &corev1.ListDiscoverFeedRequest{})
-	if err != nil || f.caller != u || len(feed.GetItems()) != 1 || feed.GetItems()[0].GetFriendCount() != 2 ||
-		feed.GetItems()[0].GetEvent().GetType() != corev1.EventType_EVENT_TYPE_HIKE {
+	if err != nil || f.caller != u || len(feed.GetItems()) != 2 || feed.GetItems()[0].GetFriendCount() != 2 ||
+		feed.GetItems()[0].GetEvent().GetTypeKey() != "hike" || feed.GetItems()[0].GetEvent().GetType() != corev1.EventType_EVENT_TYPE_UNSPECIFIED {
 		t.Fatalf("akış: %v %v", feed, err)
+	}
+	// Issue #267: the showcase is mapped as it is; a tayfa without one has
+	// no field at all.
+	sh := feed.GetItems()[0].GetTayfa().GetShowcase()
+	if len(sh.GetStats()) != 1 || sh.GetStats()[0].GetMetricKey() != "hike.distance" || sh.GetStats()[0].GetValue() != 42.5 ||
+		sh.GetStats()[0].GetEventCount() != 3 || len(sh.GetBadges()) != 1 || sh.GetBadges()[0].GetBadgeKey() != "tayfa_events_10" {
+		t.Fatalf("vitrin: %v", sh)
+	}
+	if feed.GetItems()[1].GetTayfa().GetShowcase() != nil {
+		t.Fatalf("vitrinsiz tayfada vitrin: %v", feed.GetItems()[1].GetTayfa())
+	}
+	ss, err := srv.SetTayfaStatsShowcase(ctx, &corev1.SetTayfaStatsShowcaseRequest{TayfaId: tf.String(), StatsShowcase: false})
+	if err != nil || f.tayfa != tf || f.showcase || ss.GetStatsShowcase() || ss.GetState() != corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_LISTED {
+		t.Fatalf("vitrin ayarı: %v %v", ss, err)
+	}
+	if _, err := srv.SetTayfaStatsShowcase(ctx, &corev1.SetTayfaStatsShowcaseRequest{TayfaId: "x"}); codeOf(t, err) != codes.InvalidArgument {
+		t.Fatalf("geçersiz tayfa: %v", err)
 	}
 	st, err := srv.GetTayfaDiscover(ctx, &corev1.GetTayfaDiscoverRequest{TayfaId: tf.String()})
 	if err != nil || f.tayfa != tf || st.GetState() != corev1.TayfaDiscoverState_TAYFA_DISCOVER_STATE_UNDER_REVIEW {

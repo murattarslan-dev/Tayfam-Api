@@ -1,6 +1,10 @@
 package demo
 
-import corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+import (
+	"strconv"
+
+	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
+)
 
 // The demo data set (issue #179). Names are ordinary first names with a
 // surname initial; they imitate no real person. Every text is in line with
@@ -25,7 +29,7 @@ type tayfaSpec struct {
 	Key         string
 	Name        string // contains "Demo" (ADR-0023)
 	Description string
-	Interests   []corev1.EventType
+	Interests   []string       // catalog interest keys
 	Founder     string         // person key; creates the tayfa (admin)
 	Members     []memberSpec   // joined by code, approved by the founder
 	OwnerRole   corev1.Role    // the platform owner's role, added last; UNSPECIFIED: not added
@@ -63,22 +67,38 @@ type eventSpec struct {
 	District     string
 	OnlineURL    string
 	Capacity     int32
-	Convoy       *corev1.ConvoyDetails
-	Camp         *corev1.CampDetails
-	Hike         *hikeSpec
-	Fishing      *corev1.FishingDetails
-	Gaming       *corev1.GamingDetails
-	Sports       *corev1.SportsDetails
-	RSVPs        []rsvpSpec
-	Vehicles     []vehicleSpec  // convoy: members who answered GOING
-	CampItems    []campItemSpec // camp: added by the founder
+	// Route is the route of an event whose type has the route component
+	// under the key "route" (the convoy).
+	Route []*corev1.LatLng
+	Hike  *hikeSpec
+	// Fields holds the values of the type's fields by field key, as JSON
+	// text (CreateEventRequest.fields): the data of the types (gaming,
+	// sports, camp; a hike's come from Hike).
+	Fields   map[string]string
+	RSVPs    []rsvpSpec
+	Vehicles []vehicleSpec // a type with the vehicles component (the convoy): members who answered GOING
+	// Gear is the list of a type with a list component under the key
+	// "gear" (the camp), added by the founder.
+	Gear []checklistItemSpec
 }
 
+// hikeSpec is a hike's data: its difficulty, distance and elevation are
+// fields of the hike type and its expected return is the roll call
+// component's plan (issue #242).
 type hikeSpec struct {
 	Difficulty  int32
 	DistanceKm  float64
 	ElevationM  int32
 	ReturnAfter int // hours after the start
+}
+
+// fields returns the hike type's field values (CreateEventRequest.fields).
+func (h *hikeSpec) fields() map[string]string {
+	return map[string]string{
+		"difficulty":        strconv.Itoa(int(h.Difficulty)),
+		"planned_distance":  strconv.FormatFloat(h.DistanceKm, 'f', -1, 64),
+		"planned_elevation": strconv.Itoa(int(h.ElevationM)),
+	}
 }
 
 type rsvpSpec struct {
@@ -95,7 +115,7 @@ type vehicleSpec struct {
 	Color  string
 }
 
-type campItemSpec struct {
+type checklistItemSpec struct {
 	Name     string
 	Quantity int32
 	Assigned string // person key, optional
@@ -191,7 +211,7 @@ var tayfas = []tayfaSpec{
 		Name: "Ege Klasikleri Demo",
 		Description: "Klasik otomobil tutkunlarının Ege turları, bakım sohbetleri ve buluşmaları. " +
 			"Bu tayfa tanıtım amaçlı örnek (demo) içerik barındırır.",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_CONVOY, corev1.EventType_EVENT_TYPE_GENERAL},
+		Interests: []string{"automotive", "general"},
 		Founder:   "elif",
 		Members: []memberSpec{
 			{Person: "can", Role: moderator}, {Person: "kaan", Role: member}, {Person: "onur", Role: member},
@@ -207,9 +227,9 @@ var tayfas = []tayfaSpec{
 				Start:       at{Days: 9, Hour: 8, Minute: 30}, Hours: 9,
 				PlaceName: "Kemalpaşa çıkışı dinlenme tesisi", Lat: 38.4262, Lng: 27.4171,
 				City: "İzmir", District: "Kemalpaşa",
-				Convoy: &corev1.ConvoyDetails{Route: []*corev1.LatLng{
+				Route: []*corev1.LatLng{
 					{Lat: 38.4262, Lng: 27.4171}, {Lat: 38.3369, Lng: 27.8915}, {Lat: 38.3427, Lng: 28.1079},
-				}},
+				},
 				RSVPs: []rsvpSpec{
 					{Person: "elif", Status: going}, {Person: "can", Status: going}, {Person: "kaan", Status: going},
 					{Person: "onur", Status: going}, {Person: "baris", Status: maybe}, {Person: "serkan", Status: going},
@@ -300,7 +320,7 @@ var tayfas = []tayfaSpec{
 		Name: "Kazdağı Kampçıları Demo",
 		Description: "Kazdağları eteklerinde kamp, doğa ve kıyıda akşam balığı. " +
 			"Bu tayfa tanıtım amaçlı örnek (demo) içerik barındırır.",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_CAMP, corev1.EventType_EVENT_TYPE_FISHING},
+		Interests: []string{"nature", "water"},
 		Founder:   "burak",
 		Members: []memberSpec{
 			{Person: "deniz", Role: moderator}, {Person: "mert", Role: member}, {Person: "ece", Role: member},
@@ -316,16 +336,16 @@ var tayfas = []tayfaSpec{
 				Start:       at{Days: 12, Hour: 18}, Hours: 42,
 				PlaceName: "Milli park girişine yakın kamp alanı", Lat: 39.7031, Lng: 26.8542,
 				City: "Balıkesir", District: "Edremit",
-				Camp: &corev1.CampDetails{
-					SiteName: "Kazdağı kamp alanı", HasWater: ptr(true), HasToilet: ptr(true),
-					Notes: "Geceleri hava serin, uyku tulumunuzu kalın seçin. Ateş yalnızca ocak alanında yakılır.",
+				Fields: map[string]string{
+					"site_name": `"Kazdağı kamp alanı"`, "has_water": `true`, "has_toilet": `true`,
+					"notes": `"Geceleri hava serin, uyku tulumunuzu kalın seçin. Ateş yalnızca ocak alanında yakılır."`,
 				},
 				RSVPs: []rsvpSpec{
 					{Person: "burak", Status: going}, {Person: "deniz", Status: going}, {Person: "mert", Status: going},
 					{Person: "ece", Status: going}, {Person: "gizem", Status: maybe}, {Person: "damla", Status: going},
 					{Person: "tolga", Status: notGoing},
 				},
-				CampItems: []campItemSpec{
+				Gear: []checklistItemSpec{
 					{Name: "Çadır (4 kişilik)", Quantity: 2, Assigned: "burak"},
 					{Name: "Kamp ocağı ve tüp", Quantity: 1, Assigned: "deniz"},
 					{Name: "Su bidonu (19 L)", Quantity: 3, Assigned: "mert"},
@@ -340,7 +360,6 @@ var tayfas = []tayfaSpec{
 				Start:       at{Days: 6, Hour: 17, Minute: 30}, Hours: 4,
 				PlaceName: "Akçay sahil yolu", Lat: 39.5838, Lng: 26.9265,
 				City: "Balıkesir", District: "Edremit",
-				Fishing: &corev1.FishingDetails{SpotVisibility: corev1.SpotVisibility_SPOT_VISIBILITY_PARTICIPANTS},
 				RSVPs: []rsvpSpec{
 					{Person: "burak", Status: going}, {Person: "mert", Status: going},
 					{Person: "kaan", Status: going}, {Person: "gizem", Status: maybe},
@@ -403,7 +422,7 @@ var tayfas = []tayfaSpec{
 		Name: "Nif Yürüyüş Demo",
 		Description: "İzmir çevresinde hafta sonu doğa yürüyüşleri; her seviyeye uygun rotalar. " +
 			"Bu tayfa tanıtım amaçlı örnek (demo) içerik barındırır.",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_HIKE, corev1.EventType_EVENT_TYPE_GENERAL},
+		Interests: []string{"nature", "general"},
 		Founder:   "zeynep",
 		Members: []memberSpec{
 			{Person: "selin", Role: moderator}, {Person: "ceren", Role: member}, {Person: "merve", Role: member},
@@ -500,7 +519,7 @@ var tayfas = []tayfaSpec{
 		Name: "Urla Halısaha Demo",
 		Description: "Haftalık halı saha maçı ve hafta içi çevrim içi oyun akşamları. " +
 			"Bu tayfa tanıtım amaçlı örnek (demo) içerik barındırır.",
-		Interests: []corev1.EventType{corev1.EventType_EVENT_TYPE_SPORTS, corev1.EventType_EVENT_TYPE_GAMING},
+		Interests: []string{"sports", "games"},
 		Founder:   "emre",
 		Members: []memberSpec{
 			{Person: "mert", Role: moderator}, {Person: "kaan", Role: member}, {Person: "baris", Role: member},
@@ -517,7 +536,7 @@ var tayfas = []tayfaSpec{
 				PlaceName: "Urla halı saha", Lat: 38.3227, Lng: 26.7647,
 				City: "İzmir", District: "Urla",
 				Capacity: 14,
-				Sports:   &corev1.SportsDetails{Sport: corev1.Sport_SPORT_FOOTBALL, VenueName: "Urla halı saha"},
+				Fields:   map[string]string{"sport": `"football"`, "venue_name": `"Urla halı saha"`},
 				RSVPs: []rsvpSpec{
 					{Person: "emre", Status: going}, {Person: "mert", Status: going}, {Person: "kaan", Status: going},
 					{Person: "baris", Status: going}, {Person: "tolga", Status: going}, {Person: "serkan", Status: maybe},
@@ -530,7 +549,7 @@ var tayfas = []tayfaSpec{
 				Description: "Eleme usulü, maç başına 2 x 6 dakika. Eşleşmeler etkinlik günü kanalda paylaşılır.",
 				Start:       at{Days: 10, Hour: 21}, Hours: 3,
 				OnlineURL: "https://example.com/tayfam-demo/turnuva",
-				Gaming:    &corev1.GamingDetails{Game: "Futbol simülasyonu", Platform: corev1.GamingPlatform_GAMING_PLATFORM_PLAYSTATION},
+				Fields:    map[string]string{"game": `"Futbol simülasyonu"`, "platform": `"playstation"`},
 				RSVPs: []rsvpSpec{
 					{Person: "emre", Status: going}, {Person: "kaan", Status: going}, {Person: "ceren", Status: going},
 					{Person: "tolga", Status: maybe}, {Person: "onur", Status: going},
@@ -589,5 +608,3 @@ var tayfas = []tayfaSpec{
 		},
 	},
 }
-
-func ptr[T any](v T) *T { return &v }

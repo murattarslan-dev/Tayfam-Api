@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// ScheduleComponentService is the schedule component (kind "schedule",
+// issue #247; ADR-0025 §4, §5): the event's programme as timed items. The
+// component's `max_items` parameter (1–100; 100 when the type sets none)
+// bounds the items.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+//
+// The programme is the event's plan: it is written from creating the event
+// until the write window closes (ERROR_REASON_COMPONENT_FROZEN), and a
+// series occurrence starts with the template's items, moved with its
+// start. An item's title and note are never logged or written to the audit
+// record or an outbox event.
+//
+// Every method returns the programme as the caller sees it.
+service ScheduleComponentService {
+  // GetSchedule returns the items ordered by their start (items with the
+  // same start in the order they were added). Open to every active member,
+  // muted ones included.
+  rpc GetSchedule(GetScheduleRequest) returns (GetScheduleResponse);
+
+  // AddScheduleItem adds an item. Managers only: the organizer, and
+  // moderators and admins as for every event.
+  //
+  // Errors: ERROR_REASON_VALIDATION (title, note; start_time missing or
+  // more than a day before the event's start or after its end; end_time
+  // not after start_time or more than a day after the event's end),
+  // ERROR_REASON_EVENT_LIMIT (max_items reached),
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc AddScheduleItem(AddScheduleItemRequest) returns (AddScheduleItemResponse);
+
+  // UpdateScheduleItem replaces an item's values. Managers only.
+  //
+  // Errors: those of AddScheduleItem but ERROR_REASON_EVENT_LIMIT, and
+  // ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+  rpc UpdateScheduleItem(UpdateScheduleItemRequest) returns (UpdateScheduleItemResponse);
+
+  // RemoveScheduleItem removes an item. Managers only.
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc RemoveScheduleItem(RemoveScheduleItemRequest) returns (RemoveScheduleItemResponse);
+}
+
+// ScheduleItem is one entry of a programme.
+message ScheduleItem {
+  string id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  // Unset for an item without an end.
+  google.protobuf.Timestamp end_time = 3;
+  // 1–120 characters.
+  string title = 4;
+  // 0–500 characters; empty for none.
+  string note = 5;
+}
+
+// Schedule is one schedule component of an event, as the caller sees it.
+message Schedule {
+  // Ordered by their start.
+  repeated ScheduleItem items = 1;
+  // The number of items the programme may hold (the component's
+  // `max_items` parameter, or 100).
+  int32 max_items = 2;
+  // The caller may add, edit and remove items now: a manager who is not
+  // muted, and the event, the tayfa and the write window allow it.
+  bool caller_can_edit = 3;
+}
+
+// ScheduleItemInput is an item's values.
+message ScheduleItemInput {
+  // Required.
+  google.protobuf.Timestamp start_time = 1;
+  // Optional; after start_time.
+  google.protobuf.Timestamp end_time = 2;
+  // 1–120 characters.
+  string title = 3;
+  // Optional; at most 500 characters.
+  string note = 4;
+}
+
+message GetScheduleRequest {
+  ComponentRef ref = 1;
+}
+
+message GetScheduleResponse {
+  Schedule schedule = 1;
+}
+
+message AddScheduleItemRequest {
+  ComponentRef ref = 1;
+  ScheduleItemInput item = 2;
+}
+
+message AddScheduleItemResponse {
+  Schedule schedule = 1;
+}
+
+message UpdateScheduleItemRequest {
+  ComponentRef ref = 1;
+  string item_id = 2;
+  ScheduleItemInput item = 3;
+}
+
+message UpdateScheduleItemResponse {
+  Schedule schedule = 1;
+}
+
+message RemoveScheduleItemRequest {
+  ComponentRef ref = 1;
+  string item_id = 2;
+}
+
+message RemoveScheduleItemResponse {
+  Schedule schedule = 1;
+}

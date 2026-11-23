@@ -285,6 +285,19 @@ message SocialSettings {
   // an event may be shown to their friends in Keşfet (ADR-0033 §4); it is
   // also never shown while activity visibility is PRIVATE. Default true.
   bool discover_visible_to_friends = 3;
+  // "Şimdi bildirimi kimden" (ADR-0038 §4, issue #265): from which friends
+  // the caller hears about their instant now events. Default ALL. With
+  // CLOSE only from the first 20 of the caller's friend list (the order of
+  // ListFriendships); CLOSE acts like ALL while profiling is off (there is
+  // no score). With OFF the caller gets none, and a sender is never told.
+  NowFromFriends now_from_friends = 4;
+}
+
+enum NowFromFriends {
+  NOW_FROM_FRIENDS_UNSPECIFIED = 0;
+  NOW_FROM_FRIENDS_ALL = 1;
+  NOW_FROM_FRIENDS_CLOSE = 2;
+  NOW_FROM_FRIENDS_OFF = 3;
 }
 
 message GetSocialSettingsRequest {}
@@ -297,6 +310,8 @@ message UpdateSocialSettingsRequest {
   optional bool profiling_enabled = 1;
   optional bool hide_from_suggestions = 2;
   optional bool discover_visible_to_friends = 3;
+  // UNSPECIFIED: unchanged.
+  NowFromFriends now_from_friends = 4;
 }
 
 message UpdateSocialSettingsResponse {

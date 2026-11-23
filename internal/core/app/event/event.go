@@ -1,5 +1,5 @@
 // Package event manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist, camp item lists and convoy vehicles
+// them and RSVPs with a waitlist
 // (EventService, proto/tayfam/core/v1/event.proto; issue #49, data model
 // v14 "Duyuru ve Etkinlik", "Türe özel tablolar", "Etkinlik iptali",
 // "Online etkinlik", "Konvoy aracı").
@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -37,6 +38,9 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog/definition"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -49,8 +53,11 @@ const (
 	EventCreated   = "event.created"
 	EventUpdated   = "event.updated"
 	EventCancelled = "event.cancelled"
-	RSVPChanged    = "rsvp.changed"
-	RSVPPromoted   = "rsvp.promoted"
+	// EventFinished is the audit action of Finish; the outbox event is
+	// EventUpdated with the new end.
+	EventFinished = "event.finished"
+	RSVPChanged   = "rsvp.changed"
+	RSVPPromoted  = "rsvp.promoted"
 )
 
 // Update mask paths (UpdateEventRequest.update_mask), in audit order.
@@ -61,12 +68,14 @@ const (
 	FieldLocation     = "location"
 	FieldCapacity     = "capacity"
 	FieldDiscoverable = "discoverable"
-	FieldDetails      = "details"
+	// FieldFields replaces the values of the type's fields
+	// (event_field_values, issue #237).
+	FieldFields = "fields"
 	// FieldCover is the cover image (events.cover_upload_id, issue #135).
 	FieldCover = "cover_upload_id"
 )
 
-var updateFields = []string{FieldTitle, FieldDescription, FieldTime, FieldLocation, FieldCapacity, FieldDiscoverable, FieldDetails, FieldCover}
+var updateFields = []string{FieldTitle, FieldDescription, FieldTime, FieldLocation, FieldCapacity, FieldDiscoverable, FieldFields, FieldCover}
 
 // Config wires a Service.
 type Config struct {
@@ -97,9 +106,12 @@ func (s *Service) now() time.Time { return s.cfg.Now().UTC().Truncate(time.Micro
 
 // Event is an event as an active member of its tayfa sees it.
 type Event struct {
-	ID          id.ID
-	TayfaID     id.ID
+	ID      id.ID
+	TayfaID id.ID
+	// Type is the catalog key of the event's type; TypeVersion the version
+	// of the type the event was created with (ADR-0025 §2).
 	Type        string
+	TypeVersion int32
 	Title       string
 	Description string
 	StartsAt    time.Time
@@ -131,8 +143,12 @@ type Event struct {
 	CallerCanManage bool
 	// CoverUploadID is the cover image; zero when there is none.
 	CoverUploadID id.ID
-	// Details are filled by Get only.
-	Details Details
+	// Fields holds the values of the type's fields by field key, as JSON
+	// (definition.CleanValues); filled by Get only, never nil there.
+	Fields map[string]json.RawMessage
+	// OpenEnded: started now and not finished (events.open_ended, ADR-0038
+	// §1); EndsAt is the latest end, nowMaxDuration after the start.
+	OpenEnded bool
 }
 
 // Input is a create request, and the new values of an update.
@@ -145,7 +161,9 @@ type Input struct {
 	Location     Location
 	Capacity     int32
 	Discoverable bool
-	Details      Details
+	// Fields holds the values of the type's fields by field key, as JSON.
+	// They are checked against the event's type version.
+	Fields map[string]json.RawMessage
 	// ClientRequestID is required on create and ignored on update.
 	ClientRequestID string
 	// Recurrence, on create only, makes the event the first of a series.
@@ -156,7 +174,19 @@ type Input struct {
 	// CoverUploadID is the caller's own READY cover upload opened for the
 	// tayfa; on update zero removes the cover (issue #135).
 	CoverUploadID id.ID
+	// Components, on create only, are the organizer's selections: optional
+	// components on or off and the parameters the type leaves to them
+	// (issue #238, ADR-0037 §2). Later changes go through
+	// component.Service.Set.
+	Components []component.Selection
+	// StartsNow, on create only, starts the event at the server's now as
+	// an open-ended event (ADR-0038 §1); StartsAt and EndsAt must be zero.
+	StartsNow bool
 }
+
+// nowMaxDuration is how long an open-ended event runs at most: it ends by
+// itself then unless its organizer finishes it (ADR-0038 §1).
+const nowMaxDuration = 12 * time.Hour
 
 // setCover attaches the caller's cover upload to the event (zero: removes
 // the cover) and writes the column, whose trigger checks the attachment
@@ -227,6 +257,9 @@ type batch struct {
 	tayfa  id.ID
 	actor  id.ID
 	events []queued
+	// now: the creating transaction's clock, for the day of the now
+	// notification limit (createIn sets it).
+	now time.Time
 }
 
 type queued struct {
@@ -282,8 +315,7 @@ func flush(ctx context.Context, q *store.Queries, b *batch) error {
 // them (ADR-0009, package notify): a new event for every active member,
 // a change or cancellation for its going, maybe and waitlist participants,
 // a waitlist promotion for the promoted member. The actor never hears
-// about their own change. Changes to the lists on an event (camp items,
-// convoy vehicles) notify nobody.
+// about their own change.
 func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 	for _, e := range b.events {
 		req := notify.Request{Tayfa: b.tayfa, Actor: b.actor, TargetType: notify.TargetEvent, Target: e.subject}
@@ -293,10 +325,20 @@ func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 		)
 		switch e.typ {
 		case EventCreated:
+			if now, _ := e.payload["starts_now"].(bool); now {
+				// A now event tells the members instead, within the tayfa's
+				// daily limit (ADR-0038 §4); an instant tayfa has no other
+				// member, its organizer's friends are told by package
+				// instant.
+				req.Type = notify.TypeNowStarted
+				to, err = notify.NowMembers(ctx, q, b.tayfa, b.actor, b.now)
+				break
+			}
 			req.Type = notify.TypeEventCreated
 			to, err = notify.Members(ctx, q, b.tayfa, b.actor)
 		case EventUpdated:
-			if listsOnly(e.payload["fields"]) {
+			if finished, _ := e.payload["finished"].(bool); finished {
+				// "Bitir" notifies nobody (ADR-0038 §1).
 				continue
 			}
 			req.Type = notify.TypeEventUpdated
@@ -323,21 +365,6 @@ func notifyBatch(ctx context.Context, q *store.Queries, b *batch) error {
 		}
 	}
 	return nil
-}
-
-// listsOnly reports an event.updated whose fields are all lists on the
-// event (fieldCampItems, fieldVehicles).
-func listsOnly(v any) bool {
-	fields, ok := v.([]string)
-	if !ok || len(fields) == 0 {
-		return false
-	}
-	for _, f := range fields {
-		if f != fieldCampItems && f != fieldVehicles {
-			return false
-		}
-	}
-	return true
 }
 
 // lockEvent loads and locks an event of the tayfa.
@@ -391,9 +418,11 @@ type Plan struct {
 	end      time.Time
 	loc      Location
 	capacity int32
-	details  Details
 	crid     id.ID
 	rec      *recurrence
+	// now: starts_now; start and end are set from the server's clock in
+	// the creating transaction (createIn).
+	now bool
 }
 
 // Title is the cleaned title: the name of an instant event's tayfa
@@ -405,8 +434,16 @@ func (p Plan) ClientRequestID() id.ID { return p.crid }
 
 // Prepare validates a create request.
 func (s *Service) Prepare(in Input) (Plan, error) {
-	if !slices.Contains(Types, in.Type) {
+	// Whether the catalog has the type is checked in the transaction that
+	// creates the event (createIn).
+	if !definition.ValidKey(in.Type) {
 		return Plan{}, apperr.Validation("type")
+	}
+	if len(in.Fields) > definition.MaxFields {
+		return Plan{}, apperr.Validation("fields")
+	}
+	if len(in.Components) > definition.MaxComponents {
+		return Plan{}, apperr.Validation("components")
 	}
 	p := Plan{in: in}
 	var err error
@@ -416,16 +453,28 @@ func (s *Service) Prepare(in Input) (Plan, error) {
 	if p.desc, err = cleanText(in.Description, "description", 0, descriptionMax, true); err != nil {
 		return Plan{}, err
 	}
-	if p.start, p.end, err = cleanTime(in.StartsAt, in.EndsAt, s.now()); err != nil {
+	if in.StartsNow {
+		// The client's clock is never used (ADR-0038 §1).
+		switch {
+		case !in.StartsAt.IsZero():
+			return Plan{}, apperr.Validation("start_time")
+		case !in.EndsAt.IsZero():
+			return Plan{}, apperr.Validation("end_time")
+		case in.Recurrence != nil:
+			return Plan{}, apperr.Validation("recurrence")
+		case in.Discoverable:
+			return Plan{}, apperr.Validation("discoverable")
+		}
+		p.now = true
+		p.start = s.now()
+		p.end = p.start.Add(nowMaxDuration)
+	} else if p.start, p.end, err = cleanTime(in.StartsAt, in.EndsAt, s.now()); err != nil {
 		return Plan{}, err
 	}
 	if p.loc, err = cleanLocation(in.Location); err != nil {
 		return Plan{}, err
 	}
 	if p.capacity, err = cleanCapacity(in.Capacity); err != nil {
-		return Plan{}, err
-	}
-	if p.details, err = cleanDetails(in.Type, in.Details, p.start, true); err != nil {
 		return Plan{}, err
 	}
 	var ok bool
@@ -447,7 +496,12 @@ func (s *Service) Create(ctx context.Context, user, tayfa id.ID, in Input) (Even
 	}
 	var eventID, seriesID id.ID
 	err = s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
-		if err := c.authorize(authz.EventCreate); err != nil {
+		// Şimdi başlat has its own setting (ADR-0038 §2).
+		action := authz.EventCreate
+		if p.now {
+			action = authz.EventCreateNow
+		}
+		if err := c.authorize(action); err != nil {
 			return err
 		}
 		prev, err := q.GetEventByClientRequest(ctx, store.GetEventByClientRequestParams{CreatedBy: user.PG(), ClientRequestID: p.crid.PG()})
@@ -512,17 +566,38 @@ func (s *Service) CreateInstantTx(ctx context.Context, q *store.Queries, user, t
 // caller's tayfa and queues its outbox events.
 func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan) (eventID, seriesID id.ID, err error) {
 	tayfa := id.ID(c.tayfa.ID.Bytes)
+	// The event is bound to the type's current version and checked against
+	// it (ADR-0025 §2).
+	et, err := currentType(ctx, q, p.in.Type, p.loc.Mode)
+	if err != nil {
+		return id.ID{}, id.ID{}, err
+	}
+	values, err := cleanFields(ctx, q, et, p.in.Fields, nil)
+	if err != nil {
+		return id.ID{}, id.ID{}, err
+	}
+	if p.now {
+		if err := nowAllowed(ctx, q, c.user, c.now); err != nil {
+			return id.ID{}, id.ID{}, err
+		}
+		// "Now" is the creating transaction's clock (ADR-0038 §1).
+		p.start, p.end = c.now, c.now.Add(nowMaxDuration)
+	}
 	eventID = id.New()
 	cp := store.CreateEventParams{
-		ID: eventID.PG(), TayfaID: tayfa.PG(), Type: p.in.Type, Title: p.title, Description: text(p.desc),
+		ID: eventID.PG(), TayfaID: tayfa.PG(), Type: et.Key, TypeVersion: et.Version, Title: p.title, Description: text(p.desc),
 		StartsAt: ts(p.start), EndsAt: ts(p.end), Capacity: int4(p.capacity), Discoverable: p.in.Discoverable,
-		CreatedBy: c.user.PG(), ClientRequestID: p.crid.PG(),
+		CreatedBy: c.user.PG(), ClientRequestID: p.crid.PG(), OpenEnded: p.now,
 	}
 	setLocation(&cp.Mode, &cp.MeetingPointName, &cp.MeetingLat, &cp.MeetingLng, &cp.City, &cp.District, &cp.OnlineUrl, p.loc)
 	if err := q.CreateEvent(ctx, cp); err != nil {
 		return id.ID{}, id.ID{}, fmt.Errorf("etkinlik: %w", err)
 	}
-	if err := setDetails(ctx, q, eventID, p.details); err != nil {
+	if err := setFields(ctx, q, eventID, values, false); err != nil {
+		return id.ID{}, id.ID{}, err
+	}
+	// The organizer's selections, checked against the same type version.
+	if err := component.Apply(ctx, q, et, eventID, p.in.Components); err != nil {
 		return id.ID{}, id.ID{}, err
 	}
 	if p.in.CoverUploadID != (id.ID{}) {
@@ -530,10 +605,16 @@ func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan)
 			return id.ID{}, id.ID{}, err
 		}
 	}
-	if err := audit(ctx, q, c, EventCreated, eventID, map[string]any{"type": p.in.Type}); err != nil {
+	meta := map[string]any{"type": p.in.Type}
+	payload := map[string]any{"event_id": eventID.String(), "type": p.in.Type}
+	if p.now {
+		// notifyBatch sends the now notification from this mark.
+		meta["starts_now"], payload["starts_now"] = true, true
+		b.now = c.now
+	}
+	if err := audit(ctx, q, c, EventCreated, eventID, meta); err != nil {
 		return id.ID{}, id.ID{}, err
 	}
-	payload := map[string]any{"event_id": eventID.String(), "type": p.in.Type}
 	if p.rec != nil {
 		if seriesID, err = createSeries(ctx, q, c, eventID, p.start, p.rec); err != nil {
 			return id.ID{}, id.ID{}, err
@@ -610,6 +691,17 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 		if err := changeable(ev, c.now); err != nil {
 			return err
 		}
+		if ev.OpenEnded && set[FieldTime] {
+			// An open-ended event's times are the server's; it ends with
+			// Finish (ADR-0038 §1).
+			return apperr.Validation("update_mask")
+		}
+		if set[FieldLocation] {
+			// The mode must be one the event's type version allows.
+			if err := modeAllowed(ctx, q, ev, loc.Mode); err != nil {
+				return err
+			}
+		}
 		if in.Series {
 			if !ev.SeriesID.Valid {
 				return apperr.Validation("series")
@@ -648,24 +740,19 @@ func (s *Service) Update(ctx context.Context, user, tayfa, event id.ID, fields [
 			p.Capacity = int4(capacity)
 		}
 		if set[FieldDiscoverable] {
-			// An instant tayfa's event never reaches discovery (ADR-0032).
-			if in.Discoverable && access.Instant(c.tayfa) {
+			// An instant tayfa's event never reaches discovery (ADR-0032),
+			// nor does a now event (ADR-0038 §1).
+			if in.Discoverable && (access.Instant(c.tayfa) || ev.OpenEnded) {
 				return apperr.Validation("discoverable")
 			}
 			p.Discoverable = in.Discoverable
 		}
-		if set[FieldDetails] {
-			if ev.Type == TypeGeneral {
-				return apperr.Validation("details")
-			}
-			d, err := cleanDetails(ev.Type, in.Details, p.StartsAt.Time, false)
+		if set[FieldFields] {
+			values, err := cleanEventFields(ctx, q, ev, in.Fields)
 			if err != nil {
 				return err
 			}
-			if d.typ() == "" {
-				return apperr.Validation("details")
-			}
-			if err := setDetails(ctx, q, event, d); err != nil {
+			if err := setFields(ctx, q, event, values, true); err != nil {
 				return err
 			}
 		}
@@ -758,50 +845,184 @@ func (s *Service) Cancel(ctx context.Context, user, tayfa, event id.ID, reason s
 	return s.Get(ctx, user, tayfa, event)
 }
 
-// setDetails writes the type details; d has exactly one field set, or none
-// for a general event.
-func setDetails(ctx context.Context, q *store.Queries, event id.ID, d Details) error {
-	var err error
-	switch {
-	case d.Convoy != nil:
-		var route []byte
-		if len(d.Convoy.Route) > 0 {
-			pts := make([]map[string]float64, len(d.Convoy.Route))
-			for i, p := range d.Convoy.Route {
-				pts[i] = map[string]float64{"lat": p.Lat, "lng": p.Lng}
-			}
-			if route, err = json.Marshal(pts); err != nil {
-				return fmt.Errorf("rota: %w", err)
-			}
+// Finish is the organizer's "Bitir" on their own open-ended event (ADR-0038
+// §1): the end becomes now and the event is no longer open-ended. Check-in,
+// the components' write windows, the correction window and the activity
+// records follow the new end. Participants are not notified; the end
+// reaches chat with the event.updated event like any change of the end.
+func (s *Service) Finish(ctx context.Context, user, tayfa, event id.ID) (Event, error) {
+	err := s.write(ctx, user, tayfa, func(q *store.Queries, c caller, b *batch) error {
+		ev, err := lockEvent(ctx, q, tayfa, event)
+		if err != nil {
+			return err
 		}
-		err = q.SetEventConvoy(ctx, store.SetEventConvoyParams{EventID: event.PG(), Route: route})
-	case d.Camp != nil:
-		err = q.SetEventCamp(ctx, store.SetEventCampParams{
-			EventID: event.PG(), SiteName: text(d.Camp.SiteName), HasWater: boolPtr(d.Camp.HasWater),
-			HasToilet: boolPtr(d.Camp.HasToilet), Notes: text(d.Camp.Notes),
+		// Only the organizer: "Bitir" is theirs, also against moderators.
+		if !ev.CreatedBy.Valid || id.ID(ev.CreatedBy.Bytes) != c.user {
+			return apperr.ErrPermissionDenied
+		}
+		if err := c.authorize(authz.EventFinish); err != nil {
+			return err
+		}
+		if err := changeable(ev, c.now); err != nil {
+			return err
+		}
+		if !ev.OpenEnded {
+			return apperr.ErrEventNotOpenEnded
+		}
+		end := c.now
+		if !end.After(ev.StartsAt.Time) {
+			// Finished in the instant it started (events_time: end > start).
+			end = ev.StartsAt.Time.Add(time.Microsecond)
+		}
+		n, err := q.FinishEvent(ctx, store.FinishEventParams{TayfaID: tayfa.PG(), ID: event.PG(), EndsAt: ts(end)})
+		if err != nil {
+			return fmt.Errorf("bitir: %w", err)
+		}
+		if n != 1 {
+			return apperr.ErrEventNotOpenEnded
+		}
+		if err := audit(ctx, q, c, EventFinished, event, nil); err != nil {
+			return err
+		}
+		// event.updated carries the new end to chat (the channel is
+		// archived from it); "finished" keeps it out of the participants'
+		// notifications (notifyBatch).
+		b.add(EventUpdated, event, map[string]any{
+			"event_id": event.String(), "fields": []string{FieldTime}, "ends_at": end.UTC(), "finished": true,
 		})
-	case d.Hike != nil:
-		h := d.Hike
-		p := store.SetEventHikeParams{
-			EventID: event.PG(), Difficulty: int4(h.Difficulty), ElevationM: int4(h.ElevationM),
-			ReturnGraceMinutes: h.ReturnGraceMinutes,
-		}
-		if h.DistanceKm > 0 {
-			p.DistanceKm = pgtype.Float8{Float64: h.DistanceKm, Valid: true}
-		}
-		if !h.ExpectedReturnAt.IsZero() {
-			p.ExpectedReturnAt = ts(h.ExpectedReturnAt)
-		}
-		err = q.SetEventHike(ctx, p)
-	case d.Fishing != nil:
-		err = q.SetEventFishing(ctx, store.SetEventFishingParams{EventID: event.PG(), SpotVisibility: d.Fishing.SpotVisibility})
-	case d.Gaming != nil:
-		err = q.SetEventGaming(ctx, store.SetEventGamingParams{EventID: event.PG(), Game: d.Gaming.Game, Platform: d.Gaming.Platform})
-	case d.Sports != nil:
-		err = q.SetEventSports(ctx, store.SetEventSportsParams{EventID: event.PG(), Sport: d.Sports.Sport, VenueName: text(d.Sports.VenueName)})
+		// The activity records take the real duration (issue #50).
+		return refreshActivity(ctx, q, tayfa, event, c.now)
+	})
+	if err != nil {
+		return Event{}, err
+	}
+	return s.Get(ctx, user, tayfa, event)
+}
+
+// nowAllowed checks the limit of open now events of user (ADR-0038 §2): at
+// most one at a time, in tayfas and instant events together. It takes the
+// user's now lock first, so two creates cannot both pass.
+func nowAllowed(ctx context.Context, q *store.Queries, user id.ID, now time.Time) error {
+	if err := q.LockNowEventCreation(ctx, user.PG()); err != nil {
+		return fmt.Errorf("şimdi kilidi: %w", err)
+	}
+	n, err := q.CountOpenNowEvents(ctx, store.CountOpenNowEventsParams{CreatedBy: user.PG(), Now: ts(now)})
+	if err != nil {
+		return fmt.Errorf("açık şimdi etkinlikleri: %w", err)
+	}
+	if n >= maxOpenNow {
+		return apperr.ErrNowLimitReached
+	}
+	return nil
+}
+
+// maxOpenNow is how many open now events one person may organize at a time
+// (ADR-0038 §2).
+const maxOpenNow = 1
+
+// currentType returns the catalog's current version of the type key for a
+// new event with the given mode. An unknown or retired type and a mode the
+// type does not allow are validation errors: the client sent a type the
+// catalog it holds should not have offered.
+func currentType(ctx context.Context, q *store.Queries, key, mode string) (catalog.EventType, error) {
+	et, err := catalog.CurrentType(ctx, q, key)
+	if errors.Is(err, apperr.ErrCatalogTypeNotFound) {
+		return catalog.EventType{}, apperr.Validation("type")
 	}
 	if err != nil {
-		return fmt.Errorf("etkinlik detayı: %w", err)
+		return catalog.EventType{}, err
+	}
+	if et.Status != catalog.StatusActive {
+		return catalog.EventType{}, apperr.Validation("type")
+	}
+	if !slices.Contains(et.Modes, mode) {
+		return catalog.EventType{}, apperr.Validation("mode")
+	}
+	return et, nil
+}
+
+// modeAllowed checks a new mode of ev against the modes of the type
+// version it was created with.
+func modeAllowed(ctx context.Context, q *store.Queries, ev store.GetEventRow, mode string) error {
+	et, err := catalog.TypeVersion(ctx, q, ev.Type, ev.TypeVersion)
+	if err != nil {
+		// The foreign key guarantees the version exists.
+		return fmt.Errorf("etkinliğin tür sürümü: %w", err)
+	}
+	if !slices.Contains(et.Modes, mode) {
+		return apperr.Validation("mode")
+	}
+	return nil
+}
+
+// typeFlags returns the flags of the type version ev was created with
+// (ADR-0037 §1). Versions never change, so neither do an event's flags. In
+// SQL the same flag is event_attendance_sensitive (migration 00051).
+func typeFlags(ctx context.Context, q *store.Queries, ev store.GetEventRow) (definition.Flags, error) {
+	et, err := catalog.TypeVersion(ctx, q, ev.Type, ev.TypeVersion)
+	if err != nil {
+		// The foreign key guarantees the version exists.
+		return definition.Flags{}, fmt.Errorf("etkinliğin tür sürümü: %w", err)
+	}
+	return et.Parsed.Flags, nil
+}
+
+// cleanFields checks a complete set of field values against a type
+// version's definition, the study tag fields against the study tag list
+// (ADR-0043 §2). previous are the event's values before an update, nil
+// for a new event: a retired study tag they hold may stay. The error names
+// the field ("fields.platform"), never its value.
+func cleanFields(ctx context.Context, q *store.Queries, et catalog.EventType, in, previous map[string]json.RawMessage) (map[string]json.RawMessage, error) {
+	values, err := et.Parsed.CleanValues(in, true)
+	if err == nil {
+		err = catalog.CheckStudyValues(ctx, q, et.Parsed, values, previous)
+	}
+	var ve *definition.ValueError
+	switch {
+	case errors.As(err, &ve) && ve.Field != "":
+		return nil, apperr.Validation("fields." + ve.Field)
+	case errors.As(err, &ve):
+		return nil, apperr.Validation("fields")
+	case err != nil:
+		return nil, err
+	}
+	return values, nil
+}
+
+// cleanEventFields is cleanFields against the type version ev was created
+// with, which may be older than the catalog's current one.
+func cleanEventFields(ctx context.Context, q *store.Queries, ev store.GetEventRow, in map[string]json.RawMessage) (map[string]json.RawMessage, error) {
+	if len(in) > definition.MaxFields {
+		return nil, apperr.Validation("fields")
+	}
+	et, err := catalog.TypeVersion(ctx, q, ev.Type, ev.TypeVersion)
+	if err != nil {
+		// The foreign key guarantees the version exists.
+		return nil, fmt.Errorf("etkinliğin tür sürümü: %w", err)
+	}
+	// The values the event holds, for the study tags it may keep.
+	var previous map[string]json.RawMessage
+	if slices.ContainsFunc(et.Parsed.Fields, func(f definition.Field) bool { return f.Kind == definition.KindStudyTags }) {
+		if previous, err = loadFields(ctx, q, id.ID(ev.ID.Bytes)); err != nil {
+			return nil, err
+		}
+	}
+	return cleanFields(ctx, q, et, in, previous)
+}
+
+// setFields writes an event's field values; replace first removes the
+// values it had. The values were cleaned by cleanFields.
+func setFields(ctx context.Context, q *store.Queries, event id.ID, values map[string]json.RawMessage, replace bool) error {
+	if replace {
+		if err := q.DeleteEventFieldValues(ctx, event.PG()); err != nil {
+			return fmt.Errorf("alan değerleri: %w", err)
+		}
+	}
+	// In key order, so that concurrent writers lock rows in one order.
+	for _, k := range slices.Sorted(maps.Keys(values)) {
+		if err := q.SetEventFieldValue(ctx, store.SetEventFieldValueParams{EventID: event.PG(), FieldKey: k, Value: values[k]}); err != nil {
+			return fmt.Errorf("alan değeri: %w", err)
+		}
 	}
 	return nil
 }
@@ -830,19 +1051,4 @@ func int4(n int32) pgtype.Int4 {
 		return pgtype.Int4{}
 	}
 	return pgtype.Int4{Int32: n, Valid: true}
-}
-
-func boolPtr(b *bool) pgtype.Bool {
-	if b == nil {
-		return pgtype.Bool{}
-	}
-	return pgtype.Bool{Bool: *b, Valid: true}
-}
-
-// optID is NULL for the zero ID.
-func optID(u id.ID) pgtype.UUID {
-	if u == (id.ID{}) {
-		return pgtype.UUID{}
-	}
-	return u.PG()
 }

@@ -2,6 +2,14 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Revizyon:** 2026-11-18 ([ADR-0040](0040-tayfa-modulleri-v3.md)): dört
+  modül bileşeninin (ortak kütüphane, soru havuzu, materyal kütüphanesi,
+  üye garajı) veri modeli ve ders-konu listesi.
+- **Revizyon:** 2026-11-23 (platform sahibi, sohbette, issue #323):
+  günün içeriği (`daily`) **modül** olarak kalır (§1'deki gösterim bileşeni
+  sınıflamasından sapma onaylandı; "Uygulama notları (#269)"). Varsayılan
+  ana sayfa bileşenleri her ilgi alanında yalnızca temel bölümlerdir
+  (#260).
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3)" §5a ve §4.15). Bu ADR onların mimariye taşınmasıdır.
 - **İlgili:** [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md),
@@ -53,6 +61,11 @@ kararları (2026-11-15):
 Her modül bileşeni kendi ADR'siyle gelir (veri modeli, yetki, KVKK). Bu ADR
 yalnızca çerçeveyi ve günün içeriğini tanımlar.
 
+> **Güncelleme (2026-11-23, platform sahibi, #323):** Günün içeriği
+> uygulamada kendi verisi ve uçları olan bir **modül bileşenidir**
+> (`tayfa_modules` anahtarı `daily`); öyle kalır. Yukarıdaki gösterim
+> bileşeni listesinde geçmesi tarihçedir. §5'in kuralları değişmez.
+
 ### 2. Bileşen listesi koddadır
 
 Bileşenler (gösterim ve modül) kapalı bir listedir ve core'da sabittir:
@@ -94,7 +107,7 @@ varsayılan bileşen eşlemesi **katalogdadır** (`catalog_interests`'e
 | `stats` | gösterilecek metrikler (en fazla 4), yıl | ADR-0026; tayfa içinde eşik yok |
 | `goal` | metrik, hedef değer, yıl | Ölçümden dolar; manuel artırma yok |
 | `countdown` | başlık (en fazla 60), hedef tarih | Tarih geçince kart kendiliğinden gizlenir |
-| `daily` | — | Havuz ayrı tabloda (§5) |
+| `daily` | — | Havuz ayrı tabloda (§5); modül bileşeni (§1 güncellemesi) |
 | `champions` | kaynak türler, dönem (son 30 gün / bu yıl) | `celebration` ve `scoreboard`'dan |
 | `log_summary` | kaynak `log` bileşeni, dönem | Örn. "Bu yıl görülen 84 kuş türü" |
 
@@ -132,7 +145,9 @@ Serbest metin (`countdown` başlığı) kötüye kullanım filtresinden geçer
 ### 6. Eğitim etiket listesi
 
 Ders ve konu etiketleri (Matematik → Türev…) katalogdadır
-(`catalog_subjects`, `catalog_topics`; ADR-0025 §2 kuralları: anahtar
+(uygulamada tek tablo `catalog_study_tags`, ≤ 3 seviye; ADR-0040 §5
+uygulama notu. Burada adı geçen `catalog_subjects` / `catalog_topics`
+tasarım taslağıdır. ADR-0025 §2 kuralları: anahtar
 değişmez, silinmez, `retired` olur, metinler `labels`'ta). Soru havuzu ve
 materyal kütüphanesi ADR'leri bu etiketlere bağlanır. Etiket listesi platform
 panelinden yönetilir.
@@ -172,3 +187,109 @@ panelinden yönetilir.
   olurdu; üyeler farklı içerik görebilirdi.
 - **Rastgele seçim:** Platform sahibi sıralı havuz ve tarihe sabitleme
   istedi; rastgelelik özel günleri garanti edemez.
+
+## Uygulama notları (#268)
+
+Karar değişmedi; §2–§4'ün uygulanışı:
+
+- **Bileşen listesi** `internal/core/app/home` (`Widgets`): anahtar, tür
+  (`section` / `display` / `module`), bağlı modül, ayar zorunluluğu. Bugünkü
+  sabit bölümlerin anahtarları `upcoming`, `announcements`, `polls`,
+  `questions` (bu sırayla); gösterim bileşenleri `stats`, `goal`,
+  `countdown`, `champions`, `log_summary`. Diğer bileşenler (#269 `daily`,
+  #270, #271, #261, #272) listeye kendi başlıkları altına tek satır ekler;
+  `tayfa_home_widgets.widget_key` CHECK'te liste tutmaz (yalnızca biçim),
+  migration gerekmez. "En düşük istemci sürümü" alanı yoktur: Faz 3 tek
+  sürümde yayınlanır (Notion E.6) ve istemci tanımadığı anahtarı atlar.
+- **Modüllerle ilişki** (ADR-0040): bileşenin `module` alanı
+  `tayfa_modules` anahtarıdır; modül kapalıyken (ya da satırı yokken)
+  bileşen açık olsa da ana sayfada gösterilmez, verisi
+  `home-widget-not-found` döner. Bölümler ve `champions` `events`
+  modülüne bağlıdır. Modül bileşenlerinin verisi modülün kendi
+  uçlarındadır.
+- **`updated_by` tutulmaz:** kim değiştirdi denetim kaydındadır
+  (`tayfa.home_updated`, açık bileşen anahtarlarıyla; ayar metni yok).
+  Satırda kişisel veri olmadığı için dışa aktarma ve hesap silme kapsamı
+  dışındadır (ADR-0011, tutmadığın veri).
+- **Varsayılanlar:** oluşturma ve anlık tayfa dönüştürmede bölümler +
+  ilgi alanlarının `default_widgets`'ı; ilgi alanı eklenince yalnızca
+  onunkiler. Platform sahibinin 2026-11-23 kararıyla (#260) her ilgi
+  alanının `default_widgets`'ı yalnızca temel bölümlerdir (`upcoming`,
+  `announcements`, `polls`, `questions`); Notion §5a'daki ilgi alanına
+  özel varsayılanlar (Kitap → kütüphane, İnanç → günün içeriği …)
+  uygulanmaz, bileşenleri yönetici açar. Ayar isteyen bileşen (`goal`, `countdown`, `log_summary`) ve
+  kodun tanımadığı anahtar varsayılan olamaz, atlanır. Mevcut standart
+  tayfalara migration bölümleri bugünkü sırayla açık ekler. İlgi alanı →
+  bileşen eşlemesinin içeriği katalog verisidir (#260); bu iş kaydı boş
+  bıraktı.
+- **Sözleşme:** `GET /v1/tayfas/{id}` → `home_widgets` (yalnızca
+  gösterilenler); `GET`/`PUT /v1/tayfas/{id}/home-widgets` (düzenin
+  tamamı; PUT her bileşeni tam bir kez ister); gösterim bileşeni verisi
+  `GET /v1/tayfas/{id}/home-widgets/{key}/data`. `config` bileşen
+  anahtarıyla adlanmış alt nesnedir (`{"goal": {…}}`).
+- **Ayarlar:** `stats` en fazla 4 metrik + dönem (`this_year` /
+  `all_time`; ayarsızsa dört ortak metrik, bu yıl); `goal` metrik, hedef
+  (0 < hedef ≤ 1e9), yıl (yoksa her zaman içinde bulunulan yıl);
+  `countdown` başlık (1–60, filtre takılma noktası `home.checkTerms`) ve
+  an (saniye); `champions` türler (≤ 10, boş = hepsi) + dönem
+  (`last_30_days` / `this_year`, ayarsızsa bu yıl); `log_summary`
+  `<tür>.<günlük>.<stat>` + dönem. Yıl Europe/Istanbul yılıdır.
+- **Veri:** istatistik, hedef ve günlük özeti `stats.TayfaTotals`'tan
+  (donmuş etkinlikler; hassas değer hiç yok); şampiyonlar ilan edilmiş,
+  başlamış, iptal edilmemiş etkinliklerin kutlamalarından
+  `celebration.Load` ile (gizli kaynak ve hassas katılımlı tür yok, kapalı
+  isteğe bağlı kutlama yok), en fazla 10, en yeni ilan önce; takım adı ve
+  misafir takma adı eklenir.
+- **Yetki:** `tayfa.home.update` yalnızca yönetici; anlık tayfada kimse.
+  Okuma (`tayfa.view`) her etkin üye; kapalı tayfanın düzeni ve verisi
+  üye olmayana hiçbir uçtan dönmez (`tayfa-not-found`).
+
+## Uygulama notları (#269)
+
+§5'in uygulanışı; bir noktada §1'den sapma (platform sahibinin kararıyla;
+2026-11-23'te sohbette onaylandı, #323):
+
+- **Modül:** Günün içeriği kendi verisi ve uçları olan bir **modüldür**
+  (`tayfa_modules` anahtarı `daily`, `tayfa.Modules`); §1'de gösterim
+  bileşenleri arasında sayılmıştı. Ana sayfa bileşeni `daily` `module`
+  türündedir ve kartını modülün `GET /v1/tayfas/{id}/daily/today` ucundan
+  çizer; modül kapalıyken bileşen gizlenir, uçlar `module-disabled` döner.
+  Yeni ve var olan standart tayfalarda modül açıktır; anlık tayfada
+  kapalıdır.
+- **Tablolar:** `tayfa_daily_items` (§5'teki alanlar + `client_request_id`,
+  `updated_at`; `body` satır sonu içerebilir: dizeler için, art arda en
+  fazla bir boş satır, başka denetim karakteri yok; Go ve CHECK aynı
+  kuralı uygular) ve `tayfa_daily_state` (`next_position`, `shown_on`,
+  `shown_item_id`).
+- **Seçim kuralı** (`internal/core/app/daily`, testlerle sabit): gün
+  Europe/Istanbul günüdür. O güne sabitlenmiş canlı içerik (`pin_year` o
+  yıl ya da NULL) varsa `(position, id)` sırasında ilki gösterilir; bu
+  hesap her istekte yapılır, sıra ilerlemez. Yoksa durum satırı okunur:
+  `shown_on` bugünse ve o içerik hâlâ canlı ve sabitlenmemişse o gösterilir;
+  değilse `position >= next_position` olan ilk sabitlenmemiş canlı içerik
+  (yoksa baştan ilki) seçilir ve `next_position = position + 1`,
+  `shown_on = bugün` karşılaştır-yaz ile yazılır (aynı anda gelen iki ilk
+  istekten biri yazar, diğeri yeniden okur). Gün içinde eklenen bir
+  sabitleme o günü hemen alır (dönüşteki içerik kaybolmaz, gösterilmiş
+  sayılır). Yılsız 29 Şubat yalnızca artık yıllarda gösterilir; yıllı 29
+  Şubat artık yıl ister.
+- **Sıra:** yeni ve geri alınan içerik havuzun sonuna gider (silinmişler
+  dahil en büyük yer + 1); `PUT …/daily/order` havuzun tamamını tam bir
+  kez ister ve yerleri 0'dan yeniden yazar; sıradaki dönüş aynı yer
+  numarasından devam eder.
+- **Çakışma:** ekleme, düzenleme ve geri almada aynı güne (yılsız
+  sabitleme her yılla) başka canlı sabitleme varsa yanıtta
+  `pin_conflict: true`; reddedilmez.
+- **Yetki:** `tayfa.daily.manage` moderatör ve yönetici (ekleme,
+  düzenleme, silme, geri alma, sıralama, sabitleme); okuma `tayfa.view`.
+  Silinenler listesi (`deleted=true`) yalnızca yönetenlere. Silinen içerik
+  30 gün geri alınabilir, sonra arka plan işi kalıcı siler.
+- **Sınırlar:** `body` 1–500, `attribution` 0–120 (tek satır), havuz 1000
+  canlı içerik (`daily-item-limit`). Kötüye kullanım filtresi core'da yok
+  (ADR-0012); tek takılma noktası `daily.checkTerms`.
+- **Şikâyet:** hedef türü `daily_item` (proto 13), konu ekleyendir; modül
+  kapalıysa hedef bulunamaz. Platform paneli içeriği okur ve kaldırır.
+- **KVKK:** içerik tayfanındır; ekleyenin içerikleri duyurular gibi dışa
+  aktarılır (bölüm 36 `daily_items`), hesap silinince içerik kalır, ekleyen
+  ve silen boşalır. Görsel yoktur.
+- **Hatalar:** `daily-item-not-found` (2690), `daily-item-limit` (2691).

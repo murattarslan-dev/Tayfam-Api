@@ -188,6 +188,146 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_CLOSED, true
 	case errors.Is(err, apperr.ErrSafetyContactNotFound):
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_SAFETY_CONTACT_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrCatalogTypeNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_CATALOG_TYPE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrComponentNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_COMPONENT_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrComponentDisabled):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_DISABLED, true
+	case errors.Is(err, apperr.ErrComponentLocked):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_LOCKED, true
+	case errors.Is(err, apperr.ErrComponentFrozen):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_COMPONENT_FROZEN, true
+	case errors.Is(err, apperr.ErrVehicleFull):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VEHICLE_FULL, true
+	case errors.Is(err, apperr.ErrVehicleSeatsTaken):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VEHICLE_SEATS_TAKEN, true
+	case errors.Is(err, apperr.ErrSeatRequestDriver):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SEAT_REQUEST_DRIVER, true
+	case errors.Is(err, apperr.ErrVocabularyNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_VOCABULARY_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrVocabularyMerged):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOCABULARY_MERGED, true
+	case errors.Is(err, apperr.ErrVocabularyNotMerged):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOCABULARY_NOT_MERGED, true
+	case errors.Is(err, apperr.ErrMeasurementNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MEASUREMENT_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrMeasurementNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MEASUREMENT_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrMeasurementScope):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MEASUREMENT_SCOPE, true
+	case errors.Is(err, apperr.ErrTeamsManual):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_MANUAL, true
+	case errors.Is(err, apperr.ErrTeamsTooFew):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_TOO_FEW, true
+	case errors.Is(err, apperr.ErrTeamsNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_TEAMS_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrDrawAlreadyMade):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DRAW_ALREADY_MADE, true
+	case errors.Is(err, apperr.ErrDrawTooFew):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DRAW_TOO_FEW, true
+	case errors.Is(err, apperr.ErrScorePresetUnavailable):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_PRESET_UNAVAILABLE, true
+	case errors.Is(err, apperr.ErrScoreTableNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_SCORE_TABLE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrScoreTableFinished):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_TABLE_FINISHED, true
+	case errors.Is(err, apperr.ErrScoreTableStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_TABLE_STARTED, true
+	case errors.Is(err, apperr.ErrScorePlayerNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrScoreNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_SCORE_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrBracketDrawRequired):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_DRAW_REQUIRED, true
+	case errors.Is(err, apperr.ErrBracketStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_STARTED, true
+	case errors.Is(err, apperr.ErrBracketNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrBracketTooFew):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_TOO_FEW, true
+	case errors.Is(err, apperr.ErrBracketMatchNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_BRACKET_MATCH_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrBracketGameNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_BRACKET_GAME_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrBracketMatchDecided):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_MATCH_DECIDED, true
+	case errors.Is(err, apperr.ErrBracketRoundOpen):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_ROUND_OPEN, true
+	case errors.Is(err, apperr.ErrBracketRoundClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_ROUND_CLOSED, true
+	case errors.Is(err, apperr.ErrBracketFinished):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_BRACKET_FINISHED, true
+	case errors.Is(err, apperr.ErrGuestPlayersDisabled):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GUEST_PLAYERS_DISABLED, true
+	case errors.Is(err, apperr.ErrGuestPlayerNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_GUEST_PLAYER_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrGuestPlayerInUse):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GUEST_PLAYER_IN_USE, true
+	case errors.Is(err, apperr.ErrRankingNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrRankingNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrRankingFromMeasure):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_FROM_MEASURE, true
+	case errors.Is(err, apperr.ErrVoteClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_CLOSED, true
+	case errors.Is(err, apperr.ErrVoteOwnOption):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_OWN_OPTION, true
+	case errors.Is(err, apperr.ErrVoteOptionsFixed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_OPTIONS_FIXED, true
+	case errors.Is(err, apperr.ErrVoteOptionExists):
+		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_VOTE_OPTION_EXISTS, true
+	case errors.Is(err, apperr.ErrCelebrationNotStarted):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CELEBRATION_NOT_STARTED, true
+	case errors.Is(err, apperr.ErrCelebrationNoWinner):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CELEBRATION_NO_WINNER, true
+	case errors.Is(err, apperr.ErrCelebrationNotParticipant):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CELEBRATION_NOT_PARTICIPANT, true
+	case errors.Is(err, apperr.ErrAttendeesHidden):
+		return codes.PermissionDenied, corev1.ErrorReason_ERROR_REASON_ATTENDEES_HIDDEN, true
+	case errors.Is(err, apperr.ErrAlbumConsentRequired):
+		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_ALBUM_CONSENT_REQUIRED, true
+	case errors.Is(err, apperr.ErrNowLimitReached):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_NOW_LIMIT_REACHED, true
+	case errors.Is(err, apperr.ErrNowBroadcastLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED, true
+	case errors.Is(err, apperr.ErrEventNotOpenEnded):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_EVENT_NOT_OPEN_ENDED, true
+	case errors.Is(err, apperr.ErrInvalidJoinQR):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_INVALID_JOIN_QR, true
+	case errors.Is(err, apperr.ErrJoinQRLimit):
+		return codes.ResourceExhausted, corev1.ErrorReason_ERROR_REASON_JOIN_QR_LIMIT_REACHED, true
+	case errors.Is(err, apperr.ErrHomeWidgetNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_HOME_WIDGET_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrDailyItemNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_DAILY_ITEM_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrDailyItemLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DAILY_ITEM_LIMIT, true
+	case errors.Is(err, apperr.ErrLibraryItemNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrLibraryLoanNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_LIBRARY_LOAN_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrLibraryOwnItem):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_OWN_ITEM, true
+	case errors.Is(err, apperr.ErrLibraryLoanState):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_LOAN_STATE, true
+	case errors.Is(err, apperr.ErrLibraryItemOnLoan):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_ON_LOAN, true
+	case errors.Is(err, apperr.ErrLibraryItemLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_LIMIT, true
+	case errors.Is(err, apperr.ErrLibraryQueueFull):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_QUEUE_FULL, true
+	case errors.Is(err, apperr.ErrMaterialNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_MATERIAL_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrBlockedLink):
+		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_BLOCKED_LINK, true
+	case errors.Is(err, apperr.ErrMaterialLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MATERIAL_LIMIT, true
+	case errors.Is(err, apperr.ErrGarageVehicleNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrGarageLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GARAGE_LIMIT, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

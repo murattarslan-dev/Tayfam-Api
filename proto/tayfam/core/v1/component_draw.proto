@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// DrawComponentService is the draw component (kind "draw", issue #249;
+// ADR-0025 §4–§6): a random order of the event's entrants, made once. Two
+// places in a row are a pairing (1–2, 3–4 …); with an odd number the last
+// place has a bye. The bracket component seeds from it.
+//
+// What is drawn: the teams of the type's first teams component that is on
+// for the event, if the type has one (teams with people in them), or else
+// the event's participants (active members of the tayfa who answered
+// "going" or whose attendance was verified).
+//
+// The result is fixed and auditable: it cannot be drawn again or changed,
+// and who drew it is in the audit log. A place only empties: a person who
+// left the tayfa or deleted their account, or a team that was removed.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto). Drawing is for managers (the
+// organizer, and moderators and admins as for every event) until the
+// write window closes (ERROR_REASON_COMPONENT_FROZEN).
+service DrawComponentService {
+  // GetDraw returns the draw, or what a draw would take when none was made.
+  // Open to every active member, muted ones included.
+  rpc GetDraw(GetDrawRequest) returns (GetDrawResponse);
+
+  // MakeDraw draws the order with crypto/rand and fixes it.
+  //
+  // Errors: ERROR_REASON_DRAW_ALREADY_MADE, ERROR_REASON_DRAW_TOO_FEW,
+  // ERROR_REASON_EVENT_LIMIT (more than 500 participants),
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc MakeDraw(MakeDrawRequest) returns (MakeDrawResponse);
+}
+
+// DrawEntry is one place of the draw.
+message DrawEntry {
+  // 1-based.
+  int32 position = 1;
+  // A participant draw: the person's user ID; empty when the place is
+  // empty.
+  string user_id = 2;
+  // A team draw: the team's ID (of the teams component teams_key); empty
+  // when the place is empty.
+  string team_id = 3;
+  // A participant draw: the guest player's ID (issue #252;
+  // GuestPlayerComponentService). A guest's place never becomes empty.
+  string guest_id = 4;
+}
+
+// Draw is one draw component of an event, as the caller sees it.
+message Draw {
+  // The draw was made; entries and drawn_time are set.
+  bool drawn = 1;
+  // "participants" or "teams": what was drawn, or what a draw would take
+  // now.
+  string subject = 2;
+  // For "teams": the key of the teams component.
+  string teams_key = 3;
+  google.protobuf.Timestamp drawn_time = 4;
+  // Ordered by position.
+  repeated DrawEntry entries = 5;
+  // The caller may make the draw now: no draw yet, a manager who is not
+  // muted, and the event, the tayfa and the write window allow it.
+  bool caller_can_draw = 6;
+}
+
+message GetDrawRequest {
+  ComponentRef ref = 1;
+}
+
+message GetDrawResponse {
+  Draw draw = 1;
+}
+
+message MakeDrawRequest {
+  ComponentRef ref = 1;
+}
+
+message MakeDrawResponse {
+  Draw draw = 1;
+}

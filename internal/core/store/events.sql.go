@@ -40,18 +40,21 @@ func (q *Queries) CancelEvent(ctx context.Context, arg CancelEventParams) (int64
 	return result.RowsAffected(), nil
 }
 
-const countCampItems = `-- name: CountCampItems :one
-
-SELECT count(*) FROM event_camp_items WHERE event_id = $1
+const copyEventFieldValues = `-- name: CopyEventFieldValues :exec
+INSERT INTO event_field_values (event_id, field_key, value)
+SELECT $1::uuid, src.field_key, src.value FROM event_field_values AS src
+WHERE src.event_id = $2
 `
 
-// ---------------------------------------------------------------------------
-// Kamp malzemeleri
-func (q *Queries) CountCampItems(ctx context.Context, eventID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countCampItems, eventID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+type CopyEventFieldValuesParams struct {
+	ToEventID   pgtype.UUID
+	FromEventID pgtype.UUID
+}
+
+// Seri örneği şablonun alan değerlerini alır.
+func (q *Queries) CopyEventFieldValues(ctx context.Context, arg CopyEventFieldValuesParams) error {
+	_, err := q.db.Exec(ctx, copyEventFieldValues, arg.ToEventID, arg.FromEventID)
+	return err
 }
 
 const countGoing = `-- name: CountGoing :one
@@ -61,6 +64,27 @@ WHERE event_id = $1 AND status = 'going'
 
 func (q *Queries) CountGoing(ctx context.Context, eventID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countGoing, eventID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOpenNowEvents = `-- name: CountOpenNowEvents :one
+SELECT count(*) FROM events e
+JOIN tayfas t ON t.id = e.tayfa_id
+WHERE e.created_by = $1 AND e.open_ended AND e.deleted_at IS NULL
+  AND e.status = 'scheduled' AND e.ends_at > $2 AND t.deleted_at IS NULL
+`
+
+type CountOpenNowEventsParams struct {
+	CreatedBy pgtype.UUID
+	Now       pgtype.Timestamptz
+}
+
+// Kullanıcının açık şimdi etkinlikleri: bitmemiş (Bitir denmemiş ve 12
+// saat dolmamış), iptal edilmemiş, silinmemiş; tayfası da silinmemiş.
+func (q *Queries) CountOpenNowEvents(ctx context.Context, arg CountOpenNowEventsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOpenNowEvents, arg.CreatedBy, arg.Now)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -101,42 +125,16 @@ func (q *Queries) CountRsvpsForEvents(ctx context.Context, eventIds []pgtype.UUI
 	return items, nil
 }
 
-const createCampItem = `-- name: CreateCampItem :exec
-INSERT INTO event_camp_items (id, event_id, name, quantity, assigned_user_id, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-`
-
-type CreateCampItemParams struct {
-	ID             pgtype.UUID
-	EventID        pgtype.UUID
-	Name           string
-	Quantity       int32
-	AssignedUserID pgtype.UUID
-	CreatedBy      pgtype.UUID
-}
-
-func (q *Queries) CreateCampItem(ctx context.Context, arg CreateCampItemParams) error {
-	_, err := q.db.Exec(ctx, createCampItem,
-		arg.ID,
-		arg.EventID,
-		arg.Name,
-		arg.Quantity,
-		arg.AssignedUserID,
-		arg.CreatedBy,
-	)
-	return err
-}
-
 const createEvent = `-- name: CreateEvent :exec
 
 INSERT INTO events (
-  id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+  id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
   meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
-  capacity, discoverable, created_by, client_request_id
+  capacity, discoverable, created_by, client_request_id, open_ended
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8,
-  $9, $10, $11, $12, $13, $14,
-  $15, $16, $17, $18
+  $1, $2, $3, $4, $5, $6, $7, $8, $9,
+  $10, $11, $12, $13, $14, $15,
+  $16, $17, $18, $19, $20
 )
 `
 
@@ -144,6 +142,7 @@ type CreateEventParams struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -159,6 +158,7 @@ type CreateEventParams struct {
 	Discoverable     bool
 	CreatedBy        pgtype.UUID
 	ClientRequestID  pgtype.UUID
+	OpenEnded        bool
 }
 
 // Etkinlikler (issue #49). Her sorgu tayfa_id ile ya da tayfa kapsamında
@@ -169,6 +169,7 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 		arg.ID,
 		arg.TayfaID,
 		arg.Type,
+		arg.TypeVersion,
 		arg.Mode,
 		arg.Title,
 		arg.Description,
@@ -184,115 +185,47 @@ func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) error 
 		arg.Discoverable,
 		arg.CreatedBy,
 		arg.ClientRequestID,
+		arg.OpenEnded,
 	)
 	return err
 }
 
-const deleteCampItem = `-- name: DeleteCampItem :execrows
-DELETE FROM event_camp_items WHERE event_id = $1 AND id = $2
+const deleteEventFieldValues = `-- name: DeleteEventFieldValues :exec
+DELETE FROM event_field_values WHERE event_id = $1
 `
 
-type DeleteCampItemParams struct {
-	EventID pgtype.UUID
+func (q *Queries) DeleteEventFieldValues(ctx context.Context, eventID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteEventFieldValues, eventID)
+	return err
+}
+
+const finishEvent = `-- name: FinishEvent :execrows
+UPDATE events SET ends_at = $1, open_ended = false
+WHERE tayfa_id = $2 AND id = $3 AND deleted_at IS NULL
+  AND status = 'scheduled' AND open_ended
+`
+
+type FinishEventParams struct {
+	EndsAt  pgtype.Timestamptz
+	TayfaID pgtype.UUID
 	ID      pgtype.UUID
 }
 
-func (q *Queries) DeleteCampItem(ctx context.Context, arg DeleteCampItemParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteCampItem, arg.EventID, arg.ID)
+// Şimdi başlat (issue #263, ADR-0038 §1): organizatör "Bitir" der; bitiş
+// o an olur, açık uçluluk kalkar. Yalnızca planlı, açık uçlu etkinlikte.
+func (q *Queries) FinishEvent(ctx context.Context, arg FinishEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishEvent, arg.EndsAt, arg.TayfaID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const deleteConvoyVehicle = `-- name: DeleteConvoyVehicle :execrows
-DELETE FROM event_convoy_vehicles WHERE event_id = $1 AND id = $2
-`
-
-type DeleteConvoyVehicleParams struct {
-	EventID pgtype.UUID
-	ID      pgtype.UUID
-}
-
-func (q *Queries) DeleteConvoyVehicle(ctx context.Context, arg DeleteConvoyVehicleParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteConvoyVehicle, arg.EventID, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteUserConvoyVehicle = `-- name: DeleteUserConvoyVehicle :execrows
-DELETE FROM event_convoy_vehicles WHERE event_id = $1 AND user_id = $2
-`
-
-type DeleteUserConvoyVehicleParams struct {
-	EventID pgtype.UUID
-	UserID  pgtype.UUID
-}
-
-// "Geliyorum"dan vazgeçen kişinin aracı (ve plakası) kalmaz.
-func (q *Queries) DeleteUserConvoyVehicle(ctx context.Context, arg DeleteUserConvoyVehicleParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteUserConvoyVehicle, arg.EventID, arg.UserID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const getCampItemForUpdate = `-- name: GetCampItemForUpdate :one
-SELECT id, name, quantity, assigned_user_id FROM event_camp_items
-WHERE event_id = $1 AND id = $2
-FOR UPDATE
-`
-
-type GetCampItemForUpdateParams struct {
-	EventID pgtype.UUID
-	ID      pgtype.UUID
-}
-
-type GetCampItemForUpdateRow struct {
-	ID             pgtype.UUID
-	Name           string
-	Quantity       int32
-	AssignedUserID pgtype.UUID
-}
-
-// Kilit, aynı malzemeyi aynı anda üstlenen iki kişiden ikincisinin
-// güncel atamayı görmesini sağlar (issue #198).
-func (q *Queries) GetCampItemForUpdate(ctx context.Context, arg GetCampItemForUpdateParams) (GetCampItemForUpdateRow, error) {
-	row := q.db.QueryRow(ctx, getCampItemForUpdate, arg.EventID, arg.ID)
-	var i GetCampItemForUpdateRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Quantity,
-		&i.AssignedUserID,
-	)
-	return i, err
-}
-
-const getConvoyVehicleOwner = `-- name: GetConvoyVehicleOwner :one
-SELECT user_id FROM event_convoy_vehicles WHERE event_id = $1 AND id = $2
-`
-
-type GetConvoyVehicleOwnerParams struct {
-	EventID pgtype.UUID
-	ID      pgtype.UUID
-}
-
-func (q *Queries) GetConvoyVehicleOwner(ctx context.Context, arg GetConvoyVehicleOwnerParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, getConvoyVehicleOwner, arg.EventID, arg.ID)
-	var user_id pgtype.UUID
-	err := row.Scan(&user_id)
-	return user_id, err
 }
 
 const getEvent = `-- name: GetEvent :one
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
 `
@@ -306,6 +239,7 @@ type GetEventRow struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -328,6 +262,7 @@ type GetEventRow struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
+	OpenEnded        bool
 }
 
 func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error) {
@@ -337,6 +272,7 @@ func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow
 		&i.ID,
 		&i.TayfaID,
 		&i.Type,
+		&i.TypeVersion,
 		&i.Mode,
 		&i.Title,
 		&i.Description,
@@ -359,6 +295,7 @@ func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverUploadID,
+		&i.OpenEnded,
 	)
 	return i, err
 }
@@ -387,56 +324,11 @@ func (q *Queries) GetEventByClientRequest(ctx context.Context, arg GetEventByCli
 	return i, err
 }
 
-const getEventCamp = `-- name: GetEventCamp :one
-SELECT site_name, has_water, has_toilet, notes FROM event_camp WHERE event_id = $1
-`
-
-type GetEventCampRow struct {
-	SiteName  pgtype.Text
-	HasWater  pgtype.Bool
-	HasToilet pgtype.Bool
-	Notes     pgtype.Text
-}
-
-func (q *Queries) GetEventCamp(ctx context.Context, eventID pgtype.UUID) (GetEventCampRow, error) {
-	row := q.db.QueryRow(ctx, getEventCamp, eventID)
-	var i GetEventCampRow
-	err := row.Scan(
-		&i.SiteName,
-		&i.HasWater,
-		&i.HasToilet,
-		&i.Notes,
-	)
-	return i, err
-}
-
-const getEventConvoy = `-- name: GetEventConvoy :one
-SELECT route FROM event_convoy WHERE event_id = $1
-`
-
-func (q *Queries) GetEventConvoy(ctx context.Context, eventID pgtype.UUID) ([]byte, error) {
-	row := q.db.QueryRow(ctx, getEventConvoy, eventID)
-	var route []byte
-	err := row.Scan(&route)
-	return route, err
-}
-
-const getEventFishing = `-- name: GetEventFishing :one
-SELECT spot_visibility FROM event_fishing WHERE event_id = $1
-`
-
-func (q *Queries) GetEventFishing(ctx context.Context, eventID pgtype.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getEventFishing, eventID)
-	var spot_visibility string
-	err := row.Scan(&spot_visibility)
-	return spot_visibility, err
-}
-
 const getEventForUpdate = `-- name: GetEventForUpdate :one
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NULL
 FOR UPDATE
@@ -451,6 +343,7 @@ type GetEventForUpdateRow struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -473,6 +366,7 @@ type GetEventForUpdateRow struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
+	OpenEnded        bool
 }
 
 // Katılım ve düzenleme aynı etkinlik satırını kilitleyerek okur; kapasite
@@ -484,6 +378,7 @@ func (q *Queries) GetEventForUpdate(ctx context.Context, arg GetEventForUpdatePa
 		&i.ID,
 		&i.TayfaID,
 		&i.Type,
+		&i.TypeVersion,
 		&i.Mode,
 		&i.Title,
 		&i.Description,
@@ -506,65 +401,8 @@ func (q *Queries) GetEventForUpdate(ctx context.Context, arg GetEventForUpdatePa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CoverUploadID,
+		&i.OpenEnded,
 	)
-	return i, err
-}
-
-const getEventGaming = `-- name: GetEventGaming :one
-SELECT game, platform FROM event_gaming WHERE event_id = $1
-`
-
-type GetEventGamingRow struct {
-	Game     string
-	Platform string
-}
-
-func (q *Queries) GetEventGaming(ctx context.Context, eventID pgtype.UUID) (GetEventGamingRow, error) {
-	row := q.db.QueryRow(ctx, getEventGaming, eventID)
-	var i GetEventGamingRow
-	err := row.Scan(&i.Game, &i.Platform)
-	return i, err
-}
-
-const getEventHike = `-- name: GetEventHike :one
-SELECT difficulty, COALESCE(distance_km, 0)::float8 AS distance_km, elevation_m, expected_return_at, return_grace_minutes
-FROM event_hike WHERE event_id = $1
-`
-
-type GetEventHikeRow struct {
-	Difficulty         pgtype.Int4
-	DistanceKm         float64
-	ElevationM         pgtype.Int4
-	ExpectedReturnAt   pgtype.Timestamptz
-	ReturnGraceMinutes int32
-}
-
-func (q *Queries) GetEventHike(ctx context.Context, eventID pgtype.UUID) (GetEventHikeRow, error) {
-	row := q.db.QueryRow(ctx, getEventHike, eventID)
-	var i GetEventHikeRow
-	err := row.Scan(
-		&i.Difficulty,
-		&i.DistanceKm,
-		&i.ElevationM,
-		&i.ExpectedReturnAt,
-		&i.ReturnGraceMinutes,
-	)
-	return i, err
-}
-
-const getEventSports = `-- name: GetEventSports :one
-SELECT sport, venue_name FROM event_sports WHERE event_id = $1
-`
-
-type GetEventSportsRow struct {
-	Sport     string
-	VenueName pgtype.Text
-}
-
-func (q *Queries) GetEventSports(ctx context.Context, eventID pgtype.UUID) (GetEventSportsRow, error) {
-	row := q.db.QueryRow(ctx, getEventSports, eventID)
-	var i GetEventSportsRow
-	err := row.Scan(&i.Sport, &i.VenueName)
 	return i, err
 }
 
@@ -649,109 +487,32 @@ func (q *Queries) ListAttendees(ctx context.Context, arg ListAttendeesParams) ([
 	return items, nil
 }
 
-const listCampItems = `-- name: ListCampItems :many
-SELECT id, name, quantity, assigned_user_id FROM event_camp_items
+const listEventFieldValues = `-- name: ListEventFieldValues :many
+
+SELECT field_key, value FROM event_field_values
 WHERE event_id = $1
-ORDER BY created_at, id
+ORDER BY field_key
 `
 
-type ListCampItemsRow struct {
-	ID             pgtype.UUID
-	Name           string
-	Quantity       int32
-	AssignedUserID pgtype.UUID
+type ListEventFieldValuesRow struct {
+	FieldKey string
+	Value    []byte
 }
 
-func (q *Queries) ListCampItems(ctx context.Context, eventID pgtype.UUID) ([]ListCampItemsRow, error) {
-	rows, err := q.db.Query(ctx, listCampItems, eventID)
+// ---------------------------------------------------------------------------
+// Türe özel alan değerleri (issue #237, ADR-0025 §3). Değerler app
+// katmanında etkinliğin tür sürümüne göre doğrulanmış halleriyle yazılır;
+// trigger alanın o tür sürümünde olduğunu ayrıca denetler.
+func (q *Queries) ListEventFieldValues(ctx context.Context, eventID pgtype.UUID) ([]ListEventFieldValuesRow, error) {
+	rows, err := q.db.Query(ctx, listEventFieldValues, eventID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListCampItemsRow{}
+	items := []ListEventFieldValuesRow{}
 	for rows.Next() {
-		var i ListCampItemsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Quantity,
-			&i.AssignedUserID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listConvoyVehicles = `-- name: ListConvoyVehicles :many
-SELECT id, user_id, make, model, model_year, color, plate FROM event_convoy_vehicles
-WHERE event_id = $1
-ORDER BY created_at, id
-`
-
-type ListConvoyVehiclesRow struct {
-	ID        pgtype.UUID
-	UserID    pgtype.UUID
-	Make      string
-	Model     pgtype.Text
-	ModelYear pgtype.Int4
-	Color     pgtype.Text
-	Plate     pgtype.Text
-}
-
-func (q *Queries) ListConvoyVehicles(ctx context.Context, eventID pgtype.UUID) ([]ListConvoyVehiclesRow, error) {
-	rows, err := q.db.Query(ctx, listConvoyVehicles, eventID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListConvoyVehiclesRow{}
-	for rows.Next() {
-		var i ListConvoyVehiclesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.Make,
-			&i.Model,
-			&i.ModelYear,
-			&i.Color,
-			&i.Plate,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listFishingVisibility = `-- name: ListFishingVisibility :many
-SELECT event_id, spot_visibility FROM event_fishing
-WHERE event_id = ANY($1::uuid[])
-`
-
-type ListFishingVisibilityRow struct {
-	EventID        pgtype.UUID
-	SpotVisibility string
-}
-
-// Liste görünümünde mera gizliliği için.
-func (q *Queries) ListFishingVisibility(ctx context.Context, eventIds []pgtype.UUID) ([]ListFishingVisibilityRow, error) {
-	rows, err := q.db.Query(ctx, listFishingVisibility, eventIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListFishingVisibilityRow{}
-	for rows.Next() {
-		var i ListFishingVisibilityRow
-		if err := rows.Scan(&i.EventID, &i.SpotVisibility); err != nil {
+		var i ListEventFieldValuesRow
+		if err := rows.Scan(&i.FieldKey, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -763,10 +524,10 @@ func (q *Queries) ListFishingVisibility(ctx context.Context, eventIds []pgtype.U
 }
 
 const listUpcomingEvents = `-- name: ListUpcomingEvents :many
-SELECT id, tayfa_id, type, mode, title, description, starts_at, ends_at,
+SELECT id, tayfa_id, type, type_version, mode, title, description, starts_at, ends_at,
        meeting_point_name, meeting_lat, meeting_lng, city, district, online_url,
        capacity, status, cancelled_at, cancel_reason, series_id, series_override, discoverable,
-       created_by, created_at, updated_at, cover_upload_id
+       created_by, created_at, updated_at, cover_upload_id, open_ended
 FROM events
 WHERE tayfa_id = $1
   AND deleted_at IS NULL
@@ -788,6 +549,7 @@ type ListUpcomingEventsRow struct {
 	ID               pgtype.UUID
 	TayfaID          pgtype.UUID
 	Type             string
+	TypeVersion      int32
 	Mode             string
 	Title            string
 	Description      pgtype.Text
@@ -810,6 +572,7 @@ type ListUpcomingEventsRow struct {
 	CreatedAt        pgtype.Timestamptz
 	UpdatedAt        pgtype.Timestamptz
 	CoverUploadID    pgtype.UUID
+	OpenEnded        bool
 }
 
 // Bitmemiş etkinlikler, başlangıç zamanına göre; (starts_at, id) ile
@@ -833,6 +596,7 @@ func (q *Queries) ListUpcomingEvents(ctx context.Context, arg ListUpcomingEvents
 			&i.ID,
 			&i.TayfaID,
 			&i.Type,
+			&i.TypeVersion,
 			&i.Mode,
 			&i.Title,
 			&i.Description,
@@ -855,6 +619,7 @@ func (q *Queries) ListUpcomingEvents(ctx context.Context, arg ListUpcomingEvents
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CoverUploadID,
+			&i.OpenEnded,
 		); err != nil {
 			return nil, err
 		}
@@ -900,6 +665,18 @@ func (q *Queries) ListUserRsvpsForEvents(ctx context.Context, arg ListUserRsvpsF
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockNowEventCreation = `-- name: LockNowEventCreation :exec
+SELECT pg_advisory_xact_lock(hashtextextended('tayfam.core.now_event:' || $1::uuid::text, 0))
+`
+
+// Aynı kullanıcının şimdi etkinliği açan istekleri (tayfa içi ve anlık)
+// sırayla işlenir; kişi başı 1 açık şimdi etkinliği sınırı iki istekte
+// birden aşılamaz. Kilit transaction bitince bırakılır.
+func (q *Queries) LockNowEventCreation(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, lockNowEventCreation, userID)
+	return err
 }
 
 const nextWaitlisted = `-- name: NextWaitlisted :many
@@ -955,182 +732,19 @@ func (q *Queries) PromoteRsvp(ctx context.Context, arg PromoteRsvpParams) (int64
 	return result.RowsAffected(), nil
 }
 
-const setCampItemAssignee = `-- name: SetCampItemAssignee :exec
-UPDATE event_camp_items SET assigned_user_id = $1
-WHERE event_id = $2 AND id = $3
+const setEventFieldValue = `-- name: SetEventFieldValue :exec
+INSERT INTO event_field_values (event_id, field_key, value) VALUES ($1, $2, $3)
+ON CONFLICT (event_id, field_key) DO UPDATE SET value = EXCLUDED.value
 `
 
-type SetCampItemAssigneeParams struct {
-	AssignedUserID pgtype.UUID
-	EventID        pgtype.UUID
-	ID             pgtype.UUID
-}
-
-func (q *Queries) SetCampItemAssignee(ctx context.Context, arg SetCampItemAssigneeParams) error {
-	_, err := q.db.Exec(ctx, setCampItemAssignee, arg.AssignedUserID, arg.EventID, arg.ID)
-	return err
-}
-
-const setConvoyVehicle = `-- name: SetConvoyVehicle :one
-
-INSERT INTO event_convoy_vehicles (id, event_id, user_id, make, model, model_year, color, plate)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-ON CONFLICT (event_id, user_id) DO UPDATE
-SET make = EXCLUDED.make, model = EXCLUDED.model, model_year = EXCLUDED.model_year,
-    color = EXCLUDED.color, plate = EXCLUDED.plate
-RETURNING id
-`
-
-type SetConvoyVehicleParams struct {
-	ID        pgtype.UUID
-	EventID   pgtype.UUID
-	UserID    pgtype.UUID
-	Make      string
-	Model     pgtype.Text
-	ModelYear pgtype.Int4
-	Color     pgtype.Text
-	Plate     pgtype.Text
-}
-
-// ---------------------------------------------------------------------------
-// Konvoy araçları. Kişi başına bir araç; yeniden eklemek öncekinin yerine
-// geçer.
-func (q *Queries) SetConvoyVehicle(ctx context.Context, arg SetConvoyVehicleParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, setConvoyVehicle,
-		arg.ID,
-		arg.EventID,
-		arg.UserID,
-		arg.Make,
-		arg.Model,
-		arg.ModelYear,
-		arg.Color,
-		arg.Plate,
-	)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const setEventCamp = `-- name: SetEventCamp :exec
-INSERT INTO event_camp (event_id, site_name, has_water, has_toilet, notes)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (event_id) DO UPDATE
-SET site_name = EXCLUDED.site_name, has_water = EXCLUDED.has_water,
-    has_toilet = EXCLUDED.has_toilet, notes = EXCLUDED.notes
-`
-
-type SetEventCampParams struct {
-	EventID   pgtype.UUID
-	SiteName  pgtype.Text
-	HasWater  pgtype.Bool
-	HasToilet pgtype.Bool
-	Notes     pgtype.Text
-}
-
-func (q *Queries) SetEventCamp(ctx context.Context, arg SetEventCampParams) error {
-	_, err := q.db.Exec(ctx, setEventCamp,
-		arg.EventID,
-		arg.SiteName,
-		arg.HasWater,
-		arg.HasToilet,
-		arg.Notes,
-	)
-	return err
-}
-
-const setEventConvoy = `-- name: SetEventConvoy :exec
-
-INSERT INTO event_convoy (event_id, route) VALUES ($1, $2)
-ON CONFLICT (event_id) DO UPDATE SET route = EXCLUDED.route
-`
-
-type SetEventConvoyParams struct {
-	EventID pgtype.UUID
-	Route   []byte
-}
-
-// ---------------------------------------------------------------------------
-// Türe özel detaylar. Detay satırı türün tablosuna yazılır; bileşik foreign
-// key yanlış türü reddeder.
-func (q *Queries) SetEventConvoy(ctx context.Context, arg SetEventConvoyParams) error {
-	_, err := q.db.Exec(ctx, setEventConvoy, arg.EventID, arg.Route)
-	return err
-}
-
-const setEventFishing = `-- name: SetEventFishing :exec
-INSERT INTO event_fishing (event_id, spot_visibility) VALUES ($1, $2)
-ON CONFLICT (event_id) DO UPDATE SET spot_visibility = EXCLUDED.spot_visibility
-`
-
-type SetEventFishingParams struct {
-	EventID        pgtype.UUID
-	SpotVisibility string
-}
-
-func (q *Queries) SetEventFishing(ctx context.Context, arg SetEventFishingParams) error {
-	_, err := q.db.Exec(ctx, setEventFishing, arg.EventID, arg.SpotVisibility)
-	return err
-}
-
-const setEventGaming = `-- name: SetEventGaming :exec
-INSERT INTO event_gaming (event_id, game, platform) VALUES ($1, $2, $3)
-ON CONFLICT (event_id) DO UPDATE SET game = EXCLUDED.game, platform = EXCLUDED.platform
-`
-
-type SetEventGamingParams struct {
+type SetEventFieldValueParams struct {
 	EventID  pgtype.UUID
-	Game     string
-	Platform string
+	FieldKey string
+	Value    []byte
 }
 
-func (q *Queries) SetEventGaming(ctx context.Context, arg SetEventGamingParams) error {
-	_, err := q.db.Exec(ctx, setEventGaming, arg.EventID, arg.Game, arg.Platform)
-	return err
-}
-
-const setEventHike = `-- name: SetEventHike :exec
-INSERT INTO event_hike (event_id, difficulty, distance_km, elevation_m, expected_return_at, return_grace_minutes)
-VALUES ($1, $2, $3::float8, $4, $5, $6)
-ON CONFLICT (event_id) DO UPDATE
-SET difficulty = EXCLUDED.difficulty, distance_km = EXCLUDED.distance_km,
-    elevation_m = EXCLUDED.elevation_m, expected_return_at = EXCLUDED.expected_return_at,
-    return_grace_minutes = EXCLUDED.return_grace_minutes
-`
-
-type SetEventHikeParams struct {
-	EventID            pgtype.UUID
-	Difficulty         pgtype.Int4
-	DistanceKm         pgtype.Float8
-	ElevationM         pgtype.Int4
-	ExpectedReturnAt   pgtype.Timestamptz
-	ReturnGraceMinutes int32
-}
-
-func (q *Queries) SetEventHike(ctx context.Context, arg SetEventHikeParams) error {
-	_, err := q.db.Exec(ctx, setEventHike,
-		arg.EventID,
-		arg.Difficulty,
-		arg.DistanceKm,
-		arg.ElevationM,
-		arg.ExpectedReturnAt,
-		arg.ReturnGraceMinutes,
-	)
-	return err
-}
-
-const setEventSports = `-- name: SetEventSports :exec
-INSERT INTO event_sports (event_id, sport, venue_name) VALUES ($1, $2, $3)
-ON CONFLICT (event_id) DO UPDATE SET sport = EXCLUDED.sport, venue_name = EXCLUDED.venue_name
-`
-
-type SetEventSportsParams struct {
-	EventID   pgtype.UUID
-	Sport     string
-	VenueName pgtype.Text
-}
-
-func (q *Queries) SetEventSports(ctx context.Context, arg SetEventSportsParams) error {
-	_, err := q.db.Exec(ctx, setEventSports, arg.EventID, arg.Sport, arg.VenueName)
+func (q *Queries) SetEventFieldValue(ctx context.Context, arg SetEventFieldValueParams) error {
+	_, err := q.db.Exec(ctx, setEventFieldValue, arg.EventID, arg.FieldKey, arg.Value)
 	return err
 }
 

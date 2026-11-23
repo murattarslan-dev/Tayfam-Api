@@ -39,15 +39,18 @@ const (
 // AllFields is every field of FieldsVersion, in form order.
 var AllFields = []string{FieldInterests, FieldAbout, FieldOccupation, FieldTeam, FieldLanguages, FieldSocialAccounts}
 
-// Interests are the event types (EventType in the REST contract).
-var Interests = []string{"convoy", "camp", "hike", "fishing", "gaming", "sports", "general"}
-
 // Limits (profile_details CHECKs).
 const (
 	MaxAbout     = 160
 	MaxShortText = 60 // occupation, team
 	MaxLanguages = 5
+	// MaxInterests bounds the interests of one profile. Which keys exist is
+	// the catalog's answer (CheckInterests).
+	MaxInterests = 20
 )
+
+// interestKey is the form of a catalog key (ADR-0025 §2).
+var interestKey = regexp.MustCompile(`^[a-z][a-z0-9_]{1,39}$`)
 
 // AboutVisibility is who sees the fields.
 type AboutVisibility string
@@ -86,6 +89,8 @@ var Platforms = []string{"instagram", "x", "tiktok", "youtube"}
 
 // Values is the user's own view of the fields.
 type Values struct {
+	// Interests are keys of the catalog's interests (core's catalog; here
+	// checked against identity's copy, ADR-0025 §10), sorted.
 	Interests      []string
 	About          string
 	Occupation     string
@@ -173,6 +178,10 @@ func (u Update) Empty() bool {
 // Apply returns cur with u applied, cleaned and checked. Giving a value to
 // a field in the same update that declines it is ErrInvalid; giving a value
 // to a field declined earlier takes it off the declined set.
+//
+// Interests are checked for their shape only; whether they are interests of
+// the catalog is CheckInterests' question, asked where the values are
+// written.
 func Apply(cur Values, u Update) (Values, error) {
 	next := cur
 	if u.Declined != nil {
@@ -262,15 +271,21 @@ func cleanDeclined(in []string) ([]string, error) {
 	return sortedLike(out, AllFields), nil
 }
 
+// cleanInterests checks the shape: at most MaxInterests distinct catalog
+// keys; sorted.
 func cleanInterests(in []string) ([]string, error) {
+	if len(in) > MaxInterests {
+		return nil, fmt.Errorf("%w: ilgi alanı sayısı", ErrInvalid)
+	}
 	out := make([]string, 0, len(in))
 	for _, v := range in {
-		if !slices.Contains(Interests, v) || slices.Contains(out, v) {
+		if !interestKey.MatchString(v) || slices.Contains(out, v) {
 			return nil, fmt.Errorf("%w: ilgi alanı", ErrInvalid)
 		}
 		out = append(out, v)
 	}
-	return sortedLike(out, Interests), nil
+	slices.Sort(out)
+	return out, nil
 }
 
 // cleanText trims the ends; a single-line field also collapses runs of

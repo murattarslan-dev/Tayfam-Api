@@ -67,6 +67,48 @@ const (
 	// no actor, no content; the target is the participant. Like
 	// hike_overdue it cannot be muted and is pushed even while online.
 	TypeSafetyAlert = "safety_alert"
+	// TypeCelebration: the organizer (the actor) announced the winner of a
+	// celebration component of the target event (issue #255). In-app only:
+	// the enqueue_push trigger opens no push job for it. Never names the
+	// winner.
+	TypeCelebration = "celebration"
+	// TypeBadgeEarned: a badge was earned (issue #258; ADR-0039 §4). No
+	// actor, never the badge itself; in-app only (the enqueue_push trigger
+	// opens no push job for it). A personal badge: the earner is the one
+	// recipient and the target (TargetUser), no tayfa. A tayfa badge: the
+	// tayfa's admins and moderators, the tayfa is the target (TargetTayfa).
+	TypeBadgeEarned = "badge_earned"
+	// TypeNowStarted: a now event (the target) started; the actor is its
+	// organizer (issue #265; ADR-0038 §4). Always about a tayfa: the
+	// event's tayfa, or the hidden tayfa of an instant event, whose chosen
+	// friends are invited and are not members yet. Pushed with the
+	// push_now_started keys only; muted with the tayfa's level none or its
+	// ScopeTayfaNow preference.
+	TypeNowStarted = "now_started"
+	// TypeLibraryDue: a library loan's return date passed (issue #270;
+	// ADR-0040 §1): one reminder to the borrower. TypeLibraryLoanOrphaned:
+	// one side of a handed-over loan left the tayfa, a warning to both
+	// sides (the one who left is no longer a member). Both name the loan's
+	// tayfa as target, have no actor and are in-app only (the enqueue_push
+	// trigger opens no push job for them).
+	TypeLibraryDue          = "library_due"
+	TypeLibraryLoanOrphaned = "library_loan_orphaned"
+	// The library's loan steps (issue #321; ADR-0040 §1, revised
+	// 2026-11-23): about one item (TargetLibraryItem) of the tayfa, with
+	// the member who took the step as actor, to the other side. Pushed
+	// with the push_<type> keys only; personal (level mentions pushes
+	// them). To the owner: TypeLibraryLoanRequested, TypeLibraryQueueJoined;
+	// to the borrower: TypeLibraryLoanApproved, TypeLibraryLoanDeclined,
+	// TypeLibraryLoanHandedOver.
+	TypeLibraryLoanRequested  = "library_loan_requested"
+	TypeLibraryQueueJoined    = "library_queue_joined"
+	TypeLibraryLoanApproved   = "library_loan_approved"
+	TypeLibraryLoanDeclined   = "library_loan_declined"
+	TypeLibraryLoanHandedOver = "library_loan_handed_over"
+	// TypeLibraryQueueTurn (issue #332): the recipient's turn in an item's
+	// queue came and their loan request opened. About the item
+	// (TargetLibraryItem), without an actor; pushed, personal.
+	TypeLibraryQueueTurn = "library_queue_turn"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -83,6 +125,9 @@ const (
 	// TargetDataExport: a data export request of the recipient
 	// (identity's DataExportService).
 	TargetDataExport = "data_export"
+	// TargetLibraryItem: a library item of the notification's tayfa (core's
+	// TayfaLibraryService.GetLibraryItem).
+	TargetLibraryItem = "library_item"
 )
 
 // Reasons of TypeTayfaWarned.
@@ -97,7 +142,7 @@ const MaxRecipients = 200
 // targetOf is the only target type each notification type may have.
 func targetOf(typ string) (string, bool) {
 	switch typ {
-	case TypeEventCreated, TypeEventUpdated, TypeEventCancelled, TypeRSVPPromoted, TypeHikeOverdue:
+	case TypeEventCreated, TypeEventUpdated, TypeEventCancelled, TypeRSVPPromoted, TypeHikeOverdue, TypeCelebration, TypeNowStarted:
 		return TargetEvent, true
 	case TypeAnnouncement:
 		return TargetAnnouncement, true
@@ -108,14 +153,17 @@ func targetOf(typ string) (string, bool) {
 	case TypeReportResolved:
 		return TargetReport, true
 	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation,
-		TypeTayfaSuspended, TypeTayfaUnsuspended:
+		TypeTayfaSuspended, TypeTayfaUnsuspended, TypeLibraryDue, TypeLibraryLoanOrphaned:
 		return TargetTayfa, true
-	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion, TypeSafetyAlert:
+	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion, TypeSafetyAlert, TypeBadgeEarned:
 		return TargetUser, true
 	case TypeDMRequest, TypeDMMessage:
 		return TargetDMConversation, true
 	case TypeDataExportReady:
 		return TargetDataExport, true
+	case TypeLibraryLoanRequested, TypeLibraryQueueJoined, TypeLibraryLoanApproved, TypeLibraryLoanDeclined,
+		TypeLibraryLoanHandedOver, TypeLibraryQueueTurn:
+		return TargetLibraryItem, true
 	}
 	return "", false
 }
@@ -124,6 +172,15 @@ func targetOf(typ string) (string, bool) {
 func withoutTayfa(typ string) bool {
 	return typ == TypeFriendRequest || typ == TypeFriendAccepted || typ == TypeFriendSuggestion ||
 		typ == TypeSafetyAlert || typ == TypeDataExportReady || IsDirect(typ)
+}
+
+// hasTayfa reports whether r must name a tayfa: badge_earned names one
+// only for a tayfa badge.
+func (r Request) hasTayfa() bool {
+	if r.Type == TypeBadgeEarned {
+		return r.TargetType == TargetTayfa
+	}
+	return !withoutTayfa(r.Type)
 }
 
 // IsDirect reports whether a notification type is about a direct message.
@@ -156,7 +213,7 @@ func (r Request) Validate() error {
 	switch {
 	case r.Event == (id.ID{}):
 		return apperr.Validation("event_id")
-	case (r.Tayfa == id.ID{}) != withoutTayfa(r.Type):
+	case (r.Tayfa != id.ID{}) != r.hasTayfa():
 		return apperr.Validation("tayfa_id")
 	case r.Target == (id.ID{}):
 		return apperr.Validation("notification_requested.target_id")
@@ -166,6 +223,9 @@ func (r Request) Validate() error {
 	target, ok := targetOf(r.Type)
 	if !ok {
 		return apperr.Validation("notification_requested.type")
+	}
+	if r.Type == TypeBadgeEarned && r.TargetType == TargetTayfa {
+		target = TargetTayfa
 	}
 	if r.TargetType != target {
 		return apperr.Validation("notification_requested.target_type")
@@ -179,7 +239,8 @@ func (r Request) Validate() error {
 	// The reporter is never told who handled their report; a direct
 	// message notice does not say who wrote.
 	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || r.Type == TypeFriendSuggestion ||
-		r.Type == TypeSafetyAlert || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
+		r.Type == TypeSafetyAlert || r.Type == TypeBadgeEarned || r.Type == TypeLibraryDue ||
+		r.Type == TypeLibraryLoanOrphaned || r.Type == TypeLibraryQueueTurn || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {

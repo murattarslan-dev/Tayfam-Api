@@ -168,10 +168,15 @@ var reportTargets = map[corev1.ReportTargetType]report.TargetType{
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_QUESTION:        report.TargetQuestion,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_ANSWER:          report.TargetAnswer,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_POLL:            report.TargetPoll,
-	corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH:   report.TargetFishingCatch,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_FISHING_CATCH:   report.TargetLogEntry,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_PHOTO:     report.TargetEventPhoto,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_DM_MESSAGE:      report.TargetDMMessage,
 	corev1.ReportTargetType_REPORT_TARGET_TYPE_CHANNEL_MESSAGE: report.TargetChannelMessage,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_EVENT_QUESTION:  report.TargetEventQuestion,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_DAILY_ITEM:      report.TargetDailyItem,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_LIBRARY_ITEM:    report.TargetLibraryItem,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_MATERIAL:        report.TargetMaterial,
+	corev1.ReportTargetType_REPORT_TARGET_TYPE_GARAGE_VEHICLE:  report.TargetGarageVehicle,
 }
 
 var reportReasons = map[corev1.ReportReason]report.Reason{
@@ -191,6 +196,7 @@ var reportReasons = map[corev1.ReportReason]report.Reason{
 	corev1.ReportReason_REPORT_REASON_COPYRIGHT:          report.ReasonCopyright,
 	corev1.ReportReason_REPORT_REASON_STAFF_CONDUCT:      report.ReasonStaffConduct,
 	corev1.ReportReason_REPORT_REASON_OTHER:              report.ReasonOther,
+	corev1.ReportReason_REPORT_REASON_PAID_TUTORING:      report.ReasonPaidTutoring,
 }
 
 var reportResolutions = map[corev1.ReportResolution]report.Resolution{

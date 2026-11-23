@@ -135,6 +135,10 @@ type Account struct {
 	Profile                  profilefields.Values
 	AboutVisibility          profilefields.AboutVisibility
 	ProfileCompletionPending bool
+	// StatsVisibility is who sees the personal statistics and badges on
+	// the profile (users.stats_visibility, ADR-0026 §4; issue #267): the
+	// values and audiences of AboutVisibility, none by default.
+	StatsVisibility profilefields.AboutVisibility
 }
 
 // Get returns the caller's own ID, display name, referral code and
@@ -148,6 +152,7 @@ func (s *Service) Get(ctx context.Context, caller id.ID) (Account, error) {
 		UserID: id.ID(u.ID.Bytes), DisplayName: u.DisplayName.String,
 		ReferralCode: u.RefCode.String, ActivityVisibility: Visibility(u.ActivityVisibility),
 		BirthdayVisibility: BirthdayVisibility(u.BirthDateVisibility),
+		StatsVisibility:    profilefields.AboutVisibility(u.StatsVisibility),
 	}
 	if u.AvatarUploadID.Valid {
 		a.AvatarUploadID = id.ID(u.AvatarUploadID.Bytes)
@@ -227,7 +232,7 @@ func (s *Service) setAvatar(ctx context.Context, caller, upload id.ID) error {
 		if n != 1 {
 			return ErrUnknownUser
 		}
-		p := userevents.Profile{DisplayName: u.DisplayName.String, ActivityVisibility: u.ActivityVisibility}
+		p := userevents.Profile{DisplayName: u.DisplayName.String, ActivityVisibility: u.ActivityVisibility, StatsVisibility: u.StatsVisibility}
 		if upload != (id.ID{}) {
 			p.AvatarUploadID = upload.String()
 		}
@@ -351,13 +356,17 @@ type Changes struct {
 	// either; profilefields has the rules.
 	Profile         profilefields.Update
 	AboutVisibility *profilefields.AboutVisibility
+	// StatsVisibility (issue #267) goes to core's profile copy, which
+	// decides who sees the personal statistics and badges.
+	StatsVisibility *profilefields.AboutVisibility
 }
 
 // Update applies c in one transaction: every field is checked before
 // anything is written, so an invalid field changes nothing. A field set to
 // its current value writes nothing and, for the display name, does not
-// count toward DisplayNameChangesPerDay. When the display name or the
-// activity visibility changes, core and chat get the new profile
+// count toward DisplayNameChangesPerDay. When the display name, the
+// activity visibility or the statistics visibility changes, core and chat
+// get the new profile
 // (user.profile_updated, ADR-0009). Neither the old nor the new name is
 // logged or kept anywhere else.
 func (s *Service) Update(ctx context.Context, caller id.ID, c Changes) error {
@@ -378,6 +387,9 @@ func (s *Service) Update(ctx context.Context, caller id.ID, c Changes) error {
 	if c.AboutVisibility != nil && !c.AboutVisibility.Valid() {
 		return ErrInvalidVisibility
 	}
+	if c.StatsVisibility != nil && !c.StatsVisibility.Valid() {
+		return ErrInvalidVisibility
+	}
 	// The profile fields are checked here too, before anything is written;
 	// against the stored values again inside the transaction.
 	if _, err := profilefields.Apply(profilefields.Values{}, c.Profile); err != nil {
@@ -396,7 +408,7 @@ func (s *Service) Update(ctx context.Context, caller id.ID, c Changes) error {
 		if err != nil {
 			return err
 		}
-		profile := userevents.Profile{DisplayName: u.DisplayName.String, ActivityVisibility: u.ActivityVisibility}
+		profile := userevents.Profile{DisplayName: u.DisplayName.String, ActivityVisibility: u.ActivityVisibility, StatsVisibility: u.StatsVisibility}
 		if u.AvatarUploadID.Valid {
 			profile.AvatarUploadID = id.ID(u.AvatarUploadID.Bytes).String()
 		}
@@ -428,6 +440,16 @@ func (s *Service) Update(ctx context.Context, caller id.ID, c Changes) error {
 				return ErrUnknownUser
 			}
 			profile.ActivityVisibility, changed = string(*c.ActivityVisibility), true
+		}
+		if c.StatsVisibility != nil && profilefields.AboutVisibility(u.StatsVisibility) != *c.StatsVisibility {
+			n, err := q.SetStatsVisibility(ctx, store.SetStatsVisibilityParams{ID: caller.PG(), StatsVisibility: string(*c.StatsVisibility)})
+			if err != nil {
+				return fmt.Errorf("istatistik görünürlüğü: %w", err)
+			}
+			if n != 1 {
+				return ErrUnknownUser
+			}
+			profile.StatsVisibility, changed = string(*c.StatsVisibility), true
 		}
 		if c.BirthdayVisibility != nil && BirthdayVisibility(u.BirthDateVisibility) != *c.BirthdayVisibility {
 			n, err := q.SetBirthDateVisibility(ctx, store.SetBirthDateVisibilityParams{ID: caller.PG(), BirthDateVisibility: string(*c.BirthdayVisibility)})
@@ -466,6 +488,16 @@ func (s *Service) updateProfile(ctx context.Context, q *store.Queries, caller id
 	next, err := profilefields.Apply(st.Values, c.Profile)
 	if err != nil {
 		return ErrInvalidProfile
+	}
+	if c.Profile.Interests != nil {
+		// Interests are keys of core's catalog; identity checks them
+		// against its copy (ADR-0025 §10).
+		if err := profilefields.CheckInterests(ctx, q, st.Values.Interests, next.Interests); err != nil {
+			if errors.Is(err, profilefields.ErrInvalid) {
+				return ErrInvalidProfile
+			}
+			return err
+		}
 	}
 	vis := st.Visibility
 	if c.AboutVisibility != nil {

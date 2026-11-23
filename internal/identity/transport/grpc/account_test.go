@@ -198,7 +198,8 @@ func TestUpdateAccount(t *testing.T) {
 }
 
 // TestUpdateProfileFields (issue #186): enums become the stored names,
-// unknown values and oversized input never reach the app layer.
+// unknown values and oversized input never reach the app layer. Interests
+// are catalog keys and go on as they are (ADR-0025 §10).
 func TestUpdateProfileFields(t *testing.T) {
 	u := id.New()
 	ctx := fullCtx(u)
@@ -206,7 +207,7 @@ func TestUpdateProfileFields(t *testing.T) {
 	_, err := newAccountServer(f).UpdateAccount(ctx, &identityv1.UpdateAccountRequest{
 		AboutVisibility: identityv1.AboutVisibility_ABOUT_VISIBILITY_FRIENDS,
 		Profile: &identityv1.ProfileUpdate{
-			Interests:      &identityv1.InterestList{Values: []identityv1.ProfileInterest{identityv1.ProfileInterest_PROFILE_INTEREST_HIKE}},
+			Interests:      &identityv1.InterestList{Keys: []string{"nature"}},
 			Team:           ptr("Bursaspor"),
 			Languages:      &identityv1.LanguageList{},
 			SocialAccounts: &identityv1.SocialAccountList{Values: []*identityv1.SocialAccount{{Platform: identityv1.SocialPlatform_SOCIAL_PLATFORM_X, Username: "ece"}}},
@@ -214,12 +215,15 @@ func TestUpdateProfileFields(t *testing.T) {
 		},
 	})
 	p := f.update.Profile
-	if err != nil || *f.update.AboutVisibility != "friends" || (*p.Interests)[0] != "hike" || *p.Team != "Bursaspor" ||
+	if err != nil || *f.update.AboutVisibility != "friends" || (*p.Interests)[0] != "nature" || *p.Team != "Bursaspor" ||
 		p.About != nil || len(*p.Languages) != 0 || (*p.SocialAccounts)[0].Platform != "x" || (*p.Declined)[0] != "about" {
 		t.Fatalf("güncelleme = %v %+v", err, f.update)
 	}
 	for name, req := range map[string]*identityv1.UpdateAccountRequest{
-		"bilinmeyen ilgi":       {Profile: &identityv1.ProfileUpdate{Interests: &identityv1.InterestList{Values: []identityv1.ProfileInterest{99}}}},
+		// Interests are catalog keys; the Faz 1 enum list is refused rather
+		// than dropped.
+		"Faz 1 ilgi listesi":    {Profile: &identityv1.ProfileUpdate{Interests: &identityv1.InterestList{Values: []identityv1.ProfileInterest{identityv1.ProfileInterest_PROFILE_INTEREST_HIKE}}}},
+		"çok fazla ilgi":        {Profile: &identityv1.ProfileUpdate{Interests: &identityv1.InterestList{Keys: make([]string, 33)}}},
 		"belirsiz platform":     {Profile: &identityv1.ProfileUpdate{SocialAccounts: &identityv1.SocialAccountList{Values: []*identityv1.SocialAccount{{Username: "ece"}}}}},
 		"bilinmeyen alan":       {Profile: &identityv1.ProfileUpdate{Declined: &identityv1.ProfileFieldList{Values: []identityv1.ProfileField{0}}}},
 		"bilinmeyen görünürlük": {AboutVisibility: 99},

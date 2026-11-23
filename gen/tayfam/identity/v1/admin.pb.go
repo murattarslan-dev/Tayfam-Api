@@ -1279,9 +1279,12 @@ type PlatformAuditEntry struct {
 	// The written reason. Shown on the panel only.
 	Reason string `protobuf:"bytes,8,opt,name=reason,proto3" json:"reason,omitempty"`
 	// IDs from the entry's metadata, if any.
-	TayfaId       string `protobuf:"bytes,9,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
-	UserId        string `protobuf:"bytes,10,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	ReportId      string `protobuf:"bytes,11,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
+	TayfaId  string `protobuf:"bytes,9,opt,name=tayfa_id,json=tayfaId,proto3" json:"tayfa_id,omitempty"`
+	UserId   string `protobuf:"bytes,10,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ReportId string `protobuf:"bytes,11,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
+	// The catalog entry a catalog.* action changed (issue #262): its key,
+	// or the domain of a blocked domain action. Empty otherwise.
+	CatalogKey    string `protobuf:"bytes,12,opt,name=catalog_key,json=catalogKey,proto3" json:"catalog_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1393,6 +1396,13 @@ func (x *PlatformAuditEntry) GetReportId() string {
 	return ""
 }
 
+func (x *PlatformAuditEntry) GetCatalogKey() string {
+	if x != nil {
+		return x.CatalogKey
+	}
+	return ""
+}
+
 type RecordPlatformAuditRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// core's outbox event ID (UUIDv7); the audit entry's ID.
@@ -1414,7 +1424,11 @@ type RecordPlatformAuditRequest struct {
 	// reported person).
 	UserId string `protobuf:"bytes,10,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	// The platform report the action decided, if any.
-	ReportId      string `protobuf:"bytes,11,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
+	ReportId string `protobuf:"bytes,11,opt,name=report_id,json=reportId,proto3" json:"report_id,omitempty"`
+	// The catalog entry a catalog.* action changed (issue #262): a catalog
+	// key (^[a-z][a-z0-9_]{1,39}$) or, for a blocked domain action, a lower
+	// case host name. A short value, never personal data.
+	CatalogKey    string `protobuf:"bytes,12,opt,name=catalog_key,json=catalogKey,proto3" json:"catalog_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1522,6 +1536,13 @@ func (x *RecordPlatformAuditRequest) GetUserId() string {
 func (x *RecordPlatformAuditRequest) GetReportId() string {
 	if x != nil {
 		return x.ReportId
+	}
+	return ""
+}
+
+func (x *RecordPlatformAuditRequest) GetCatalogKey() string {
+	if x != nil {
+		return x.CatalogKey
 	}
 	return ""
 }
@@ -1654,7 +1675,7 @@ const file_tayfam_identity_v1_admin_proto_rawDesc = "" +
 	"\bend_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\"\x8b\x01\n" +
 	"\x1dListPlatformAuditLogsResponse\x12@\n" +
 	"\aentries\x18\x01 \x03(\v2&.tayfam.identity.v1.PlatformAuditEntryR\aentries\x12(\n" +
-	"\x10next_page_cursor\x18\x02 \x01(\tR\x0enextPageCursor\"\xf4\x02\n" +
+	"\x10next_page_cursor\x18\x02 \x01(\tR\x0enextPageCursor\"\x95\x03\n" +
 	"\x12PlatformAuditEntry\x12\x19\n" +
 	"\bentry_id\x18\x01 \x01(\tR\aentryId\x12;\n" +
 	"\vcreate_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -1669,7 +1690,9 @@ const file_tayfam_identity_v1_admin_proto_rawDesc = "" +
 	"\btayfa_id\x18\t \x01(\tR\atayfaId\x12\x17\n" +
 	"\auser_id\x18\n" +
 	" \x01(\tR\x06userId\x12\x1b\n" +
-	"\treport_id\x18\v \x01(\tR\breportId\"\xf6\x02\n" +
+	"\treport_id\x18\v \x01(\tR\breportId\x12\x1f\n" +
+	"\vcatalog_key\x18\f \x01(\tR\n" +
+	"catalogKey\"\x97\x03\n" +
 	"\x1aRecordPlatformAuditRequest\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x129\n" +
 	"\n" +
@@ -1684,7 +1707,9 @@ const file_tayfam_identity_v1_admin_proto_rawDesc = "" +
 	"\btayfa_id\x18\t \x01(\tR\atayfaId\x12\x17\n" +
 	"\auser_id\x18\n" +
 	" \x01(\tR\x06userId\x12\x1b\n" +
-	"\treport_id\x18\v \x01(\tR\breportId\"\x1d\n" +
+	"\treport_id\x18\v \x01(\tR\breportId\x12\x1f\n" +
+	"\vcatalog_key\x18\f \x01(\tR\n" +
+	"catalogKey\"\x1d\n" +
 	"\x1bRecordPlatformAuditResponse*_\n" +
 	"\fSanctionType\x12\x1d\n" +
 	"\x19SANCTION_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +

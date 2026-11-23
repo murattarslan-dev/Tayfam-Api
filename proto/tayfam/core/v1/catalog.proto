@@ -1,0 +1,184 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "tayfam/core/v1/event.proto";
+
+// CatalogService serves the event type catalog (issue #237; ADR-0025 §2,
+// §8; ADR-0037). Event types are data: their names, icons, interests,
+// fields, components and parameters live in core's catalog, and the client
+// draws events from them. Only gateway calls it, with the user's access
+// token.
+//
+// Every method needs the caller's access token; there are no open methods.
+// The catalog is the same for every caller. It changes only through the
+// platform panel (and migrations); nothing here writes.
+//
+// Labels are the platform owner's content, by language ("tr" is always
+// there). Icons are keys of the client's fixed icon set; the server holds
+// no images.
+service CatalogService {
+  // GetCatalog returns the interests and the current definitions of the
+  // active event types. When known_version equals the catalog's version
+  // the lists are left out and not_modified is true.
+  rpc GetCatalog(GetCatalogRequest) returns (GetCatalogResponse);
+
+  // GetEventTypeVersion returns one version of an event type, for an event
+  // that was created with it. Retired types and old versions are served
+  // too.
+  //
+  // Errors: ERROR_REASON_VALIDATION (key, version),
+  // ERROR_REASON_CATALOG_TYPE_NOT_FOUND.
+  rpc GetEventTypeVersion(GetEventTypeVersionRequest) returns (GetEventTypeVersionResponse);
+}
+
+// Whether a catalog entry can be chosen for something new. A retired entry
+// is never deleted: old events, tayfas and profiles keep showing it.
+enum CatalogStatus {
+  CATALOG_STATUS_UNSPECIFIED = 0;
+  CATALOG_STATUS_ACTIVE = 1;
+  CATALOG_STATUS_RETIRED = 2;
+}
+
+// CatalogInterest groups event types.
+message CatalogInterest {
+  // Immutable; ^[a-z][a-z0-9_]{1,39}$.
+  string key = 1;
+  // Listing order, ascending.
+  int32 position = 2;
+  // Language to name.
+  map<string, string> labels = 3;
+  string icon = 4;
+  CatalogStatus status = 5;
+  // The home page widgets that are on by default in a tayfa that chooses
+  // this interest (ADR-0027).
+  repeated string default_widgets = 6;
+}
+
+// CatalogEventType is one version of an event type.
+message CatalogEventType {
+  // Immutable; ^[a-z][a-z0-9_]{1,39}$.
+  string key = 1;
+  // One to three interests; the first is the main one.
+  repeated string interest_keys = 2;
+  // Language to name.
+  map<string, string> labels = 3;
+  string icon = 4;
+  // The modes an event of this type may have.
+  repeated EventMode modes = 5;
+  CatalogStatus status = 6;
+  int32 version = 7;
+  // The definition as compact JSON (ADR-0025 §3): fields, components and
+  // flags. core validated it against its closed schema; it has no unknown
+  // keys and is at most 16 KiB.
+  string definition = 8;
+}
+
+// CatalogStudyTag is one entry of the study tag list the Eğitim modules
+// label their content with (issue #259; ADR-0040 §5): level (exam or
+// grade) → subject → topic, at most three deep. A subject is required on
+// such content, a topic is optional. Every level and subject has a "Diğer"
+// child whose key is the parent's key followed by "_other". A retired tag
+// cannot be chosen for new content; old content keeps showing it.
+message CatalogStudyTag {
+  // Immutable and unique in the whole list; ^[a-z][a-z0-9_]{1,39}$.
+  string key = 1;
+  // Empty for a level; never changes.
+  string parent_key = 2;
+  // Order under the same parent, ascending.
+  int32 position = 3;
+  // Language to name.
+  map<string, string> labels = 4;
+  CatalogStatus status = 5;
+}
+
+// Who earns a badge.
+enum BadgeScope {
+  BADGE_SCOPE_UNSPECIFIED = 0;
+  BADGE_SCOPE_USER = 1;
+  BADGE_SCOPE_TAYFA = 2;
+}
+
+// How a badge is earned (ADR-0039 §1).
+enum BadgeRuleKind {
+  BADGE_RULE_KIND_UNSPECIFIED = 0;
+  // A metric's total reached value within period.
+  BADGE_RULE_KIND_THRESHOLD = 1;
+  // The first attendance, of event_type or of any type. Personal only.
+  BADGE_RULE_KIND_FIRST = 2;
+  // A celebration of an event (of event_type, or of any type) named the
+  // person, or their team, the winner. Personal only.
+  BADGE_RULE_KIND_CHAMPION = 3;
+}
+
+// The period a threshold counts.
+enum BadgePeriod {
+  BADGE_PERIOD_UNSPECIFIED = 0;
+  BADGE_PERIOD_ALL_TIME = 1;
+  // Per calendar year: the badge can be earned once a year.
+  BADGE_PERIOD_YEAR = 2;
+}
+
+// CatalogBadgeRule is a badge's rule, for the client to explain it.
+message CatalogBadgeRule {
+  BadgeRuleKind kind = 1;
+  // Threshold only: a common metric (events, attended, participants,
+  // duration) or "<type key>.<key>", where key is a common metric of the
+  // type or one of its measure or log components.
+  string metric = 2;
+  // Threshold only: in the metric's unit (a duration in minutes).
+  double value = 3;
+  // Threshold only.
+  BadgePeriod period = 4;
+  // First and champion: the event type it is about; empty for any.
+  string event_type = 5;
+}
+
+// CatalogBadge is a badge definition (issue #258; ADR-0039 §1). Nothing
+// sensitive earns a badge: no sensitive measure, no type whose attendance
+// is sensitive.
+message CatalogBadge {
+  // Immutable; ^[a-z][a-z0-9_]{1,39}$.
+  string key = 1;
+  BadgeScope scope = 2;
+  // Listing order, ascending.
+  int32 position = 3;
+  // Language to name.
+  map<string, string> labels = 4;
+  string icon = 5;
+  // A retired badge is no longer earned; earned ones keep showing it.
+  CatalogStatus status = 6;
+  CatalogBadgeRule rule = 7;
+}
+
+message GetCatalogRequest {
+  // The catalog version the caller already holds; 0 when none.
+  int64 known_version = 1;
+}
+
+message GetCatalogResponse {
+  // Grows with every change to the catalog.
+  int64 catalog_version = 1;
+  // The caller's known_version is current; interests, event_types and
+  // study_tags are empty.
+  bool not_modified = 2;
+  // Every interest, retired ones included, by position.
+  repeated CatalogInterest interests = 3;
+  // The current version of every active event type, by position.
+  repeated CatalogEventType event_types = 4;
+  // The study tag list, retired tags included, by position; the client
+  // groups it by parent_key.
+  repeated CatalogStudyTag study_tags = 5;
+  // Every badge definition, retired ones included, by position.
+  repeated CatalogBadge badges = 6;
+}
+
+message GetEventTypeVersionRequest {
+  string key = 1;
+  // 1 or higher.
+  int32 version = 2;
+}
+
+message GetEventTypeVersionResponse {
+  CatalogEventType event_type = 1;
+}

@@ -16,6 +16,9 @@
 //     read-only state may have changed (ADR-0009 "Tayfa askı ve arşiv");
 //     chat drops the permissions it keeps for the tayfa. They reach chat as
 //     one kind, tayfa_status_changed.
+//   - event.component_changed: a component of an event changed (issue
+//     #238, ADR-0025 §6); chat tells the connections watching the event.
+//     Only the event ID and the component key go.
 //
 // Payloads carry IDs and classification only, and so do the requests.
 package chatrelay
@@ -25,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -65,7 +69,14 @@ const (
 	// TypeChannelMessageRemoved: the platform removes a reported channel
 	// message (issue #205, ADR-0031); chat hides it.
 	TypeChannelMessageRemoved = "report.channel_message_removed"
+	// TypeEventComponentChanged: a component of an event changed (issue
+	// #238, ADR-0025 §6, package component); chat tells the connections
+	// that watch the event. IDs only.
+	TypeEventComponentChanged = "event.component_changed"
 )
+
+// componentKeyPattern is the form of a component key (ADR-0025 §2).
+var componentKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{1,39}$`)
 
 // endedChanges are the membership.changed kinds after which the user is no
 // longer a member (package membership).
@@ -86,7 +97,7 @@ func Types() []string {
 		TypeTayfaDeletionRequested, TypeTayfaDeletionCancelled,
 		TypeTayfaSuspended, TypeTayfaUnsuspended,
 		TypeRSVPChanged, TypeRSVPPromoted, TypeEventUpdated, TypeEventCancelled,
-		TypeChannelMessageRemoved,
+		TypeChannelMessageRemoved, TypeEventComponentChanged,
 	}
 }
 
@@ -129,6 +140,8 @@ type payload struct {
 	EventID     string     `json:"event_id"`
 	EndsAt      *time.Time `json:"ends_at"`
 	CancelledAt *time.Time `json:"cancelled_at"`
+	// Component changes (issue #238).
+	ComponentKey string `json:"component_key"`
 }
 
 var types = map[string]chatv1.NotificationType{
@@ -150,6 +163,17 @@ var types = map[string]chatv1.NotificationType{
 	notify.TypeFriendAccepted:         chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_ACCEPTED,
 	notify.TypeFriendSuggestion:       chatv1.NotificationType_NOTIFICATION_TYPE_FRIEND_SUGGESTION,
 	notify.TypeSafetyAlert:            chatv1.NotificationType_NOTIFICATION_TYPE_SAFETY_ALERT,
+	notify.TypeCelebration:            chatv1.NotificationType_NOTIFICATION_TYPE_CELEBRATION,
+	notify.TypeBadgeEarned:            chatv1.NotificationType_NOTIFICATION_TYPE_BADGE_EARNED,
+	notify.TypeNowStarted:             chatv1.NotificationType_NOTIFICATION_TYPE_NOW_STARTED,
+	notify.TypeLibraryDue:             chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_DUE,
+	notify.TypeLibraryLoanOrphaned:    chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED,
+	notify.TypeLibraryLoanRequested:   chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED,
+	notify.TypeLibraryQueueJoined:     chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED,
+	notify.TypeLibraryLoanApproved:    chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED,
+	notify.TypeLibraryLoanDeclined:    chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED,
+	notify.TypeLibraryLoanHandedOver:  chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER,
+	notify.TypeLibraryQueueTurn:       chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN,
 	notify.TypeTayfaInvitation:        chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION,
 	notify.TypeReportResolved:         chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED,
 }
@@ -162,6 +186,7 @@ var targets = map[string]chatv1.NotificationTargetType{
 	notify.TargetAnswer:       chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER,
 	notify.TargetUser:         chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER,
 	notify.TargetReport:       chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT,
+	notify.TargetLibraryItem:  chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM,
 }
 
 var reasons = map[string]chatv1.TayfaWarningReason{
@@ -241,6 +266,16 @@ func Request(e outbox.Event) (*chatv1.ApplyCoreEventRequest, error) {
 		}
 		req.Event = &chatv1.ApplyCoreEventRequest_EventScheduleChanged{EventScheduleChanged: &chatv1.EventScheduleChanged{
 			EventId: p.EventID, EndTime: timestamppb.New(*end), Cancelled: cancelled,
+		}}
+	case TypeEventComponentChanged:
+		if _, ok := id.Parse(p.EventID); !ok {
+			return nil, errors.New("bileşen olayında etkinlik yok")
+		}
+		if p.ComponentKey != "" && !componentKeyPattern.MatchString(p.ComponentKey) {
+			return nil, errors.New("bileşen olayında geçersiz bileşen anahtarı")
+		}
+		req.Event = &chatv1.ApplyCoreEventRequest_EventComponentChanged{EventComponentChanged: &chatv1.EventComponentChanged{
+			EventId: p.EventID, ComponentKey: p.ComponentKey,
 		}}
 	case TypeMembershipChanged:
 		if _, ok := id.Parse(p.UserID); !ok {

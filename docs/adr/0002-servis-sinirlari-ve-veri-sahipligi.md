@@ -3,6 +3,9 @@
 - **Durum:** Kabul edildi
 - **Tarih:** 2026-11-07
 - **Karar veren:** Murat Arslan
+- **Revizyon:** 2026-11-23 (issue #280,
+  [ADR-0042](0042-katalog-degisikligi-olayi.md)): yan etki yönlerine
+  core → identity eklendi (panel denetim kaydı ve `catalog.changed`).
 - **İlgili:** [ADR-0001](0001-mikroservis-mimarisi.md)
 
 ## Bağlam
@@ -47,8 +50,10 @@ içi yine domain paketlerine bölünür ve ileride ayrılabilecek şekilde yazı
 - **gateway → identity, core, chat:** senkron gRPC.
 - **chat → core:** senkron gRPC (örneğin "bu kullanıcı bu tayfanın üyesi mi,
   rolü ne?"). chat bu yanıtı kısa süreli önbellekte tutabilir.
-- **Yan etkiler** (core → chat, identity → core/chat) **outbox deseni** ile
-  taşınır. Outbox olarak Notion veri modeli v10'daki `domain_events` ve
+- **Yan etkiler** (core → chat, core → identity, identity → core/chat)
+  **outbox deseni** ile taşınır. core → identity yönü panel denetim
+  kayıtlarını (`platform.audit`) ve katalog kopyasının güncellenmesini
+  (`catalog.changed`, ADR-0042) taşır. Outbox olarak Notion veri modeli v10'daki `domain_events` ve
   `event_consumers` tabloları kullanılır; her servisin kendi veritabanında bu
   iki tablo bulunur:
   1. Servis, kendi işlemiyle **aynı transaction içinde** `domain_events`'e bir

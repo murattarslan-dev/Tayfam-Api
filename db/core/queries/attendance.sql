@@ -40,22 +40,15 @@ SELECT EXISTS (
 );
 
 -- ---------------------------------------------------------------------------
--- Yürüyüş yoklaması
+-- Yoklama (`roll_call` bileşeni, issue #242)
 
--- name: GetHikeCheckin :one
-SELECT started_at, started_received_at, returned_at, returned_received_at
-FROM event_hike_checkins
-WHERE event_id = @event_id AND user_id = @user_id;
-
--- name: StartHikeCheckin :execrows
-INSERT INTO event_hike_checkins (event_id, user_id, started_at, started_received_at)
-VALUES (@event_id, @user_id, @started_at, @received_at)
-ON CONFLICT (event_id, user_id) DO NOTHING;
-
--- name: ReturnHikeCheckin :execrows
-UPDATE event_hike_checkins
-SET returned_at = @returned_at, returned_received_at = @received_at
-WHERE event_id = @event_id AND user_id = @user_id AND returned_at IS NULL;
+-- Katılım geçmişi, yoklaması olan kişide çıkış anını ve döndüyse gerçek
+-- süreyi kullanır (birden çok yoklamada en erken çıkış).
+-- name: GetRollCallTimes :one
+SELECT started_at, returned_at FROM event_roll_call_checkins
+WHERE event_id = @event_id AND user_id = @user_id
+ORDER BY started_at, component_key
+LIMIT 1;
 
 -- ---------------------------------------------------------------------------
 -- Kalıcı katılım geçmişi
@@ -81,37 +74,3 @@ DELETE FROM user_activity_records WHERE user_id = @user_id AND event_id = @event
 SELECT user_id, attendance_method FROM user_activity_records
 WHERE event_id = @event_id
 ORDER BY user_id;
-
--- ---------------------------------------------------------------------------
--- Av günlüğü
-
--- name: GetCatchByClientRequest :one
-SELECT id, event_id, deleted_at FROM fishing_catches
-WHERE user_id = @user_id AND client_request_id = @client_request_id;
-
--- name: CountUserCatches :one
-SELECT count(*) FROM fishing_catches
-WHERE event_id = @event_id AND user_id = @user_id AND deleted_at IS NULL;
-
--- name: CreateCatch :exec
-INSERT INTO fishing_catches (id, event_id, user_id, species, length_cm, lat, lng, visibility, client_request_id)
-VALUES (@id, @event_id, @user_id, @species, sqlc.arg(length_cm)::float8, @lat, @lng, @visibility, @client_request_id);
-
--- name: GetCatch :one
-SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at, photo_upload_id
-FROM fishing_catches
-WHERE event_id = @event_id AND id = @id AND deleted_at IS NULL;
-
--- (created_at, id) ile sayfalanır.
--- name: ListCatches :many
-SELECT id, user_id, species, length_cm::float8 AS length_cm, lat, lng, visibility, created_at, photo_upload_id
-FROM fishing_catches
-WHERE event_id = @event_id
-  AND deleted_at IS NULL
-  AND (created_at, id) > (@after_time::timestamptz, @after_id::uuid)
-ORDER BY created_at, id
-LIMIT @page_size;
-
--- name: DeleteCatch :execrows
-UPDATE fishing_catches SET deleted_at = @deleted_at, deleted_by = @deleted_by
-WHERE event_id = @event_id AND id = @id AND deleted_at IS NULL;

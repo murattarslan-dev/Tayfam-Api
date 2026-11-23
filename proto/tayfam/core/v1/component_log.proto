@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+import "tayfam/core/v1/event.proto";
+
+// LogComponentService is the log component (kind "log", issue #243;
+// ADR-0025 §4, §5; ADR-0037 §3): entries people log during an event — a
+// catch, a book, a bird, a summit. The record's fields come from the
+// component's `fields` parameter in the type definition; an entry may carry
+// a location (the `location` parameter) and a photo. It replaces the Faz 1
+// fishing catch log (EventService.AddFishingCatch, ListFishingCatches,
+// RemoveFishingCatch; FishingDetails.spot_visibility) for every type that
+// has the component.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto): anyone but an ACTIVE member
+// gets ERROR_REASON_TAYFA_NOT_FOUND, and so on.
+//
+// An entry's location is content its author shares knowingly (ADR-0008);
+// who sees it is the entry's location_visibility. Values and locations are
+// never logged or written to the audit record or an outbox event.
+service LogComponentService {
+  // ListLogEntries returns a page of the log's entries, oldest first. Open
+  // to every active member, muted ones included. An entry's location is
+  // returned to its author, and to others as its visibility allows.
+  //
+  // Errors: ERROR_REASON_VALIDATION (page_size, page_token) and the errors
+  // of every component read.
+  rpc ListLogEntries(ListLogEntriesRequest) returns (ListLogEntriesResponse);
+
+  // AddLogEntry logs an entry. The caller's attendance must be verified;
+  // one person has at most the component's `max_entries` (100 when not
+  // set) entries in one log. A repeat with the same client_request_id
+  // returns the first entry. Open within the write window (until seven
+  // days after the end; not on a cancelled event).
+  //
+  // Errors: ERROR_REASON_VALIDATION (values.<field>, values,
+  // vocabulary_ids.<field> for an ID that is not a value of the tayfa's
+  // vocabulary in the field's namespace, vocabulary_ids, location,
+  // location_visibility, client_request_id), ERROR_REASON_NOT_ATTENDED,
+  // ERROR_REASON_EVENT_LIMIT, ERROR_REASON_UPLOAD_NOT_FOUND,
+  // ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc AddLogEntry(AddLogEntryRequest) returns (AddLogEntryResponse);
+
+  // RemoveLogEntry removes an entry: the author their own within the
+  // write window, moderators and admins anyone's at any time (moderation;
+  // also on cancelled and frozen events).
+  //
+  // Errors: ERROR_REASON_EVENT_ITEM_NOT_FOUND,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc RemoveLogEntry(RemoveLogEntryRequest) returns (RemoveLogEntryResponse);
+}
+
+// LogLocationVisibility is who sees an entry's location besides its
+// author.
+enum LogLocationVisibility {
+  // In a request: the log's default (location_default).
+  LOG_LOCATION_VISIBILITY_UNSPECIFIED = 0;
+  // Only the author.
+  LOG_LOCATION_VISIBILITY_SELF = 1;
+  // Those who answered going or maybe or whose attendance was verified,
+  // the organizer, moderators and admins.
+  LOG_LOCATION_VISIBILITY_PARTICIPANTS = 2;
+  // Every member who sees the entry.
+  LOG_LOCATION_VISIBILITY_TAYFA = 3;
+}
+
+// LogEntry is one entry of a log, as the caller sees it.
+message LogEntry {
+  string id = 1;
+  string user_id = 2;
+  // The values by record field key, as JSON text (the stored forms of
+  // definition.CleanValues: text a string, integer and decimal a number,
+  // choice a string …).
+  map<string, string> values = 3;
+  // Not set when the entry has none or the caller may not see it.
+  LatLng location = 4;
+  // Set on the caller's own entries that have a location; UNSPECIFIED
+  // otherwise.
+  LogLocationVisibility location_visibility = 5;
+  // Empty when there is no photo (MediaService.GetMediaUrls).
+  string photo_upload_id = 6;
+  google.protobuf.Timestamp create_time = 7;
+  // The caller may remove the entry now.
+  bool caller_can_remove = 8;
+  // The tayfa vocabulary values of the fields bound to a vocabulary
+  // (issue #244; ADR-0037 §4), by field key: the value's ID, resolved to
+  // its merge target. The value's text is in values, as a JSON string.
+  map<string, string> vocabulary_ids = 9;
+}
+
+message ListLogEntriesRequest {
+  ComponentRef ref = 1;
+  // 0 means 50; at most 100.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListLogEntriesResponse {
+  repeated LogEntry entries = 1;
+  string next_page_token = 2;
+  // The component's `location` parameter.
+  bool location_enabled = 3;
+  // The default visibility of a new entry's location; UNSPECIFIED when the
+  // location is off.
+  LogLocationVisibility location_default = 4;
+  // One person's bound in this log.
+  int32 max_entries = 5;
+  // The caller may add an entry now: the write window, the permission and
+  // a verified attendance (not the count).
+  bool caller_can_add = 6;
+}
+
+message AddLogEntryRequest {
+  ComponentRef ref = 1;
+  // The values by record field key, as JSON text; every required field.
+  map<string, string> values = 2;
+  // Optional; only on a log with the `location` parameter.
+  LatLng location = 3;
+  // Only with a location.
+  LogLocationVisibility location_visibility = 4;
+  // Optional: the caller's own READY UPLOAD_PURPOSE_CATCH_PHOTO (log
+  // photo) upload opened for the tayfa.
+  string photo_upload_id = 5;
+  // Required (UUID).
+  string client_request_id = 6;
+  // A field bound to a tayfa vocabulary (`vocabulary` in the definition;
+  // issue #244) takes either an existing value of the tayfa's vocabulary
+  // here (field key → TayfaVocabularyService value ID) or a text in values:
+  // a known text (normalized) is reused, a new one is added to the
+  // vocabulary. Not both for one field.
+  map<string, string> vocabulary_ids = 7;
+}
+
+message AddLogEntryResponse {
+  LogEntry entry = 1;
+}
+
+message RemoveLogEntryRequest {
+  ComponentRef ref = 1;
+  string entry_id = 2;
+}
+
+message RemoveLogEntryResponse {}

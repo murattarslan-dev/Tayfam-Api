@@ -109,6 +109,7 @@ func (s *AccountServer) account(ctx context.Context, u id.ID) (*identityv1.GetAc
 		Profile: profileFieldsToPB(a.Profile.Interests, a.Profile.About, a.Profile.Occupation, a.Profile.Team,
 			a.Profile.Languages, a.Profile.SocialAccounts),
 		AboutVisibility:          aboutVisibilityValues[a.AboutVisibility],
+		StatsVisibility:          aboutVisibilityValues[a.StatsVisibility],
 		ProfileCompletionPending: a.ProfileCompletionPending,
 	}
 	out.DeclinedProfileFields, _ = mapAll(a.Profile.Declined, fieldValues)
@@ -235,6 +236,13 @@ func (s *AccountServer) UpdateAccount(ctx context.Context, req *identityv1.Updat
 			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
 		}
 		c.AboutVisibility = &vis
+	}
+	if v := req.GetStatsVisibility(); v != identityv1.AboutVisibility_ABOUT_VISIBILITY_UNSPECIFIED {
+		vis, ok := aboutVisibilityNames[v]
+		if !ok {
+			return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)
+		}
+		c.StatsVisibility = &vis
 	}
 	if profileUpdateTooLarge(req.GetProfile()) {
 		return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_VALIDATION)

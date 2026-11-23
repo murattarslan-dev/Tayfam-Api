@@ -22,6 +22,9 @@ const (
 	EventService_CreateEvent_FullMethodName         = "/tayfam.core.v1.EventService/CreateEvent"
 	EventService_CreateInstantEvent_FullMethodName  = "/tayfam.core.v1.EventService/CreateInstantEvent"
 	EventService_UpdateEvent_FullMethodName         = "/tayfam.core.v1.EventService/UpdateEvent"
+	EventService_FinishEvent_FullMethodName         = "/tayfam.core.v1.EventService/FinishEvent"
+	EventService_CreateEventJoinQr_FullMethodName   = "/tayfam.core.v1.EventService/CreateEventJoinQr"
+	EventService_JoinEventByQr_FullMethodName       = "/tayfam.core.v1.EventService/JoinEventByQr"
 	EventService_CancelEvent_FullMethodName         = "/tayfam.core.v1.EventService/CancelEvent"
 	EventService_GetEvent_FullMethodName            = "/tayfam.core.v1.EventService/GetEvent"
 	EventService_ListUpcomingEvents_FullMethodName  = "/tayfam.core.v1.EventService/ListUpcomingEvents"
@@ -52,8 +55,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // EventService manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist, camp item lists and convoy vehicles (issue
-// #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
+// them and RSVPs with a waitlist (issue #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
 // "Etkinlik iptali", "Online etkinlik", "Konvoy aracı"). Only gateway calls
 // it, with the user's access token.
 //
@@ -72,10 +74,14 @@ const (
 //     read events and attendees: every active member (also when muted)
 //     create: moderators and admins; every active member when
 //     Tayfa.members_can_create_events is true
-//     edit, cancel, manage camp items and other people's vehicles: the
-//     organizer (the event's creator) for their own event, moderators
-//     and admins for every event
-//     RSVP, add or remove one's own convoy vehicle: every active member
+//     create with starts_now: Tayfa.now_create_min_role and above
+//     (every active member by default; ADR-0038 §2)
+//     finish: the organizer, for their own open-ended event
+//     join QR: the organizer for their own event, admins for every
+//     event (ADR-0038 §3)
+//     edit, cancel: the organizer (the event's creator) for their own
+//     event, moderators and admins for every event
+//     RSVP: every active member
 //   - Changes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
 //   - Changes to a cancelled event fail with ERROR_REASON_EVENT_CANCELLED,
 //     and to an event that has ended with ERROR_REASON_EVENT_ENDED.
@@ -92,7 +98,8 @@ type EventServiceClient interface {
 	// with the same client_request_id by the same caller returns the event
 	// created the first time and creates nothing.
 	//
-	// Errors: common, ERROR_REASON_VALIDATION.
+	// Errors: common, ERROR_REASON_VALIDATION, ERROR_REASON_NOW_LIMIT_REACHED
+	// (starts_now).
 	CreateEvent(ctx context.Context, in *CreateEventRequest, opts ...grpc.CallOption) (*CreateEventResponse, error)
 	// CreateInstantEvent creates an instant event (ADR-0032): a hidden tayfa
 	// of kind TAYFA_KIND_INSTANT with the caller as its only admin and this
@@ -106,7 +113,8 @@ type EventServiceClient interface {
 	//
 	// Errors: ERROR_REASON_VALIDATION, ERROR_REASON_INSTANT_EVENT_LIMIT,
 	// ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_NOT_FRIENDS,
-	// ERROR_REASON_DIRECT_INVITE_LIMIT.
+	// ERROR_REASON_DIRECT_INVITE_LIMIT, ERROR_REASON_NOW_LIMIT_REACHED
+	// (event.starts_now).
 	CreateInstantEvent(ctx context.Context, in *CreateInstantEventRequest, opts ...grpc.CallOption) (*CreateInstantEventResponse, error)
 	// UpdateEvent changes the fields named in update_mask. Raising the
 	// capacity (or removing it) moves the oldest waitlisted RSVPs to GOING in
@@ -115,6 +123,47 @@ type EventServiceClient interface {
 	//
 	// Errors: common, ERROR_REASON_VALIDATION.
 	UpdateEvent(ctx context.Context, in *UpdateEventRequest, opts ...grpc.CallOption) (*UpdateEventResponse, error)
+	// FinishEvent is the organizer's "Bitir" on their own open-ended event
+	// (Event.open_ended, ADR-0038 §1): the end becomes the server's now and
+	// open_ended false. Participants are not notified; the event's channel
+	// is archived from the new end like after any change of the end. An
+	// open-ended event that is not finished ends by itself at its end_time
+	// (12 hours after the start).
+	//
+	// Errors: common (ERROR_REASON_EVENT_ENDED once it has ended, also when
+	// already finished), ERROR_REASON_EVENT_NOT_OPEN_ENDED for an event that
+	// was not started now.
+	FinishEvent(ctx context.Context, in *FinishEventRequest, opts ...grpc.CallOption) (*FinishEventResponse, error)
+	// CreateEventJoinQr returns a new short-lived join token for the event's
+	// QR (ADR-0038 §3; the client shows https://tayfam.app/q#<token>). Only
+	// the organizer for their own event and the tayfa's admins; only an
+	// in-person event that has not ended. The token is 128 random bits,
+	// returned only here; core keeps only its SHA-256 hash, and the token
+	// expires after 2 minutes (expire_time): the client asks for a new one
+	// before that. Earlier tokens stay valid until they expire.
+	//
+	// Errors: common, ERROR_REASON_VALIDATION (online event: field "mode"),
+	// ERROR_REASON_JOIN_QR_LIMIT_REACHED (30 QR joins already).
+	CreateEventJoinQr(ctx context.Context, in *CreateEventJoinQrRequest, opts ...grpc.CallOption) (*CreateEventJoinQrResponse, error)
+	// JoinEventByQr joins the event behind a join QR token (ADR-0038 §3).
+	// Any signed-in user may call it; the token travels only in the body.
+	//   - Instant tayfa: the caller becomes an ACTIVE member at once
+	//     (joined_via qr) and answers GOING (WAITLIST when full).
+	//   - Standard tayfa: the join policy applies: OPEN → ACTIVE member and
+	//     GOING; APPROVAL → a join request (pending true) and nothing else.
+	//   - Already an ACTIVE member: GOING, and the attendance is checked in
+	//     with ATTENDANCE_METHOD_QR while the check-in window is open.
+	//   - A waiting join request: pending true again, nothing changes.
+	// At most 30 QR joins per event (a repeat that changes nothing does not
+	// count); 5 attempts per minute per user.
+	//
+	// Errors: ERROR_REASON_VALIDATION (token missing),
+	// ERROR_REASON_INVALID_JOIN_QR (all refusals, alike on purpose),
+	// ERROR_REASON_JOIN_QR_LIMIT_REACHED, ERROR_REASON_RATE_LIMITED,
+	// ERROR_REASON_ALREADY_PENDING (a direct invitation waiting for an
+	// answer), ERROR_REASON_MUTED and ERROR_REASON_PERMISSION_DENIED (a
+	// member who may not answer).
+	JoinEventByQr(ctx context.Context, in *JoinEventByQrRequest, opts ...grpc.CallOption) (*JoinEventByQrResponse, error)
 	// CancelEvent cancels a scheduled event. The event is not deleted: its
 	// members still see it, with the cancellation time and reason. RSVPs
 	// cannot change afterwards.
@@ -135,42 +184,32 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_VALIDATION (status).
 	SetRsvp(ctx context.Context, in *SetRsvpRequest, opts ...grpc.CallOption) (*SetRsvpResponse, error)
 	// ListAttendees lists the answers with one status, oldest first (for
-	// WAITLIST: the order in line).
+	// WAITLIST: the order in line). For an event whose type's attendance is
+	// sensitive (sensitive_attendance, ADR-0037 §1) only the organizer,
+	// moderators and admins get the list; the others get
+	// ERROR_REASON_ATTENDEES_HIDDEN and see the counts on the event.
 	ListAttendees(ctx context.Context, in *ListAttendeesRequest, opts ...grpc.CallOption) (*ListAttendeesResponse, error)
-	// AddCampItem adds an item to a camp event's list (at most 200).
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
-	// did not answer GOING or is not an active member),
-	// ERROR_REASON_VALIDATION.
+	// AddCampItem is not served any more: a camp's list is the list
+	// component's (ChecklistComponentService.AddChecklistItem,
+	// component_checklist.proto; issue #241). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	AddCampItem(ctx context.Context, in *AddCampItemRequest, opts ...grpc.CallOption) (*AddCampItemResponse, error)
-	// RemoveCampItem removes an item from a camp event's list.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveCampItem is not served any more
+	// (ChecklistComponentService.RemoveChecklistItem; issue #241). It
+	// answers UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveCampItem(ctx context.Context, in *RemoveCampItemRequest, opts ...grpc.CallOption) (*RemoveCampItemResponse, error)
-	// AssignCampItem sets or clears who brings a camp item (issue #198). The
-	// organizer, moderators and admins assign any participant who answered
-	// GOING or clear any assignment; a member who answered GOING takes a
-	// free item for themselves or drops their own. Setting the current value
-	// is a no-op.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
-	// ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+	// AssignCampItem is not served any more
+	// (ChecklistComponentService.AssignChecklistItem; issue #241). It
+	// answers UNIMPLEMENTED; the method stays because it cannot be removed.
 	AssignCampItem(ctx context.Context, in *AssignCampItemRequest, opts ...grpc.CallOption) (*AssignCampItemResponse, error)
-	// AddConvoyVehicle sets the caller's vehicle on a convoy event; it
-	// replaces the caller's previous vehicle there. The caller must have
-	// answered GOING.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_VALIDATION.
+	// AddConvoyVehicle is not served any more: vehicles are the vehicles
+	// component's (VehiclesComponentService.SetVehicle,
+	// component_vehicles.proto; issue #240). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	AddConvoyVehicle(ctx context.Context, in *AddConvoyVehicleRequest, opts ...grpc.CallOption) (*AddConvoyVehicleResponse, error)
-	// RemoveConvoyVehicle removes a vehicle: one's own, or any vehicle for the
-	// organizer, moderators and admins.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveConvoyVehicle is not served any more
+	// (VehiclesComponentService.RemoveVehicle; issue #240). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveConvoyVehicle(ctx context.Context, in *RemoveConvoyVehicleRequest, opts ...grpc.CallOption) (*RemoveConvoyVehicleResponse, error)
 	// CheckIn verifies the caller's attendance. The window is from 30 minutes
 	// before the start until the end, and the caller must have answered
@@ -191,19 +230,14 @@ type EventServiceClient interface {
 	// (location: set for an online event, unset or out of range for an
 	// in-person one).
 	CheckIn(ctx context.Context, in *CheckInRequest, opts ...grpc.CallOption) (*CheckInResponse, error)
-	// StartHike records that the caller set out on a hike; it counts as
-	// attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
-	// as CheckIn. A repeat returns the first start.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
-	// ERROR_REASON_VALIDATION (start_time).
+	// StartHike is not served any more: the hike roll call is the roll call
+	// component's (RollCallComponentService.StartRollCall,
+	// component_roll_call.proto; issue #242). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	StartHike(ctx context.Context, in *StartHikeRequest, opts ...grpc.CallOption) (*StartHikeResponse, error)
-	// FinishHike records the caller's return. It also works after the end and
-	// on a cancelled event. A repeat returns the first return.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+	// FinishHike is not served any more
+	// (RollCallComponentService.ReturnRollCall; issue #242). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	FinishHike(ctx context.Context, in *FinishHikeRequest, opts ...grpc.CallOption) (*FinishHikeResponse, error)
 	// SetAttendance is the organizer's correction: the organizer for their own
 	// event, moderators and admins for every event add a participant's
@@ -216,24 +250,18 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_CORRECTION_CLOSED,
 	// ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_VALIDATION (user_id).
 	SetAttendance(ctx context.Context, in *SetAttendanceRequest, opts ...grpc.CallOption) (*SetAttendanceResponse, error)
-	// AddFishingCatch logs a catch on a fishing event. The caller's attendance
-	// must be verified; catches are accepted until seven days after the end
-	// (ERROR_REASON_EVENT_ENDED afterwards). At most 100 per angler and event.
-	// A repeat with the same client_request_id returns the first catch.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
-	// ERROR_REASON_VALIDATION.
+	// AddFishingCatch is not served any more: the fishing catch log is the
+	// log component's (LogComponentService.AddLogEntry, component_log.proto;
+	// issue #243). It answers UNIMPLEMENTED; the method stays because it
+	// cannot be removed.
 	AddFishingCatch(ctx context.Context, in *AddFishingCatchRequest, opts ...grpc.CallOption) (*AddFishingCatchResponse, error)
-	// ListFishingCatches lists an event's catches, oldest first.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH.
+	// ListFishingCatches is not served any more
+	// (LogComponentService.ListLogEntries; issue #243). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	ListFishingCatches(ctx context.Context, in *ListFishingCatchesRequest, opts ...grpc.CallOption) (*ListFishingCatchesResponse, error)
-	// RemoveFishingCatch removes a catch: one's own, or anyone's for
-	// moderators and admins.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveFishingCatch is not served any more
+	// (LogComponentService.RemoveLogEntry; issue #243). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveFishingCatch(ctx context.Context, in *RemoveFishingCatchRequest, opts ...grpc.CallOption) (*RemoveFishingCatchResponse, error)
 	// AddEventPhoto adds the caller's own READY EVENT_PHOTO upload, opened
 	// for this tayfa, to the event's album (issue #206, ADR-0028). The
@@ -246,7 +274,9 @@ type EventServiceClient interface {
 	// Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
 	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
 	// ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
-	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION,
+	// ERROR_REASON_ALBUM_CONSENT_REQUIRED (a type with album_notice, ADR-0037
+	// §1, without consent_ack).
 	AddEventPhoto(ctx context.Context, in *AddEventPhotoRequest, opts ...grpc.CallOption) (*AddEventPhotoResponse, error)
 	// ListEventPhotos lists the event's album, oldest first. Every active
 	// member may read it, also while muted and on a cancelled event. The
@@ -324,6 +354,36 @@ func (c *eventServiceClient) UpdateEvent(ctx context.Context, in *UpdateEventReq
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateEventResponse)
 	err := c.cc.Invoke(ctx, EventService_UpdateEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) FinishEvent(ctx context.Context, in *FinishEventRequest, opts ...grpc.CallOption) (*FinishEventResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(FinishEventResponse)
+	err := c.cc.Invoke(ctx, EventService_FinishEvent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) CreateEventJoinQr(ctx context.Context, in *CreateEventJoinQrRequest, opts ...grpc.CallOption) (*CreateEventJoinQrResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateEventJoinQrResponse)
+	err := c.cc.Invoke(ctx, EventService_CreateEventJoinQr_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *eventServiceClient) JoinEventByQr(ctx context.Context, in *JoinEventByQrRequest, opts ...grpc.CallOption) (*JoinEventByQrResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(JoinEventByQrResponse)
+	err := c.cc.Invoke(ctx, EventService_JoinEventByQr_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -565,8 +625,7 @@ func (c *eventServiceClient) ExportEvent(ctx context.Context, in *ExportEventReq
 // for forward compatibility.
 //
 // EventService manages a tayfa's events: creating, editing and cancelling
-// them, RSVPs with a waitlist, camp item lists and convoy vehicles (issue
-// #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
+// them and RSVPs with a waitlist (issue #49; data model v14 "Duyuru ve Etkinlik", "Türe özel tablolar",
 // "Etkinlik iptali", "Online etkinlik", "Konvoy aracı"). Only gateway calls
 // it, with the user's access token.
 //
@@ -585,10 +644,14 @@ func (c *eventServiceClient) ExportEvent(ctx context.Context, in *ExportEventReq
 //     read events and attendees: every active member (also when muted)
 //     create: moderators and admins; every active member when
 //     Tayfa.members_can_create_events is true
-//     edit, cancel, manage camp items and other people's vehicles: the
-//     organizer (the event's creator) for their own event, moderators
-//     and admins for every event
-//     RSVP, add or remove one's own convoy vehicle: every active member
+//     create with starts_now: Tayfa.now_create_min_role and above
+//     (every active member by default; ADR-0038 §2)
+//     finish: the organizer, for their own open-ended event
+//     join QR: the organizer for their own event, admins for every
+//     event (ADR-0038 §3)
+//     edit, cancel: the organizer (the event's creator) for their own
+//     event, moderators and admins for every event
+//     RSVP: every active member
 //   - Changes to a read-only tayfa fail with ERROR_REASON_TAYFA_READ_ONLY.
 //   - Changes to a cancelled event fail with ERROR_REASON_EVENT_CANCELLED,
 //     and to an event that has ended with ERROR_REASON_EVENT_ENDED.
@@ -605,7 +668,8 @@ type EventServiceServer interface {
 	// with the same client_request_id by the same caller returns the event
 	// created the first time and creates nothing.
 	//
-	// Errors: common, ERROR_REASON_VALIDATION.
+	// Errors: common, ERROR_REASON_VALIDATION, ERROR_REASON_NOW_LIMIT_REACHED
+	// (starts_now).
 	CreateEvent(context.Context, *CreateEventRequest) (*CreateEventResponse, error)
 	// CreateInstantEvent creates an instant event (ADR-0032): a hidden tayfa
 	// of kind TAYFA_KIND_INSTANT with the caller as its only admin and this
@@ -619,7 +683,8 @@ type EventServiceServer interface {
 	//
 	// Errors: ERROR_REASON_VALIDATION, ERROR_REASON_INSTANT_EVENT_LIMIT,
 	// ERROR_REASON_USER_NOT_FOUND, ERROR_REASON_NOT_FRIENDS,
-	// ERROR_REASON_DIRECT_INVITE_LIMIT.
+	// ERROR_REASON_DIRECT_INVITE_LIMIT, ERROR_REASON_NOW_LIMIT_REACHED
+	// (event.starts_now).
 	CreateInstantEvent(context.Context, *CreateInstantEventRequest) (*CreateInstantEventResponse, error)
 	// UpdateEvent changes the fields named in update_mask. Raising the
 	// capacity (or removing it) moves the oldest waitlisted RSVPs to GOING in
@@ -628,6 +693,47 @@ type EventServiceServer interface {
 	//
 	// Errors: common, ERROR_REASON_VALIDATION.
 	UpdateEvent(context.Context, *UpdateEventRequest) (*UpdateEventResponse, error)
+	// FinishEvent is the organizer's "Bitir" on their own open-ended event
+	// (Event.open_ended, ADR-0038 §1): the end becomes the server's now and
+	// open_ended false. Participants are not notified; the event's channel
+	// is archived from the new end like after any change of the end. An
+	// open-ended event that is not finished ends by itself at its end_time
+	// (12 hours after the start).
+	//
+	// Errors: common (ERROR_REASON_EVENT_ENDED once it has ended, also when
+	// already finished), ERROR_REASON_EVENT_NOT_OPEN_ENDED for an event that
+	// was not started now.
+	FinishEvent(context.Context, *FinishEventRequest) (*FinishEventResponse, error)
+	// CreateEventJoinQr returns a new short-lived join token for the event's
+	// QR (ADR-0038 §3; the client shows https://tayfam.app/q#<token>). Only
+	// the organizer for their own event and the tayfa's admins; only an
+	// in-person event that has not ended. The token is 128 random bits,
+	// returned only here; core keeps only its SHA-256 hash, and the token
+	// expires after 2 minutes (expire_time): the client asks for a new one
+	// before that. Earlier tokens stay valid until they expire.
+	//
+	// Errors: common, ERROR_REASON_VALIDATION (online event: field "mode"),
+	// ERROR_REASON_JOIN_QR_LIMIT_REACHED (30 QR joins already).
+	CreateEventJoinQr(context.Context, *CreateEventJoinQrRequest) (*CreateEventJoinQrResponse, error)
+	// JoinEventByQr joins the event behind a join QR token (ADR-0038 §3).
+	// Any signed-in user may call it; the token travels only in the body.
+	//   - Instant tayfa: the caller becomes an ACTIVE member at once
+	//     (joined_via qr) and answers GOING (WAITLIST when full).
+	//   - Standard tayfa: the join policy applies: OPEN → ACTIVE member and
+	//     GOING; APPROVAL → a join request (pending true) and nothing else.
+	//   - Already an ACTIVE member: GOING, and the attendance is checked in
+	//     with ATTENDANCE_METHOD_QR while the check-in window is open.
+	//   - A waiting join request: pending true again, nothing changes.
+	// At most 30 QR joins per event (a repeat that changes nothing does not
+	// count); 5 attempts per minute per user.
+	//
+	// Errors: ERROR_REASON_VALIDATION (token missing),
+	// ERROR_REASON_INVALID_JOIN_QR (all refusals, alike on purpose),
+	// ERROR_REASON_JOIN_QR_LIMIT_REACHED, ERROR_REASON_RATE_LIMITED,
+	// ERROR_REASON_ALREADY_PENDING (a direct invitation waiting for an
+	// answer), ERROR_REASON_MUTED and ERROR_REASON_PERMISSION_DENIED (a
+	// member who may not answer).
+	JoinEventByQr(context.Context, *JoinEventByQrRequest) (*JoinEventByQrResponse, error)
 	// CancelEvent cancels a scheduled event. The event is not deleted: its
 	// members still see it, with the cancellation time and reason. RSVPs
 	// cannot change afterwards.
@@ -648,42 +754,32 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_VALIDATION (status).
 	SetRsvp(context.Context, *SetRsvpRequest) (*SetRsvpResponse, error)
 	// ListAttendees lists the answers with one status, oldest first (for
-	// WAITLIST: the order in line).
+	// WAITLIST: the order in line). For an event whose type's attendance is
+	// sensitive (sensitive_attendance, ADR-0037 §1) only the organizer,
+	// moderators and admins get the list; the others get
+	// ERROR_REASON_ATTENDEES_HIDDEN and see the counts on the event.
 	ListAttendees(context.Context, *ListAttendeesRequest) (*ListAttendeesResponse, error)
-	// AddCampItem adds an item to a camp event's list (at most 200).
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_LIMIT, ERROR_REASON_EVENT_NOT_GOING (the assignee
-	// did not answer GOING or is not an active member),
-	// ERROR_REASON_VALIDATION.
+	// AddCampItem is not served any more: a camp's list is the list
+	// component's (ChecklistComponentService.AddChecklistItem,
+	// component_checklist.proto; issue #241). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	AddCampItem(context.Context, *AddCampItemRequest) (*AddCampItemResponse, error)
-	// RemoveCampItem removes an item from a camp event's list.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveCampItem is not served any more
+	// (ChecklistComponentService.RemoveChecklistItem; issue #241). It
+	// answers UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveCampItem(context.Context, *RemoveCampItemRequest) (*RemoveCampItemResponse, error)
-	// AssignCampItem sets or clears who brings a camp item (issue #198). The
-	// organizer, moderators and admins assign any participant who answered
-	// GOING or clear any assignment; a member who answered GOING takes a
-	// free item for themselves or drops their own. Setting the current value
-	// is a no-op.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND, ERROR_REASON_EVENT_NOT_GOING,
-	// ERROR_REASON_EVENT_ITEM_TAKEN, ERROR_REASON_VALIDATION.
+	// AssignCampItem is not served any more
+	// (ChecklistComponentService.AssignChecklistItem; issue #241). It
+	// answers UNIMPLEMENTED; the method stays because it cannot be removed.
 	AssignCampItem(context.Context, *AssignCampItemRequest) (*AssignCampItemResponse, error)
-	// AddConvoyVehicle sets the caller's vehicle on a convoy event; it
-	// replaces the caller's previous vehicle there. The caller must have
-	// answered GOING.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_VALIDATION.
+	// AddConvoyVehicle is not served any more: vehicles are the vehicles
+	// component's (VehiclesComponentService.SetVehicle,
+	// component_vehicles.proto; issue #240). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	AddConvoyVehicle(context.Context, *AddConvoyVehicleRequest) (*AddConvoyVehicleResponse, error)
-	// RemoveConvoyVehicle removes a vehicle: one's own, or any vehicle for the
-	// organizer, moderators and admins.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveConvoyVehicle is not served any more
+	// (VehiclesComponentService.RemoveVehicle; issue #240). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveConvoyVehicle(context.Context, *RemoveConvoyVehicleRequest) (*RemoveConvoyVehicleResponse, error)
 	// CheckIn verifies the caller's attendance. The window is from 30 minutes
 	// before the start until the end, and the caller must have answered
@@ -704,19 +800,14 @@ type EventServiceServer interface {
 	// (location: set for an online event, unset or out of range for an
 	// in-person one).
 	CheckIn(context.Context, *CheckInRequest) (*CheckInResponse, error)
-	// StartHike records that the caller set out on a hike; it counts as
-	// attendance (ATTENDANCE_METHOD_HIKE_START). Same window and GOING rule
-	// as CheckIn. A repeat returns the first start.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_CHECK_IN_CLOSED, ERROR_REASON_EVENT_NOT_GOING,
-	// ERROR_REASON_VALIDATION (start_time).
+	// StartHike is not served any more: the hike roll call is the roll call
+	// component's (RollCallComponentService.StartRollCall,
+	// component_roll_call.proto; issue #242). It answers UNIMPLEMENTED; the
+	// method stays because it cannot be removed.
 	StartHike(context.Context, *StartHikeRequest) (*StartHikeResponse, error)
-	// FinishHike records the caller's return. It also works after the end and
-	// on a cancelled event. A repeat returns the first return.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_HIKE_NOT_STARTED, ERROR_REASON_VALIDATION (return_time).
+	// FinishHike is not served any more
+	// (RollCallComponentService.ReturnRollCall; issue #242). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	FinishHike(context.Context, *FinishHikeRequest) (*FinishHikeResponse, error)
 	// SetAttendance is the organizer's correction: the organizer for their own
 	// event, moderators and admins for every event add a participant's
@@ -729,24 +820,18 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_CORRECTION_CLOSED,
 	// ERROR_REASON_MEMBER_NOT_FOUND, ERROR_REASON_VALIDATION (user_id).
 	SetAttendance(context.Context, *SetAttendanceRequest) (*SetAttendanceResponse, error)
-	// AddFishingCatch logs a catch on a fishing event. The caller's attendance
-	// must be verified; catches are accepted until seven days after the end
-	// (ERROR_REASON_EVENT_ENDED afterwards). At most 100 per angler and event.
-	// A repeat with the same client_request_id returns the first catch.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
-	// ERROR_REASON_VALIDATION.
+	// AddFishingCatch is not served any more: the fishing catch log is the
+	// log component's (LogComponentService.AddLogEntry, component_log.proto;
+	// issue #243). It answers UNIMPLEMENTED; the method stays because it
+	// cannot be removed.
 	AddFishingCatch(context.Context, *AddFishingCatchRequest) (*AddFishingCatchResponse, error)
-	// ListFishingCatches lists an event's catches, oldest first.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH.
+	// ListFishingCatches is not served any more
+	// (LogComponentService.ListLogEntries; issue #243). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	ListFishingCatches(context.Context, *ListFishingCatchesRequest) (*ListFishingCatchesResponse, error)
-	// RemoveFishingCatch removes a catch: one's own, or anyone's for
-	// moderators and admins.
-	//
-	// Errors: common, ERROR_REASON_EVENT_TYPE_MISMATCH,
-	// ERROR_REASON_EVENT_ITEM_NOT_FOUND.
+	// RemoveFishingCatch is not served any more
+	// (LogComponentService.RemoveLogEntry; issue #243). It answers
+	// UNIMPLEMENTED; the method stays because it cannot be removed.
 	RemoveFishingCatch(context.Context, *RemoveFishingCatchRequest) (*RemoveFishingCatchResponse, error)
 	// AddEventPhoto adds the caller's own READY EVENT_PHOTO upload, opened
 	// for this tayfa, to the event's album (issue #206, ADR-0028). The
@@ -759,7 +844,9 @@ type EventServiceServer interface {
 	// Errors: common, ERROR_REASON_EVENT_CANCELLED, ERROR_REASON_ALBUM_CLOSED,
 	// ERROR_REASON_NOT_ATTENDED, ERROR_REASON_EVENT_LIMIT,
 	// ERROR_REASON_UPLOAD_NOT_FOUND, ERROR_REASON_UPLOAD_NOT_READY,
-	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION.
+	// ERROR_REASON_UPLOAD_IN_USE, ERROR_REASON_VALIDATION,
+	// ERROR_REASON_ALBUM_CONSENT_REQUIRED (a type with album_notice, ADR-0037
+	// §1, without consent_ack).
 	AddEventPhoto(context.Context, *AddEventPhotoRequest) (*AddEventPhotoResponse, error)
 	// ListEventPhotos lists the event's album, oldest first. Every active
 	// member may read it, also while muted and on a cancelled event. The
@@ -821,6 +908,15 @@ func (UnimplementedEventServiceServer) CreateInstantEvent(context.Context, *Crea
 }
 func (UnimplementedEventServiceServer) UpdateEvent(context.Context, *UpdateEventRequest) (*UpdateEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateEvent not implemented")
+}
+func (UnimplementedEventServiceServer) FinishEvent(context.Context, *FinishEventRequest) (*FinishEventResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method FinishEvent not implemented")
+}
+func (UnimplementedEventServiceServer) CreateEventJoinQr(context.Context, *CreateEventJoinQrRequest) (*CreateEventJoinQrResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateEventJoinQr not implemented")
+}
+func (UnimplementedEventServiceServer) JoinEventByQr(context.Context, *JoinEventByQrRequest) (*JoinEventByQrResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method JoinEventByQr not implemented")
 }
 func (UnimplementedEventServiceServer) CancelEvent(context.Context, *CancelEventRequest) (*CancelEventResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CancelEvent not implemented")
@@ -962,6 +1058,60 @@ func _EventService_UpdateEvent_Handler(srv interface{}, ctx context.Context, dec
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(EventServiceServer).UpdateEvent(ctx, req.(*UpdateEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_FinishEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FinishEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).FinishEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_FinishEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).FinishEvent(ctx, req.(*FinishEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_CreateEventJoinQr_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateEventJoinQrRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).CreateEventJoinQr(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_CreateEventJoinQr_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).CreateEventJoinQr(ctx, req.(*CreateEventJoinQrRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _EventService_JoinEventByQr_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JoinEventByQrRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(EventServiceServer).JoinEventByQr(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: EventService_JoinEventByQr_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(EventServiceServer).JoinEventByQr(ctx, req.(*JoinEventByQrRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1398,6 +1548,18 @@ var EventService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateEvent",
 			Handler:    _EventService_UpdateEvent_Handler,
+		},
+		{
+			MethodName: "FinishEvent",
+			Handler:    _EventService_FinishEvent_Handler,
+		},
+		{
+			MethodName: "CreateEventJoinQr",
+			Handler:    _EventService_CreateEventJoinQr_Handler,
+		},
+		{
+			MethodName: "JoinEventByQr",
+			Handler:    _EventService_JoinEventByQr_Handler,
 		},
 		{
 			MethodName: "CancelEvent",

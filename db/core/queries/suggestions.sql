@@ -21,7 +21,8 @@ DELETE FROM friend_scores;
 -- Son 12 ayda (since sonrası, now öncesi başlayan) silinmemiş ve iptal
 -- edilmemiş etkinliklerde ikisi de "attended" olan çiftler. Ağırlık
 -- 0,5 ^ (yaş / yarı ömür). Profillemesi kapalı, hesabı silinmiş ya da banlı
--- kullanıcı ve aralarında engel olan çift girmez.
+-- kullanıcı ve aralarında engel olan çift girmez. Hassas katılımlı türün
+-- etkinliği (sensitive_attendance, ADR-0037 §1) sayılmaz.
 -- name: InsertFriendScores :execrows
 WITH att AS (
   SELECT r.user_id, e.id AS event_id, e.starts_at
@@ -30,6 +31,7 @@ WITH att AS (
   WHERE r.attendance = 'attended'
     AND e.deleted_at IS NULL AND e.status <> 'cancelled'
     AND e.starts_at > @since::timestamptz AND e.starts_at <= @now::timestamptz
+    AND NOT event_attendance_sensitive(e.id)
     AND NOT EXISTS (SELECT 1 FROM social_settings s WHERE s.user_id = r.user_id AND NOT s.profiling_enabled)
     AND NOT EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = r.user_id AND p.deleted_at IS NOT NULL)
     AND NOT EXISTS (SELECT 1 FROM user_platform_bans b WHERE b.user_id = r.user_id AND b.banned_at IS NOT NULL)
@@ -144,22 +146,24 @@ WHERE user_id = @user_id AND suggested_user_id = @suggested_user_id AND dismisse
 -- Ayarlar
 
 -- name: GetSocialSettings :one
-SELECT profiling_enabled, hide_from_suggestions, discover_visible_to_friends FROM social_settings WHERE user_id = @user_id;
+SELECT profiling_enabled, hide_from_suggestions, discover_visible_to_friends, now_from_friends FROM social_settings WHERE user_id = @user_id;
 
 -- Verilmeyen alan (NULL) olduğu gibi kalır; satır yoksa varsayılanlardan
 -- açılır.
 -- name: UpsertSocialSettings :one
-INSERT INTO social_settings (user_id, profiling_enabled, hide_from_suggestions, discover_visible_to_friends, updated_at)
+INSERT INTO social_settings (user_id, profiling_enabled, hide_from_suggestions, discover_visible_to_friends, now_from_friends, updated_at)
 VALUES (@user_id, COALESCE(sqlc.narg(profiling_enabled)::boolean, true),
         COALESCE(sqlc.narg(hide_from_suggestions)::boolean, false),
-        COALESCE(sqlc.narg(discover_visible_to_friends)::boolean, true), @now::timestamptz)
+        COALESCE(sqlc.narg(discover_visible_to_friends)::boolean, true),
+        COALESCE(sqlc.narg(now_from_friends)::text, 'all'), @now::timestamptz)
 ON CONFLICT (user_id) DO UPDATE SET
   profiling_enabled     = COALESCE(sqlc.narg(profiling_enabled)::boolean, social_settings.profiling_enabled),
   hide_from_suggestions = COALESCE(sqlc.narg(hide_from_suggestions)::boolean, social_settings.hide_from_suggestions),
   discover_visible_to_friends = COALESCE(sqlc.narg(discover_visible_to_friends)::boolean,
                                          social_settings.discover_visible_to_friends),
+  now_from_friends      = COALESCE(sqlc.narg(now_from_friends)::text, social_settings.now_from_friends),
   updated_at            = @now::timestamptz
-RETURNING profiling_enabled, hide_from_suggestions, discover_visible_to_friends;
+RETURNING profiling_enabled, hide_from_suggestions, discover_visible_to_friends, now_from_friends;
 
 -- Profilleme kapatma ve hesap silme: kişinin bütün puanları.
 -- name: DeleteUserFriendScores :exec

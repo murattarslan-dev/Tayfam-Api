@@ -107,6 +107,67 @@ const (
 	// no location; the client reads the shared event from core's
 	// DiscoverService.ListSafetyShares. Muting does not apply; push is sent.
 	NotificationType_NOTIFICATION_TYPE_SAFETY_ALERT NotificationType = 23
+	// The organizer announced the winner of a celebration component of the
+	// event (target: EVENT; issue #255, ADR-0025 §4). Goes to the tayfa's
+	// active members but the announcer, once per celebration. Never names the
+	// winner (a guest winner has no name to give); the client reads the
+	// celebration from core's CelebrationComponentService. In-app only: no
+	// push is sent for it.
+	NotificationType_NOTIFICATION_TYPE_CELEBRATION NotificationType = 24
+	// A badge was earned (issue #258, ADR-0039 §4). No actor; never names
+	// the badge: the client reads badges from the profile or the tayfa. A
+	// personal badge goes to its earner (target: USER, the earner; no
+	// tayfa); a tayfa badge goes to the tayfa's admins and moderators
+	// (target: TAYFA). In-app only: no push is sent for it.
+	NotificationType_NOTIFICATION_TYPE_BADGE_EARNED NotificationType = 25
+	// A now event started (issue #265, ADR-0038 §4; target: EVENT; the actor
+	// is its organizer). A tayfa's now event goes to its active members but
+	// the organizer and anyone blocked with the organizer either way, at
+	// most 3 a day per tayfa; an instant now event goes to the friends the
+	// organizer chose, who are invited directly (accepting the tayfa's
+	// invitation joins). Never a title, type, place or name; the push holds
+	// the push_now_started_title / _body keys only. Muted with the tayfa's
+	// level NONE or with its NOTIFICATION_SCOPE_TYPE_TAYFA_NOW preference.
+	NotificationType_NOTIFICATION_TYPE_NOW_STARTED NotificationType = 26
+	// A library loan's return date passed (issue #270, ADR-0040 §1): one
+	// reminder to the borrower (target: TAYFA, the loan's tayfa; no actor).
+	// Never names the item, the owner or the date: the client reads the
+	// caller's loans from TayfaLibraryService. In-app only: no push.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_DUE NotificationType = 27
+	// One side of a handed-over library loan left the tayfa (issue #270,
+	// ADR-0040 §1): a warning to both the owner and the borrower, the one who
+	// left included (target: TAYFA; no actor). The loan stays open for 30
+	// days, then closes. Never names the item or the people. In-app only.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED NotificationType = 28
+	// The library's loan steps (issue #321; ADR-0040 §1, revised 2026-11-23).
+	// Each is about one item (target: LIBRARY_ITEM, the item's ID), names the
+	// member who took the step as actor and goes to the other side only:
+	// never to anyone blocked with the actor either way. Never names the
+	// item or the people; the push holds the push_<type>_title / _body keys
+	// and IDs only. Pushed, muted with the tayfa's preference; personal, so
+	// level MENTIONS still pushes them.
+	//
+	// A member asked for the recipient's item and has the loan request
+	// (actor: the borrower).
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED NotificationType = 29
+	// A member took a place in the queue of the recipient's item, which is
+	// on loan or asked for (actor: the member waiting).
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED NotificationType = 30
+	// The owner (actor) approved the recipient's loan request.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED NotificationType = 31
+	// The owner (actor) declined the recipient's loan request.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED NotificationType = 32
+	// The owner (actor) recorded handing the item over to the recipient.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER NotificationType = 33
+	// The recipient's place in the queue of an item came: the loan before
+	// ended and their loan request is now open, waiting for the owner
+	// (issue #332; ADR-0040 §1, revised 2026-11-23). About the item (target:
+	// LIBRARY_ITEM), without an actor: nobody took this step for them. Not
+	// sent while the recipient and the item's owner have blocked each other
+	// either way. Never names the item or the people; pushed with the
+	// push_<type>_title / _body keys and IDs only, personal like the steps
+	// above.
+	NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN NotificationType = 34
 )
 
 // Enum value maps for NotificationType.
@@ -136,6 +197,17 @@ var (
 		21: "NOTIFICATION_TYPE_DATA_EXPORT_READY",
 		22: "NOTIFICATION_TYPE_FRIEND_SUGGESTION",
 		23: "NOTIFICATION_TYPE_SAFETY_ALERT",
+		24: "NOTIFICATION_TYPE_CELEBRATION",
+		25: "NOTIFICATION_TYPE_BADGE_EARNED",
+		26: "NOTIFICATION_TYPE_NOW_STARTED",
+		27: "NOTIFICATION_TYPE_LIBRARY_DUE",
+		28: "NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED",
+		29: "NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED",
+		30: "NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED",
+		31: "NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED",
+		32: "NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED",
+		33: "NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER",
+		34: "NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN",
 	}
 	NotificationType_value = map[string]int32{
 		"NOTIFICATION_TYPE_UNSPECIFIED":              0,
@@ -162,6 +234,17 @@ var (
 		"NOTIFICATION_TYPE_DATA_EXPORT_READY":        21,
 		"NOTIFICATION_TYPE_FRIEND_SUGGESTION":        22,
 		"NOTIFICATION_TYPE_SAFETY_ALERT":             23,
+		"NOTIFICATION_TYPE_CELEBRATION":              24,
+		"NOTIFICATION_TYPE_BADGE_EARNED":             25,
+		"NOTIFICATION_TYPE_NOW_STARTED":              26,
+		"NOTIFICATION_TYPE_LIBRARY_DUE":              27,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED":    28,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED":   29,
+		"NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED":     30,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED":    31,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED":    32,
+		"NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER": 33,
+		"NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN":       34,
 	}
 )
 
@@ -212,21 +295,25 @@ const (
 	// target_id is a data export request of the recipient (identity's
 	// DataExportService.GetDataExport).
 	NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT NotificationTargetType = 9
+	// target_id is a library item of the notification's tayfa
+	// (TayfaLibraryService.GetLibraryItem; issue #321).
+	NotificationTargetType_NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM NotificationTargetType = 10
 )
 
 // Enum value maps for NotificationTargetType.
 var (
 	NotificationTargetType_name = map[int32]string{
-		0: "NOTIFICATION_TARGET_TYPE_UNSPECIFIED",
-		1: "NOTIFICATION_TARGET_TYPE_TAYFA",
-		2: "NOTIFICATION_TARGET_TYPE_MEMBERSHIP",
-		3: "NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT",
-		4: "NOTIFICATION_TARGET_TYPE_EVENT",
-		5: "NOTIFICATION_TARGET_TYPE_ANSWER",
-		6: "NOTIFICATION_TARGET_TYPE_USER",
-		7: "NOTIFICATION_TARGET_TYPE_REPORT",
-		8: "NOTIFICATION_TARGET_TYPE_DM_CONVERSATION",
-		9: "NOTIFICATION_TARGET_TYPE_DATA_EXPORT",
+		0:  "NOTIFICATION_TARGET_TYPE_UNSPECIFIED",
+		1:  "NOTIFICATION_TARGET_TYPE_TAYFA",
+		2:  "NOTIFICATION_TARGET_TYPE_MEMBERSHIP",
+		3:  "NOTIFICATION_TARGET_TYPE_ANNOUNCEMENT",
+		4:  "NOTIFICATION_TARGET_TYPE_EVENT",
+		5:  "NOTIFICATION_TARGET_TYPE_ANSWER",
+		6:  "NOTIFICATION_TARGET_TYPE_USER",
+		7:  "NOTIFICATION_TARGET_TYPE_REPORT",
+		8:  "NOTIFICATION_TARGET_TYPE_DM_CONVERSATION",
+		9:  "NOTIFICATION_TARGET_TYPE_DATA_EXPORT",
+		10: "NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM",
 	}
 	NotificationTargetType_value = map[string]int32{
 		"NOTIFICATION_TARGET_TYPE_UNSPECIFIED":     0,
@@ -239,6 +326,7 @@ var (
 		"NOTIFICATION_TARGET_TYPE_REPORT":          7,
 		"NOTIFICATION_TARGET_TYPE_DM_CONVERSATION": 8,
 		"NOTIFICATION_TARGET_TYPE_DATA_EXPORT":     9,
+		"NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM":    10,
 	}
 )
 
@@ -325,7 +413,8 @@ var File_tayfam_chat_v1_notification_types_proto protoreflect.FileDescriptor
 
 const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xa3\a\n" +
+	"'tayfam/chat/v1/notification_types.proto\x12\x0etayfam.chat.v1*\xeb\n" +
+	"\n" +
 	"\x10NotificationType\x12!\n" +
 	"\x1dNOTIFICATION_TYPE_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fNOTIFICATION_TYPE_EVENT_CREATED\x10\x01\x12#\n" +
@@ -351,7 +440,18 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"#NOTIFICATION_TYPE_TAYFA_UNSUSPENDED\x10\x14\x12'\n" +
 	"#NOTIFICATION_TYPE_DATA_EXPORT_READY\x10\x15\x12'\n" +
 	"#NOTIFICATION_TYPE_FRIEND_SUGGESTION\x10\x16\x12\"\n" +
-	"\x1eNOTIFICATION_TYPE_SAFETY_ALERT\x10\x17*\xa3\x03\n" +
+	"\x1eNOTIFICATION_TYPE_SAFETY_ALERT\x10\x17\x12!\n" +
+	"\x1dNOTIFICATION_TYPE_CELEBRATION\x10\x18\x12\"\n" +
+	"\x1eNOTIFICATION_TYPE_BADGE_EARNED\x10\x19\x12!\n" +
+	"\x1dNOTIFICATION_TYPE_NOW_STARTED\x10\x1a\x12!\n" +
+	"\x1dNOTIFICATION_TYPE_LIBRARY_DUE\x10\x1b\x12+\n" +
+	"'NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED\x10\x1c\x12,\n" +
+	"(NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED\x10\x1d\x12*\n" +
+	"&NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED\x10\x1e\x12+\n" +
+	"'NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED\x10\x1f\x12+\n" +
+	"'NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED\x10 \x12.\n" +
+	"*NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER\x10!\x12(\n" +
+	"$NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN\x10\"*\xce\x03\n" +
 	"\x16NotificationTargetType\x12(\n" +
 	"$NOTIFICATION_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eNOTIFICATION_TARGET_TYPE_TAYFA\x10\x01\x12'\n" +
@@ -362,7 +462,9 @@ const file_tayfam_chat_v1_notification_types_proto_rawDesc = "" +
 	"\x1dNOTIFICATION_TARGET_TYPE_USER\x10\x06\x12#\n" +
 	"\x1fNOTIFICATION_TARGET_TYPE_REPORT\x10\a\x12,\n" +
 	"(NOTIFICATION_TARGET_TYPE_DM_CONVERSATION\x10\b\x12(\n" +
-	"$NOTIFICATION_TARGET_TYPE_DATA_EXPORT\x10\t*\x83\x01\n" +
+	"$NOTIFICATION_TARGET_TYPE_DATA_EXPORT\x10\t\x12)\n" +
+	"%NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM\x10\n" +
+	"*\x83\x01\n" +
 	"\x12TayfaWarningReason\x12$\n" +
 	" TAYFA_WARNING_REASON_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dTAYFA_WARNING_REASON_INACTIVE\x10\x01\x12$\n" +

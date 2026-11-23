@@ -1,0 +1,350 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "tayfam/core/v1/component.proto";
+
+// ScoreboardComponentService is the scoreboard component (kind
+// "scoreboard", issue #250; ADR-0025 §4–§6, ADR-0037 §5): tables where a
+// game is played and scored round by round, live.
+//
+// A component holds up to 20 tables (one when its `tables` parameter is
+// off). A table seats participants of the event (an active member who
+// answered "going" or whose attendance was verified) or, in a team
+// scoreboard, the teams of a teams component of the event. Its rules are
+// resolved when it is created and kept on the table: the component's
+// parameters (the organizer's choice where the definition leaves it to
+// them), overridden by the table's preset and, for the target, by the
+// table. A preset is catalog data (Batak, 101 Okey …); the component's
+// `presets` parameter lists the ones its tables may use, and a table of
+// such a component must name one. No rule holds money, a stake or a prize.
+//
+// A table is finished when its rounds decide it (the one round of a single
+// match, a target reached, more than half of a best-of match won) or when
+// a referee or manager says so; a manager may reopen it.
+//
+// Only gateway calls it with the user's access token. Authentication,
+// scope and the errors every component shares are those of
+// EventComponentService (component.proto). Managing tables and correcting
+// scores is for managers (the organizer, and moderators and admins as for
+// every event); entering a round and finishing a table also for the
+// referees assigned to the table, the component or the event (ADR-0025
+// §5). Rounds are entered once the event has started
+// (ERROR_REASON_SCORE_NOT_STARTED); every write ends when the write window
+// closes (ERROR_REASON_COMPONENT_FROZEN). Every change is live
+// (event.component_changed).
+//
+// Every method returns the component as the caller sees it.
+service ScoreboardComponentService {
+  // GetScoreboard returns the tables, their results and the presets. Open
+  // to every active member, muted ones included.
+  rpc GetScoreboard(GetScoreboardRequest) returns (GetScoreboardResponse);
+
+  // CreateScoreTable adds a table; managers only. Players may be seated
+  // now or later (SetScorePlayers).
+  //
+  // Errors: ERROR_REASON_VALIDATION (label: 1–30 characters; preset_key,
+  // teams_key, target: 0–100000, or none where first_to or first needs
+  // one; players: a seat that is not exactly one person or team, a person
+  // or team twice, more than 50, fewer or more than the preset allows, a
+  // person on a team table or a team on a player table),
+  // ERROR_REASON_EVENT_LIMIT (the component's tables are full),
+  // ERROR_REASON_SCORE_PRESET_UNAVAILABLE,
+  // ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc CreateScoreTable(CreateScoreTableRequest) returns (CreateScoreTableResponse);
+
+  // UpdateScoreTable renames, reopens or finishes a table; managers only.
+  //
+  // Errors: ERROR_REASON_VALIDATION (label, status),
+  // ERROR_REASON_SCORE_TABLE_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc UpdateScoreTable(UpdateScoreTableRequest) returns (UpdateScoreTableResponse);
+
+  // DeleteScoreTable removes a table with its seats, scores and referee
+  // assignments; managers only.
+  //
+  // Errors: ERROR_REASON_SCORE_TABLE_NOT_FOUND,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc DeleteScoreTable(DeleteScoreTableRequest) returns (DeleteScoreTableResponse);
+
+  // SetScorePlayers replaces a table's seats, in order, until its first
+  // round; managers only. An empty list clears them.
+  //
+  // Errors: ERROR_REASON_VALIDATION (players, as in CreateScoreTable),
+  // ERROR_REASON_SCORE_TABLE_STARTED, ERROR_REASON_SCORE_TABLE_NOT_FOUND,
+  // ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc SetScorePlayers(SetScorePlayersRequest) returns (SetScorePlayersResponse);
+
+  // AddScoreRound enters the next round of an open table; managers and the
+  // table's referees. A round that decides the game finishes the table.
+  //
+  // Errors: ERROR_REASON_VALIDATION (scores: none, more than 50, a seat
+  // that is not the table's or twice, points outside ±1000000, an outcome
+  // in points mode; in wdl mode fewer than two seats, points, or not one
+  // win and the rest losses or all draws), ERROR_REASON_EVENT_LIMIT (200
+  // rounds), ERROR_REASON_SCORE_TABLE_FINISHED,
+  // ERROR_REASON_SCORE_TABLE_NOT_FOUND, ERROR_REASON_SCORE_NOT_STARTED,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc AddScoreRound(AddScoreRoundRequest) returns (AddScoreRoundResponse);
+
+  // CorrectScoreRound replaces the scores of an entered round, on an open
+  // or a finished table; managers only. A correction that decides the game
+  // finishes an open table; a finished table stays finished.
+  //
+  // Errors: ERROR_REASON_VALIDATION (round: not entered; scores, as in
+  // AddScoreRound), ERROR_REASON_SCORE_TABLE_NOT_FOUND,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
+  // every component change.
+  rpc CorrectScoreRound(CorrectScoreRoundRequest) returns (CorrectScoreRoundResponse);
+
+  // DeleteScoreRound removes the last round of a table; managers only.
+  // The table's status does not change.
+  //
+  // Errors: ERROR_REASON_VALIDATION (round: not the last one),
+  // ERROR_REASON_SCORE_TABLE_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc DeleteScoreRound(DeleteScoreRoundRequest) returns (DeleteScoreRoundResponse);
+
+  // FinishScoreTable finishes an open table; managers and the table's
+  // referees. Finishing a finished table changes nothing.
+  //
+  // Errors: ERROR_REASON_SCORE_TABLE_NOT_FOUND,
+  // ERROR_REASON_SCORE_NOT_STARTED, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED and the errors of every component change.
+  rpc FinishScoreTable(FinishScoreTableRequest) returns (FinishScoreTableResponse);
+}
+
+// ScoreRules are a table's (or the component's) rules.
+message ScoreRules {
+  // "player" or "team".
+  string side = 1;
+  // "round" (round by round), "single" (one match) or "first_to" (until a
+  // total reaches the target).
+  string rounds = 2;
+  // "high", "low" or "first" (the first to reach the target).
+  string winner = 3;
+  // "points" or "wdl" (win 1, draw ½, loss 0).
+  string result = 4;
+  // Target points; 0 for none.
+  int32 target = 5;
+  // 3 or 5 for a best-of match; 0 for none.
+  int32 best_of = 6;
+}
+
+// ScorePreset is a catalog preset. Its rules are partial: an empty string
+// or a zero leaves the rule to the component.
+message ScorePreset {
+  string key = 1;
+  // Language code → name; "tr" is always set.
+  map<string, string> labels = 2;
+  // Seat bounds of a table; 0 for none.
+  int32 players_min = 3;
+  int32 players_max = 4;
+  ScoreRules rules = 5;
+  // A retired preset is shown for old tables; a new table cannot use it.
+  bool retired = 6;
+}
+
+// ScorePlayer is a seat at a table.
+message ScorePlayer {
+  string id = 1;
+  // 1-based.
+  int32 position = 2;
+  // A person's user ID; empty when the seat is a team's or the person
+  // deleted their account (shown as a deleted user).
+  string user_id = 3;
+  // A team's ID (of the table's teams component); empty when the seat is a
+  // person's or the team was removed.
+  string team_id = 4;
+  // A guest player's ID (issue #252; GuestPlayerComponentService).
+  string guest_id = 5;
+}
+
+// ScoreEntry is a seat's score in a round.
+message ScoreEntry {
+  // The seat (ScorePlayer.id).
+  string player_id = 1;
+  // Points mode: the points (may be negative).
+  int32 points = 2;
+  // wdl mode: "win", "draw" or "loss"; empty in points mode.
+  string outcome = 3;
+}
+
+// ScoreRound is one round (hand, game) of a table.
+message ScoreRound {
+  // 1-based.
+  int32 number = 1;
+  repeated ScoreEntry scores = 2;
+}
+
+// ScoreStanding is a seat's place at a table.
+message ScoreStanding {
+  string player_id = 1;
+  // The sum of the seat's points; in wdl mode a win counts 1, a draw 0.5.
+  double total = 2;
+  // Rounds the seat won alone; decides a best-of match.
+  int32 rounds_won = 3;
+  // 1-based; equal seats share it.
+  int32 rank = 4;
+}
+
+// ScoreTable is one table of the component.
+message ScoreTable {
+  string id = 1;
+  // 1–30 characters.
+  string label = 2;
+  // The preset's key; empty without one.
+  string preset_key = 3;
+  ScoreRules rules = 4;
+  // For a team table: the key of the teams component.
+  string teams_key = 5;
+  // "open" or "finished".
+  string status = 6;
+  // Set when finished.
+  google.protobuf.Timestamp finished_time = 7;
+  google.protobuf.Timestamp create_time = 8;
+  // Ordered by position.
+  repeated ScorePlayer players = 9;
+  // Ordered by number.
+  repeated ScoreRound rounds = 10;
+  // Ordered by rank, then by position.
+  repeated ScoreStanding standings = 11;
+  // The seats ranked first at a finished table (more than one for a draw);
+  // empty while the table is open.
+  repeated string winner_ids = 12;
+  // The caller may enter a round or finish the table now: a manager or a
+  // referee of the table who is not muted, an open table, a started event,
+  // and the event, the tayfa and the write window allow it.
+  bool caller_can_score = 13;
+}
+
+// Scoreboard is one scoreboard component of an event, as the caller sees
+// it.
+message Scoreboard {
+  // In the order they were created.
+  repeated ScoreTable tables = 1;
+  // The presets the component offers and those its tables use, in catalog
+  // order.
+  repeated ScorePreset presets = 2;
+  // The component's own rules, before a preset.
+  ScoreRules rules = 3;
+  // 20, or 1 when the component has no `tables` parameter on.
+  int32 max_tables = 4;
+  // The caller may manage the tables and correct scores now.
+  bool caller_can_manage = 5;
+}
+
+// ScorePlayerInput is a seat to set: exactly one of user_id, team_id and
+// guest_id. A guest sits at a player table of a component whose `guests`
+// parameter is on (issue #252).
+message ScorePlayerInput {
+  string user_id = 1;
+  string team_id = 2;
+  string guest_id = 3;
+}
+
+message GetScoreboardRequest {
+  ComponentRef ref = 1;
+}
+
+message GetScoreboardResponse {
+  Scoreboard scoreboard = 1;
+}
+
+message CreateScoreTableRequest {
+  ComponentRef ref = 1;
+  string label = 2;
+  // Required when the component offers presets; empty otherwise.
+  string preset_key = 3;
+  // Overrides the target points; 0 keeps the rules'.
+  int32 target = 4;
+  // For a team table: the key of the teams component the seats come from.
+  string teams_key = 5;
+  // In seat order; at most 50.
+  repeated ScorePlayerInput players = 6;
+}
+
+message CreateScoreTableResponse {
+  Scoreboard scoreboard = 1;
+}
+
+message UpdateScoreTableRequest {
+  ComponentRef ref = 1;
+  string table_id = 2;
+  // Unset keeps the label.
+  optional string label = 3;
+  // "open" (reopen), "finished" or empty (unchanged).
+  string status = 4;
+}
+
+message UpdateScoreTableResponse {
+  Scoreboard scoreboard = 1;
+}
+
+message DeleteScoreTableRequest {
+  ComponentRef ref = 1;
+  string table_id = 2;
+}
+
+message DeleteScoreTableResponse {
+  Scoreboard scoreboard = 1;
+}
+
+message SetScorePlayersRequest {
+  ComponentRef ref = 1;
+  string table_id = 2;
+  // In seat order; at most 50.
+  repeated ScorePlayerInput players = 3;
+}
+
+message SetScorePlayersResponse {
+  Scoreboard scoreboard = 1;
+}
+
+message AddScoreRoundRequest {
+  ComponentRef ref = 1;
+  string table_id = 2;
+  repeated ScoreEntry scores = 3;
+}
+
+message AddScoreRoundResponse {
+  Scoreboard scoreboard = 1;
+}
+
+message CorrectScoreRoundRequest {
+  ComponentRef ref = 1;
+  string table_id = 2;
+  int32 round = 3;
+  repeated ScoreEntry scores = 4;
+}
+
+message CorrectScoreRoundResponse {
+  Scoreboard scoreboard = 1;
+}
+
+message DeleteScoreRoundRequest {
+  ComponentRef ref = 1;
+  string table_id = 2;
+  // The last round's number.
+  int32 round = 3;
+}
+
+message DeleteScoreRoundResponse {
+  Scoreboard scoreboard = 1;
+}
+
+message FinishScoreTableRequest {
+  ComponentRef ref = 1;
+  string table_id = 2;
+}
+
+message FinishScoreTableResponse {
+  Scoreboard scoreboard = 1;
+}
