@@ -369,7 +369,7 @@ const exportConvoyVehicles = `-- name: ExportConvoyVehicles :many
 SELECT v.id AS k, jsonb_build_object(
   'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
   'model_year', v.model_year, 'color', v.color, 'plate', v.plate, 'seats', v.seats,
-  'created_at', v.created_at, 'updated_at', v.updated_at
+  'garage_vehicle_id', v.vehicle_id, 'created_at', v.created_at, 'updated_at', v.updated_at
 ) AS data
 FROM event_vehicles v
 WHERE v.user_id = $1 AND v.id > $2
@@ -765,6 +765,92 @@ func (q *Queries) ExportFriendships(ctx context.Context, arg ExportFriendshipsPa
 	items := []ExportFriendshipsRow{}
 	for rows.Next() {
 		var i ExportFriendshipsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportGarageVehicles = `-- name: ExportGarageVehicles :many
+SELECT g.id AS k, jsonb_build_object(
+  'id', g.id, 'make', g.make, 'model', g.model, 'model_year', g.model_year, 'color', g.color, 'note', g.note,
+  'created_at', g.created_at, 'updated_at', g.updated_at, 'deleted_at', g.deleted_at
+) AS data
+FROM garage_vehicles g
+WHERE g.owner_id = $1 AND g.id > $2
+ORDER BY g.id
+LIMIT $3
+`
+
+type ExportGarageVehiclesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportGarageVehiclesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Üye garajı (issue #272; ADR-0040 §4): garajınızdaki araçlar (silinenler
+// dahil) ve tayfa başına görünürlük seçimleriniz. Fotoğraf ve silen yer
+// almaz.
+func (q *Queries) ExportGarageVehicles(ctx context.Context, arg ExportGarageVehiclesParams) ([]ExportGarageVehiclesRow, error) {
+	rows, err := q.db.Query(ctx, exportGarageVehicles, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportGarageVehiclesRow{}
+	for rows.Next() {
+		var i ExportGarageVehiclesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportGarageVisibility = `-- name: ExportGarageVisibility :many
+SELECT v.tayfa_id AS k, jsonb_build_object(
+  'tayfa_id', v.tayfa_id, 'visible', v.visible, 'updated_at', v.updated_at
+) AS data
+FROM garage_tayfa_visibility v
+WHERE v.user_id = $1 AND v.tayfa_id > $2
+ORDER BY v.tayfa_id
+LIMIT $3
+`
+
+type ExportGarageVisibilityParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportGarageVisibilityRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+func (q *Queries) ExportGarageVisibility(ctx context.Context, arg ExportGarageVisibilityParams) ([]ExportGarageVisibilityRow, error) {
+	rows, err := q.db.Query(ctx, exportGarageVisibility, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportGarageVisibilityRow{}
+	for rows.Next() {
+		var i ExportGarageVisibilityRow
 		if err := rows.Scan(&i.K, &i.Data); err != nil {
 			return nil, err
 		}

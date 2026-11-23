@@ -59,7 +59,9 @@ type VehiclesComponentServiceClient interface {
 	// have ended. A seat request of the caller's own to another vehicle is
 	// removed: a driver rides in their own vehicle.
 	//
-	// Errors: ERROR_REASON_VALIDATION (make, model, color, model_year; plate
+	// Errors: ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND (garage_vehicle_id not
+	// in the caller's garage), ERROR_REASON_VALIDATION (garage_vehicle_id,
+	// make, model, color, model_year; plate
 	// also when the component's `plate` parameter is off; seats outside 0–8
 	// or not 0 when the `seats` parameter is off),
 	// ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_EVENT_ENDED,
@@ -208,7 +210,9 @@ type VehiclesComponentServiceServer interface {
 	// have ended. A seat request of the caller's own to another vehicle is
 	// removed: a driver rides in their own vehicle.
 	//
-	// Errors: ERROR_REASON_VALIDATION (make, model, color, model_year; plate
+	// Errors: ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND (garage_vehicle_id not
+	// in the caller's garage), ERROR_REASON_VALIDATION (garage_vehicle_id,
+	// make, model, color, model_year; plate
 	// also when the component's `plate` parameter is off; seats outside 0–8
 	// or not 0 when the `seats` parameter is off),
 	// ERROR_REASON_EVENT_NOT_GOING, ERROR_REASON_EVENT_ENDED,

@@ -572,6 +572,27 @@ func (q *Queries) PurgeEvents(ctx context.Context, arg PurgeEventsParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const purgeGarageVehicles = `-- name: PurgeGarageVehicles :execrows
+DELETE FROM garage_vehicles WHERE id IN (
+  SELECT x.id FROM garage_vehicles x WHERE x.deleted_at <= $1
+  ORDER BY x.deleted_at, x.id LIMIT $2 FOR UPDATE SKIP LOCKED)
+`
+
+type PurgeGarageVehiclesParams struct {
+	DeletedBefore pgtype.Timestamptz
+	N             int32
+}
+
+// Üye garajı (issue #272): fotoğraflar silme kuyruğuna girer, etkinlik
+// kayıtlarındaki garaj bağı boşalır.
+func (q *Queries) PurgeGarageVehicles(ctx context.Context, arg PurgeGarageVehiclesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, purgeGarageVehicles, arg.DeletedBefore, arg.N)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const purgeLibraryItems = `-- name: PurgeLibraryItems :execrows
 DELETE FROM library_items WHERE id IN (
   SELECT x.id FROM library_items x

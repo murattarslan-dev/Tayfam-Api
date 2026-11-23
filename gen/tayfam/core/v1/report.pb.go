@@ -80,6 +80,10 @@ const (
 	// TayfaMaterialService). Its subject is the author. Reporting needs the
 	// materials module on and the material visible.
 	ReportTargetType_REPORT_TARGET_TYPE_MATERIAL ReportTargetType = 15
+	// target_id is a vehicle of a member's garage that shows in the tayfa
+	// (issue #272; MemberGarageService). Its subject is the owner. Reporting
+	// needs the garage module on and the vehicle showing in the tayfa.
+	ReportTargetType_REPORT_TARGET_TYPE_GARAGE_VEHICLE ReportTargetType = 16
 )
 
 // Enum value maps for ReportTargetType.
@@ -101,6 +105,7 @@ var (
 		13: "REPORT_TARGET_TYPE_DAILY_ITEM",
 		14: "REPORT_TARGET_TYPE_LIBRARY_ITEM",
 		15: "REPORT_TARGET_TYPE_MATERIAL",
+		16: "REPORT_TARGET_TYPE_GARAGE_VEHICLE",
 	}
 	ReportTargetType_value = map[string]int32{
 		"REPORT_TARGET_TYPE_UNSPECIFIED":     0,
@@ -119,6 +124,7 @@ var (
 		"REPORT_TARGET_TYPE_DAILY_ITEM":      13,
 		"REPORT_TARGET_TYPE_LIBRARY_ITEM":    14,
 		"REPORT_TARGET_TYPE_MATERIAL":        15,
+		"REPORT_TARGET_TYPE_GARAGE_VEHICLE":  16,
 	}
 )
 
@@ -1392,7 +1398,7 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"resolution\x18\x03 \x01(\x0e2 .tayfam.core.v1.ReportResolutionR\n" +
 	"resolution\"Q\n" +
 	"\x15ResolveReportResponse\x128\n" +
-	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xb6\x04\n" +
+	"\x06report\x18\x01 \x01(\v2 .tayfam.core.v1.ModerationReportR\x06report*\xdd\x04\n" +
 	"\x10ReportTargetType\x12\"\n" +
 	"\x1eREPORT_TARGET_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17REPORT_TARGET_TYPE_USER\x10\x01\x12\x1c\n" +
@@ -1410,7 +1416,8 @@ const file_tayfam_core_v1_report_proto_rawDesc = "" +
 	"!REPORT_TARGET_TYPE_EVENT_QUESTION\x10\f\x12!\n" +
 	"\x1dREPORT_TARGET_TYPE_DAILY_ITEM\x10\r\x12#\n" +
 	"\x1fREPORT_TARGET_TYPE_LIBRARY_ITEM\x10\x0e\x12\x1f\n" +
-	"\x1bREPORT_TARGET_TYPE_MATERIAL\x10\x0f*\xae\x04\n" +
+	"\x1bREPORT_TARGET_TYPE_MATERIAL\x10\x0f\x12%\n" +
+	"!REPORT_TARGET_TYPE_GARAGE_VEHICLE\x10\x10*\xae\x04\n" +
 	"\fReportReason\x12\x1d\n" +
 	"\x19REPORT_REASON_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18REPORT_REASON_HARASSMENT\x10\x01\x12\x1d\n" +

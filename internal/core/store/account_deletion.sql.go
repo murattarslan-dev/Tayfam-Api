@@ -136,6 +136,15 @@ func (q *Queries) ClearEventUserFields(ctx context.Context, userID pgtype.UUID) 
 	return err
 }
 
+const clearGarageVehicleDeleter = `-- name: ClearGarageVehicleDeleter :exec
+UPDATE garage_vehicles SET deleted_by = NULL WHERE deleted_by = $1
+`
+
+func (q *Queries) ClearGarageVehicleDeleter(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearGarageVehicleDeleter, userID)
+	return err
+}
+
 const clearGuestPlayerCreator = `-- name: ClearGuestPlayerCreator :exec
 UPDATE event_guest_players SET nickname = NULL, created_by = NULL WHERE created_by = $1
 `
@@ -428,6 +437,28 @@ DELETE FROM event_questions WHERE author_id = $1
 // #256; ADR-0025 §11).
 func (q *Queries) DeleteUserEventQuestions(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserEventQuestions, userID)
+	return err
+}
+
+const deleteUserGarageVehicles = `-- name: DeleteUserGarageVehicles :exec
+DELETE FROM garage_vehicles WHERE owner_id = $1
+`
+
+// Üye garajı (issue #272; ADR-0040 §4, KVKK): kişinin araçları ve
+// görünürlük ayarları silinir (fotoğraflar silme kuyruğuna girer;
+// etkinlik kayıtlarındaki garaj bağı boşalır); başkasının aracını kaldıran
+// olarak kişi boşalır.
+func (q *Queries) DeleteUserGarageVehicles(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserGarageVehicles, userID)
+	return err
+}
+
+const deleteUserGarageVisibility = `-- name: DeleteUserGarageVisibility :exec
+DELETE FROM garage_tayfa_visibility WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserGarageVisibility(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserGarageVisibility, userID)
 	return err
 }
 
