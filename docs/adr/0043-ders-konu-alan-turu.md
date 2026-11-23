@@ -1,8 +1,8 @@
 # ADR-0043: Ders/konu listesine bağlı tür alanı (`study_tags`)
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-23, sohbette; issue
-  #333). "Seçenekler" bölümündeki ayrıntı seçimleri ajanın önerisidir ve
-  platform sahibinin onayına sunulmuştur.
+  #333). "Seçenekler" bölümündeki ayrıntı seçimleri de platform
+  sahibince onaylandı (2026-11-23 akşam, sohbette).
 - **Tarih:** 2026-11-23
 - **Karar veren:** Murat Arslan (2026-11-23, sohbette: "eğitim türlerine
   ders/konu seçimi eklenecek"). Ürün kararı Notion "Faz 3 — Katalog

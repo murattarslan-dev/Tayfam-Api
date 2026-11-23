@@ -11375,7 +11375,7 @@ components:
         nickname:
           type: string
           maxLength: 24
-          description: "Takma ad. Etkinliğin bitiminden 30 gün sonra (ya da ekleyen hesabını silince) silinir ve alan yer almaz; istemci adsız misafir gösterir."
+          description: "Takma ad. Ekleyen hesabını silince silinir ve alan yer almaz; istemci adsız misafir gösterir. Etkinlik silinince misafir de silinir."
         created_at: { type: string, format: date-time }
     EventGuestPlayers:
       type: object
