@@ -2,7 +2,8 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-18, sohbette)
 - **Tarih:** 2026-11-18 (revizyon 2026-11-23: §3 `vote` kaynakları, §1
-  sohbet kanalı istisnası)
+  sohbet kanalı istisnası; uygulama notları 2026-11-23, #323: §1
+  katılımcı listesi, §6 misafir, §7 kişisel katkı)
 - **Karar veren:** Murat Arslan (2026-11-18 katalog oturumu). Ürün kararları
   Notion "Faz 3 — Katalog ayrıntıları ve şema ekleri (2026-11-18)"
   sayfasındadır; bu ADR onların mimariye taşınmasıdır.
@@ -64,6 +65,12 @@ modelin ifade edemediği ihtiyaçlar çıktı:
   `sensitive_attendance` türünde de etkinliğin sohbet kanalı ve üye
   listesi olduğu gibi kalır. Kanala katılan kendi isteğiyle görünür kabul
   edilir; chat'te kod değişikliği yoktur, bildirim alıcıları etkilenmez.
+- **Uygulama notu (#257, onay 2026-11-23, #323):** `sensitive_attendance`
+  türünde katılımcı listesi organizatörün yanında moderatör ve yöneticiye
+  de döner (katılımı onlar da düzeltebilir, `SetAttendance` Any; kutlamadaki
+  "organizatör (yöneticiler)" kullanımıyla aynı). Diğer katılımcılar
+  yalnızca sayıyı görür. Hassas katılımın tek kaynağı SQL
+  `event_attendance_sensitive(ev)`; albüm yüklemesi `consent_ack`.
 
 ### 2. Tanım şeması ekleri
 
@@ -186,6 +193,13 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
   girmez; profil, kişisel kayıt ve iletişim alanı yoktur.
 - Etkinlik bitiminden **30 gün** sonra takma ad silinir; skor satırı
   "Misafir" olarak kalır (şampiyonlar bileşeni misafiri adsız gösterir).
+- **Uygulama notu (#252, onay 2026-11-23, #323):** misafiri organizatör,
+  moderatör, yönetici ve etkinliğin, bileşenin ya da masanın hakemi ekler
+  (`event.guest_add`); silme yalnızca yönetenlerde, masada ya da kurada yeri
+  olan misafir silinmez. Misafir `guests` açık yazboz bileşeniyle eklenir,
+  eşleşme ağacında katılımcı kurasına girer, dereceye girmez. Takma ad
+  ekleyenin içeriğidir: ekleyen hesabını silince hemen boşalır, ekleyenin
+  dışa aktarmasına girer (`core/guest_players.json`).
 
 ### 7. ADR-0026 değişiklikleri
 
@@ -195,6 +209,11 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
 - Kişisel katkı listesinde `entered_by: organizer` olan kişisel ölçümler de
   yer alır (gol krallığı tayfa içinde görünür; vitrinde yalnızca toplam,
   §3 kuralı değişmez).
+  **Güncelleme (2026-11-23, #322):** tayfa içinde de her üye yalnızca kendi
+  katkısını görür (ADR-0026 §3, "Uygulama notları (#322)"); organizatörün
+  girdiği kişisel ölçüm o kişinin kendi katkısında görünür, başkalarına
+  listelenmez. "Gol krallığı tayfa içinde görünür" ifadesi bu kararla
+  geçersizdir.
 - `sensitive_attendance` türleri ortak metriklerden yalnızca etkinlik
   sayısı ve toplam katılıma girer; "farklı katılımcı sayısı" ve kişisel
   istatistik hesaplanmaz.

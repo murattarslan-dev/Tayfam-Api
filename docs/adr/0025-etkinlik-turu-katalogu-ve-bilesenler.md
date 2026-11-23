@@ -2,6 +2,9 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Uygulama notları:** 2026-11-23 (platform sahibi, sohbette, issue #323):
+  Faz 3 bileşenlerinin ayrıntı kararları onaylandı; "Uygulama notları —
+  bileşenler" bölümü.
 - **Revizyon:** 2026-11-23 (platform sahibi, sohbette, issue #280;
   [ADR-0042](0042-katalog-degisikligi-olayi.md)): §10'daki `catalog.changed`
   olayı yalnızca sürüm değil, ilgi alanı anahtarlarını ve durumlarını da
@@ -351,6 +354,96 @@ metin "yalnızca sürüm numarası").
 - Plaka kuralı (30 gün) `vehicles` bileşeninde aynen sürer.
 - Yeni veri kategorileri (ölçüm, skor) aydınlatma metnine eklenir;
   hukukçu listesine yazılır.
+
+## Uygulama notları — bileşenler (Faz 3, onay 2026-11-23)
+
+Platform sahibi 2026-11-23'te sohbette, Faz 3 iş kayıtlarında ajanların
+ADR ve Notion'un açık bıraktığı yerlerde verdiği ayrıntı kararlarının
+hepsini onayladı (issue #323). Kararlar bu ADR'yi değiştirmez; §4–§6'nın
+uygulanışıdır. Bileşen ekleme kalıbı `internal/core/app/component/doc.go`
+dosyasındadır.
+
+- **Çerçeve (#238):** §5'teki "Organizatör" etkinliği açan kişi ile
+  moderatör ve yöneticidir (`event.edit_any`, `event.attendance_any` ile
+  aynı kural). İzin tablosunda bileşen başına işlem yerine ortak bileşen
+  işlemleri vardır; bileşen yalnızca bunların ifade edemediği kural için
+  kendi işlemini ekler. Hakem ataması `event_referees` (etkinlik, kişi,
+  isteğe bağlı `component_key` ve kapsam); kapsamı silen bileşen atamayı
+  da siler. WebSocket çerçeveleri `event.watch` / `event.watching` /
+  `event.unwatch` / `event.unwatched` / `event.component_changed`,
+  bağlantı başına en fazla 20 izleme. Problem türleri
+  `component-not-found`, `component-locked`, `component-frozen` (ADR-0037
+  `component-disabled`'a ek). Seçimler yalnızca tek etkinliğe uygulanır;
+  seri örnekleri şablonun seçimlerini kopyalar. Seçim değeri metindir
+  (`{param, value}`).
+- **`vehicles` (#240):** iptal edilmiş ve donmuş etkinlikte araç
+  çıkarılamaz (çerçeve kuralı; plaka yine bitişten 30 gün sonra silinir).
+  Koltuk isteği kişi başına bileşende tektir, yenisi öncekinin yerini alır;
+  reddetmek isteği siler; sürücü koltuk isteyemez; moderatör onaylayamaz
+  ama kaldırabilir. Koltuk adımları bildirim üretmez (yalnızca canlı
+  güncelleme). Araçlar katılımcı verisidir, seri örneğine kopyalanmaz.
+- **`checklist` (#241):** liste etkinlik bitince kapanır (7 günlük
+  düzeltme penceresi listede yok). Madde ekleme/çıkarma yalnızca
+  yönetenlerde; katılımcı yalnızca üstlenir. Liste seri örneğine
+  kopyalanmaz. `going`'den vazgeçmek atamayı kaldırmaz.
+- **`roll_call` (#242):** dönüş toleransı tür başına bileşen
+  parametresidir. Beklenen dönüş bileşenin planıdır (etkinlik
+  oluşturulduktan sonra bileşen ucundan yazılır, seriye başlangıca göre
+  kaydırılarak kopyalanır). Herkesin kaydını yalnızca yönetenler görür;
+  üye yalnızca kendi kaydını görür.
+- **`log` (#243):** konum gizliliği kayıt başınadır, varsayılanı bileşen
+  parametresidir (`location_default`). Kayıtlar her üyeye açıktır, yalnızca
+  konum kısıtlıdır; şikâyet de böyle. Moderatör silmesi her zaman (iptal
+  ya da donmuş etkinlikte de), kendi silme yazma penceresinde. **Balıkçılık
+  buluşma noktası:** Faz 1'deki etkinlik başına mera kuralı kalktığı için
+  buluşma noktası katılmayan üyelere de görünür; av konumları kaydın
+  gizliliğiyle korunur (platform sahibi, 2026-11-23: yeni davranış kalır).
+- **`measure` (#245):** ölçüm etkinlik başlamadan girilmez; `sensitive`
+  ölçümü `entered_by: self` iken yönetici de göremez; `entered_by:
+  organizer` değeri yalnızca `going` ya da katılımı doğrulanmış kişiye
+  girilir.
+- **`goal` (#246):** hassas ölçüme bağlı hedefin ilerlemesi o ölçümün
+  görünürlüğünü izler (en dar yorum).
+- **`schedule` (#247):** madde saati başlangıçtan en çok 1 gün önce,
+  bitişten en çok 1 gün sonra olabilir; etkinliğin saati değişince
+  maddeler kaydırılmaz. Başlık 120, not 500 karakter, `max_items` yoksa
+  100. Elle sıralama yok, sıra saatten gelir.
+- **`teams` (#248):** "dengeli" mod organizatörün kurarken gönderdiği 1–5
+  seviyeleriyle çalışır; seviyeler saklanmaz (rating yok). `team_size`
+  tek başına hedef büyüklük, `team_count` ile birlikte kapasitedir.
+  Katılımcı olmaktan çıkan kişi takımında görünmez.
+- **`draw` (#249):** kura bir kez çekilir, yeniden çekilemez. Türde açık
+  takım bileşeni varsa takımlar, yoksa katılımcılar çekilir. Sonradan
+  ayrılan ya da kaldırılan takımın yeri boş kalır (bay), sıra kaymaz.
+- **`scoreboard` (#250):** kural önceliği bileşen < ön ayar < masanın
+  hedefi. Hedef puana ulaşılınca masa kendiliğinden biter. Hakem masayı
+  bitirebilir, yeniden açmak organizatöründür. Düzeltme eli silip yeniden
+  yazar; yalnızca son el silinir.
+- **`bracket` (#251):** ağaç türün kura bileşeninden tohumlanır, kura
+  çekilmeden başlatılamaz; skor kuralı yazboz bileşeninden gelir ve
+  başlatırken sabitlenir. İsviçre tur sayısı ⌈log2 n⌉. Eleme bayları
+  kuranın "ardışık iki yer" kuralıyla; berabere eleme maçı ek oyunla sürer
+  (en çok 9 oyun). Sonraki tur eşlenince önceki tur değişmez; organizatör
+  gerekirse sıfırlar (kura kalır). Bay İsviçre'de galibiyet sayılır.
+- **Misafir oyuncu (#252):** misafir etkinlik düzeyindedir ve `guests`
+  açık yazboz bileşeni üzerinden eklenir; eşleşme ağacında katılımcı
+  kurasına girer. Takma ad ekleyenin içeriği sayılır: ekleyen hesabını
+  silince hemen boşalır, ekleyenin dışa aktarmasına girer.
+- **`ranking` (#253):** varsayılan yön elle girişte `asc`, ölçümden
+  `desc`; elle girişte süre saniye + 2 basamak, sıra 1–10 000; elle girişi
+  hakemler de yapar; kaynak yalnızca kişisel ölçüm olabilir; hassas
+  ölçümden derece yalnızca bütün değerleri görenlere görünür. Misafir
+  dereceye girmez.
+- **`celebration` (#255):** kutlama bildirimi yalnızca uygulama içidir
+  (push yok). Kaynaksız kutlamada organizatör kazananları katılımcılardan
+  elle seçer (1–10). İlan geri alınmaz; kazanan kaynaktan okunduğu için
+  düzeltme kaynağın yazma penceresinde yapılır.
+- **`questions` (#256):** soru 1–500 karakter; kişi başına 20, bileşende
+  500 canlı soru. "Katılımcı" `going` ya da doğrulanmış katılımdır; kendi
+  sorusuna oy verilebilir. Başkasının sorusunu moderatör ve yönetici
+  kaldırır; organizatör yalnızca "cevaplandı" işaretler. Anonim soru
+  şikâyeti tayfa kuyruğuna yazarsız düşer.
+- **`vote` (#254):** ADR-0037 §3 uygulama notu.
 
 ## Gerekçe
 
