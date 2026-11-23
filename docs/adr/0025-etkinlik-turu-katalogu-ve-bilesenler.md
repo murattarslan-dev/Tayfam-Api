@@ -238,6 +238,45 @@ gibi her abonelikte core'a sorulur (ADR-0024 §1 modeli).
   içeriyorsa panel uyarır (yayına alınabilir; eski istemci o bölümde
   "güncelle" gösterir, §9).
 
+**Uygulama notları (#262):** Bu bölümün kararlarını değiştirmez; ayrıntılar
+koddadır (`internal/core/app/admin/catalog.go`,
+`internal/gateway/admin/catalog.go`, migration 00067).
+
+- Panel; ilgi alanı, tür, rozet (ADR-0039 §1), ders/konu etiketi (ADR-0040
+  §5), yazboz ön ayarı (ADR-0037 §5) ve engelli alan adı (ADR-0040 §3)
+  yönetir. core'un `AdminService`'ine eklenen metodlar admin token'ı ister;
+  her kayıt gerekçe ve son 5 dakikada Google girişi ister (panelin diğer
+  değişiklikleri gibi).
+- **Önizleme = aynı denetim:** `validate_only` ile kayıt aynı
+  transaction'da yazılır, bütün denetimler (şema, ilgi alanlarının varlığı,
+  yazbozun sunduğu ön ayarların varlığı, türü sayan rozetlerin yeniden
+  denetimi, ders/konu listesinin "Diğer" kuralı, veritabanı kısıtları)
+  çalışır ve transaction geri alınır. Önizleme gerekçe istemez, denetim
+  kaydına yazılmaz.
+- **Sürüm:** türün adı, ikonu, modları ya da tanımı değişince yeni sürüm
+  satırı eklenir; ilgi alanları, sıra ve durum sürümün parçası değildir
+  (sürüm satırında yoktur), yalnızca türün satırını ve `catalog_version`'ı
+  değiştirir. Düzenleme okunduğu sürüm üzerinden gönderilir; arada değişen
+  tür reddedilir.
+- Ders/konu: yeni düzeyin ve dersin "Diğer" etiketi (`<anahtar>_other`)
+  aynı kayıtta eklenir; bu yüzden düzey ve ders anahtarı en fazla 34
+  karakterdir.
+- `catalog_version` ve `catalog.changed` (ADR-0042 §5) yalnızca
+  `GET /v1/catalog`'a giren kayıtlar (ilgi alanı, tür, rozet, ders/konu)
+  için; ön ayarlar ve engelli alan adları katalog yanıtında olmadığı için
+  sürümü değiştirmez.
+- Denetim kaydı: işlem `catalog.*`, hedef yoktur; değişen anahtar (engelli
+  alan adında alan adı) identity'ye `catalog_key` olarak gider ve panelin
+  denetim sayfasında görünür.
+- En düşük istemci sürümü uyarısını gateway verir: tür önizlemesindeki
+  sürümü, kendi yapılandırmasındaki (ADR-0016) her platformun en düşük
+  desteklenen sürümüyle karşılaştırır.
+- core_app'e katalog tablolarında yalnızca gereken yazma yetkisi açılır
+  (00067): anahtar sütunlarında UPDATE, hiçbir katalog tablosunda DELETE
+  yoktur (engelli alan adı listesi hariç), sürüm satırı yalnızca eklenir;
+  `catalog_meta.catalog_version` ve türün sürümü geri gidemez
+  (tetikleyici).
+
 ### 8. Dağıtım ve sözleşme
 
 - `GET /v1/catalog`: ilgi alanları ve aktif türlerin güncel tanımları,
