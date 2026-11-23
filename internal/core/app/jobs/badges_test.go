@@ -47,7 +47,9 @@ func TestAwardChampionBadges(t *testing.T) {
 		e.seedAdmin(t, `INSERT INTO catalog_event_type_versions (type_key, version, labels, icon, modes, definition)
 			SELECT key, version, labels, icon, modes, definition FROM catalog_event_types WHERE key = $1`, key)
 	}
-	_, err := e.admin.Exec(ctx, `INSERT INTO catalog_badges (key, scope, position, labels, icon, rule) VALUES ('champion', 'user', 1, '{"tr": "Şampiyon"}', 'crown', '{"kind": "champion"}')`)
+	// Only this badge: the seed's list (issue #260) is replaced.
+	_, err := e.admin.Exec(ctx, `DELETE FROM catalog_badges;
+		INSERT INTO catalog_badges (key, scope, position, labels, icon, rule) VALUES ('champion', 'user', 1, '{"tr": "Şampiyon"}', 'crown', '{"kind": "champion"}')`)
 	must(t, err)
 	frozenWinner, openWinner, plainWinner := id.New(), id.New(), id.New()
 	e.celebrated(t, "test_job_cup", -component.FreezeAfter, frozenWinner)

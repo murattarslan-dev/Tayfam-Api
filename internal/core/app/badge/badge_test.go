@@ -24,9 +24,10 @@ import (
 
 var ctx = context.Background()
 
-// testBadges is the smallest set the tests need; the real list comes from
-// the platform owner's approved draft (issue #260).
-const testBadges = `INSERT INTO catalog_badges (key, scope, position, labels, icon, rule, status) VALUES
+// testBadges is the smallest set the tests need; it replaces the seed's
+// list (issue #260), so that only these badges are earned.
+const testBadges = `DELETE FROM catalog_badges;
+INSERT INTO catalog_badges (key, scope, position, labels, icon, rule, status) VALUES
 	('first_event', 'user', 1, '{"tr": "İlk etkinlik"}', 'flag', '{"kind": "first"}', 'active'),
 	('first_hike', 'user', 2, '{"tr": "İlk yürüyüş"}', 'hiking', '{"kind": "first", "event_type": "hike"}', 'active'),
 	('ten_events', 'user', 3, '{"tr": "On etkinlik"}', 'medal', '{"kind": "threshold", "metric": "attended", "value": 10, "period": "all_time"}', 'active'),

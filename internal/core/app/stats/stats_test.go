@@ -67,6 +67,8 @@ func setup(t *testing.T) *env {
 	tayfas, err := tayfa.New(tayfa.Config{Pool: d.App, Log: log})
 	must(t, err)
 	e := &env{svc: stats.New(fw), tayfas: tayfas, pool: d.App, admin: d.Admin}
+	// The tests bring their own badges: the seed's (issue #260) are removed.
+	e.exec(t, `DELETE FROM catalog_badges`)
 	for key, def := range map[string]string{fishType: fishDef, bloodType: bloodDef} {
 		e.exec(t, `INSERT INTO catalog_event_types (key, interest_keys, position, labels, icon, modes, version, definition)
 			VALUES ($1, ARRAY['general'], 9000, '{"tr": "Test türü"}', 'event', ARRAY['in_person', 'online'], 1, $2::jsonb)`, key, def)

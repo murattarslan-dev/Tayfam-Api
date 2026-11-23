@@ -705,7 +705,10 @@ func TestScoreboardTeamsAndWDL(t *testing.T) {
 func TestScoreboardOutsideTypeVersion(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
-	general := e.newEvent(t, tf, admin, event.TypeGeneral)
+	// "Genel" has an optional toolbox (issue #260): a type without any
+	// component stands in for it.
+	e.addType(t, "test_bare", `{}`)
+	general := e.newEvent(t, tf, admin, "test_bare")
 	game := e.newEvent(t, tf, admin, gameType)
 	chess := e.newEvent(t, tf, admin, chessType)
 	for name, r := range map[string]component.Ref{

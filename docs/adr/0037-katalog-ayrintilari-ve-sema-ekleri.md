@@ -199,6 +199,36 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
   sayısı ve toplam katılıma girer; "farklı katılımcı sayısı" ve kişisel
   istatistik hesaplanmaz.
 
+### Uygulama notları (#260, katalog verisi)
+
+Karar değişmedi; tam katalog seed'inin (`db/core/migrations/00066`)
+ayrıntıları:
+
+- **Sürümleme:** Faz 1 türlerinden tanımı Notion'la değişen altısı (`convoy`,
+  `hike`, `camp`, `sports`, `gaming`, `general`) **sürüm 2** ile gelir; sürüm
+  1 satırları değişmez ve o sürümle açılmış etkinlikler onunla kalır
+  (ADR-0025 §2). `fishing` Notion'la aynıdır, sürüm 1'de kalır. Faz 1
+  türleri bugünkü iki modunu korur; yeni türlerden yalnızca Notion'da
+  "(yüz yüze/online)" yazanlar iki modludur.
+- **"(ops)"** bileşenler `optional: {"default": false}` olarak yazıldı;
+  Genel'in araç kutusu (liste, oylama, takım kurma, yazboz, kronometre) da
+  varsayılan kapalıdır. Notion'da alarmı belirtilmeyen yoklamalar alarmlı
+  (30 dk tolerans), "alarmsız" yazanlar alarmsızdır.
+- **Oylama kaynağı:** Notion'daki "rota durakları" (Gastronomi turu) §3'teki
+  karara göre serbest (`free`) oylamadır.
+- **Anahtarlar:** ölçüm ve günlük anahtarları ortak metrik adlarıyla
+  (`events`, `attended`, `participants`, `duration`) çakışmaz; koşu ve
+  antrenmanın süre ölçümleri `run_time` ve `training_time`'dır.
+- **Tür alanında sözlük:** Notion'da "[sözlük]" işaretli tür alanları
+  (kitap, oyun, dal) tanımda `vocabulary` taşır; sözlüğe bağlama bugün
+  yalnızca günlük kayıtlarındadır (§4 uygulama notu), tür alanının değeri
+  düz metindir.
+- **Eğitim türlerinin ders/konu alanları** tanımda yoktur: şemada ders-konu
+  listesine (ADR-0040 §5) bağlı bir alan türü yoktur; karar platform
+  sahibindedir.
+- Varsayılan ana sayfa bileşenleri her ilgi alanında yalnızca temel
+  bölümlerdir (platform sahibi, 2026-11-23, #260).
+
 ## Gerekçe
 
 - **`optional` ve `organizer_choice`:** Koşul dili eklemeden aynı türün

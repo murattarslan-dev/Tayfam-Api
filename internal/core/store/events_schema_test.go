@@ -147,7 +147,7 @@ func TestEventConstraints(t *testing.T) {
 	}
 
 	// The type is a catalog key at a version the catalog has (issue #237).
-	if _, err := insertEvent(ctx, pool, tayfa, "cycling", "in_person", nil); constraintOf(err) != "events_type_version_fkey" {
+	if _, err := insertEvent(ctx, pool, tayfa, "paragliding", "in_person", nil); constraintOf(err) != "events_type_version_fkey" {
 		t.Errorf("bilinmeyen tür: %v", err)
 	}
 	if _, err := insertEvent(ctx, pool, tayfa, "general", "in_person", map[string]string{"type_version": "2"}); constraintOf(err) != "events_type_version_fkey" {

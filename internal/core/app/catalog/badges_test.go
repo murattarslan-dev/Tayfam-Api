@@ -11,9 +11,10 @@ import (
 )
 
 // testBadges is the smallest set that exercises the catalog's rules. It is
-// test data only: the real list comes from the platform owner's approved
-// draft (issue #260).
-const testBadges = `INSERT INTO catalog_badges (key, scope, position, labels, icon, rule, status) VALUES
+// test data only: the real list is the seed's (issue #260;
+// TestSeedCatalogData), which it replaces.
+const testBadges = `DELETE FROM catalog_badges;
+INSERT INTO catalog_badges (key, scope, position, labels, icon, rule, status) VALUES
 	('first_event', 'user', 1, '{"tr": "İlk etkinlik", "en": "First event"}', 'flag', '{"kind": "first"}', 'active'),
 	('ten_events', 'user', 2, '{"tr": "On etkinlik"}', 'medal', '{"kind": "threshold", "metric": "attended", "value": 10, "period": "all_time"}', 'active'),
 	('yearly_km', 'tayfa', 3, '{"tr": "Yılın yürüyüşçüleri"}', 'trophy', '{"kind": "threshold", "metric": "hike.distance", "value": 100, "period": "year"}', 'active'),
@@ -98,9 +99,10 @@ func TestParseBadgeRule(t *testing.T) {
 	}
 }
 
-// The migrations leave the badges empty (their content is issue #260's).
-func TestSeedBadgesEmpty(t *testing.T) {
-	svc, _, _ := setup(t)
+// A catalog without badges serves an empty list.
+func TestEmptyBadges(t *testing.T) {
+	svc, _, admin := setup(t)
+	exec(t, admin, `DELETE FROM catalog_badges`)
 	c, _, err := svc.Get(ctx, 0)
 	if err != nil {
 		t.Fatal(err)

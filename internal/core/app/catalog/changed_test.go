@@ -80,7 +80,8 @@ func TestPublishDue(t *testing.T) {
 		keys = append(keys, i.Key)
 	}
 	slices.Sort(keys)
-	if !slices.Equal(keys, []string{"automotive", "games", "general", "nature", "sports", "water"}) {
+	if !slices.Equal(keys, []string{"animals", "arts", "automotive", "books", "education", "environment", "faith", "food",
+		"games", "general", "learning", "nature", "sports", "travel", "water"}) {
 		t.Fatalf("ilgi alanları = %v", keys)
 	}
 	// Only key and status leave core.
@@ -114,7 +115,7 @@ func TestPublishDue(t *testing.T) {
 	for _, i := range got[1].Interests {
 		status[i.Key] = i.Status
 	}
-	if len(status) != 7 || status["dance"] != StatusActive || status["water"] != StatusRetired {
+	if len(status) != 16 || status["dance"] != StatusActive || status["water"] != StatusRetired {
 		t.Fatalf("yeni katalog = %v", status)
 	}
 }
@@ -131,7 +132,7 @@ func TestPublishChanged(t *testing.T) {
 	if publishDue(t, app) {
 		t.Fatal("yazma yolunun yayınladığı sürüm yeniden yayınlandı")
 	}
-	if got := changedEvents(t, app); len(got) != 1 || got[0].CatalogVersion != seedVersion || len(got[0].Interests) != 6 {
+	if got := changedEvents(t, app); len(got) != 1 || got[0].CatalogVersion != seedVersion || len(got[0].Interests) != 15 {
 		t.Fatalf("olaylar = %+v", got)
 	}
 	// Outside a transaction there is no event.
