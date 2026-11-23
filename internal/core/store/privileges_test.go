@@ -60,18 +60,20 @@ var wantAppPrivileges = map[string]string{
 	"uploads": "DELETE,INSERT,SELECT,UPDATE(attach_confirmed_at,attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
 	// Issue #207: user_id and day never change.
 	"user_availability": "DELETE,INSERT,SELECT,UPDATE(note,slots,updated_at)",
-	// Issue #237, ADR-0025: the service only reads the catalog; it changes
-	// through migrations (and later the platform panel, #262).
-	"catalog_meta":                "SELECT",
-	"catalog_interests":           "SELECT",
-	"catalog_event_types":         "SELECT",
-	"catalog_event_type_versions": "SELECT",
-	// Issue #259: the study tag list is catalog data too.
-	"catalog_study_tags": "SELECT",
+	// Issue #237, ADR-0025: the catalog changes through migrations and the
+	// platform panel (#262, 00067): keys never change, nothing is deleted,
+	// a type version row is only ever added.
+	"catalog_meta":                "SELECT,UPDATE(catalog_version,updated_at)",
+	"catalog_interests":           "INSERT,SELECT,UPDATE(default_widgets,icon,labels,position,status,updated_at)",
+	"catalog_event_types":         "INSERT,SELECT,UPDATE(definition,icon,interest_keys,labels,modes,position,status,updated_at,version)",
+	"catalog_event_type_versions": "INSERT,SELECT",
+	// Issue #259: the study tag list is catalog data too; a tag's parent
+	// never changes.
+	"catalog_study_tags": "INSERT,SELECT,UPDATE(labels,position,status,updated_at)",
 	// Issue #258: badge definitions are catalog data; an earned badge is
 	// never changed or taken back (ADR-0039 §2), only one's own go with
 	// one's account. Each frozen event is looked at once.
-	"catalog_badges":   "SELECT",
+	"catalog_badges":   "INSERT,SELECT,UPDATE(icon,labels,position,rule,status,updated_at)",
 	"user_badges":      "DELETE,INSERT,SELECT",
 	"tayfa_badges":     "INSERT,SELECT",
 	"event_badge_runs": "INSERT,SELECT",
@@ -116,10 +118,11 @@ var wantAppPrivileges = map[string]string{
 	// empties a person's place.
 	"event_draws":        "INSERT,SELECT",
 	"event_draw_entries": "INSERT,SELECT,UPDATE(user_id)",
-	// Issue #250: score presets are catalog data the service only reads.
+	// Issue #250: score presets are catalog data (the platform panel
+	// manages them, #262).
 	// A table, a seat or a score never moves to another event, component or
 	// table; account deletion empties a person's seat.
-	"catalog_score_presets": "SELECT",
+	"catalog_score_presets": "INSERT,SELECT,UPDATE(labels,params,position,status,updated_at)",
 	"event_score_tables":    "DELETE,INSERT,SELECT,UPDATE(finished_at,label,status,updated_at)",
 	"event_score_players":   "DELETE,INSERT,SELECT,UPDATE(user_id)",
 	"event_scores":          "DELETE,INSERT,SELECT",
@@ -166,10 +169,10 @@ var wantAppPrivileges = map[string]string{
 	"library_loans": "DELETE,INSERT,SELECT,UPDATE(approved_at,borrower_id,due_at,ended_at,handed_over_at,orphaned_at,reminded_at,state)",
 	"library_queue": "DELETE,INSERT,SELECT",
 	// Issue #261: a material never moves to another tayfa and its kind
-	// and request ID never change; the blocked domain list is read only
-	// (the platform panel manages it, #262).
+	// and request ID never change; the blocked domain list is managed on
+	// the platform panel (#262): entries are added and removed.
 	"materials":       "DELETE,INSERT,SELECT,UPDATE(author_id,deleted_at,deleted_by,domain,photo1_upload_id,photo2_upload_id,photo3_upload_id,subject_key,title,topic_key,updated_at,url)",
-	"blocked_domains": "SELECT",
+	"blocked_domains": "DELETE,INSERT,SELECT",
 	// Issue #272: a garage vehicle never moves to another person and its
 	// request ID never changes; a visibility row never moves.
 	"garage_vehicles":         "DELETE,INSERT,SELECT,UPDATE(color,deleted_at,deleted_by,make,model,model_year,note,photo1_upload_id,photo2_upload_id,photo3_upload_id,updated_at)",
