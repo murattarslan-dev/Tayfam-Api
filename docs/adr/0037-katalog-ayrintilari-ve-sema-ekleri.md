@@ -245,6 +245,9 @@ ayrıntıları:
 - **Eğitim türlerinin ders/konu alanları** tanımda yoktur: şemada ders-konu
   listesine (ADR-0040 §5) bağlı bir alan türü yoktur; karar platform
   sahibindedir.
+  **Güncelleme (2026-11-23, #333):** platform sahibi alan türünü onayladı;
+  [ADR-0043](0043-ders-konu-alan-turu.md) `study_tags`'i ekler, dört Eğitim
+  türü sürüm 2 ile bu alanları alır (migration 00068).
 - Varsayılan ana sayfa bileşenleri her ilgi alanında yalnızca temel
   bölümlerdir (platform sahibi, 2026-11-23, #260).
 

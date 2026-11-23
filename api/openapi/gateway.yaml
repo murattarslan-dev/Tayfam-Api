@@ -12440,7 +12440,8 @@ components:
         Türün alanlarının değerleri: alan anahtarı → değer. Alanlar
         etkinliğin tür sürümünün tanımındadır (`CatalogDefinition.fields`);
         değerin biçimi alanın `kind`'ine göredir (`CatalogField` tablosu):
-        metin, sayı, `true`/`false`, `YYYY-MM-DD` ya da metin dizisi. Değeri
+        metin, sayı, `true`/`false`, `YYYY-MM-DD` ya da metin dizisi
+        (`multi_choice` seçenekleri, `study_tags` etiket anahtarları). Değeri
         olmayan alan nesnede yer almaz; `null` gönderilmez.
       additionalProperties: true
 
@@ -14712,12 +14713,22 @@ components:
         | `boolean` | `true` / `false` | — |
         | `date` | `YYYY-MM-DD` | — |
         | `duration` | dakika, tam sayı | `min`, `max` |
+        | `study_tags` | ders/konu etiketi anahtarlarının listesi | `min_depth`, `max_depth`, `max_selected` |
+
+        `study_tags` (ADR-0043) ders/konu listesinden (`Catalog.study_tags`)
+        seçimdir ve yalnızca türün alanı olabilir (`log` kayıt alanı olamaz).
+        Her öğe seçilen en derin etiketin anahtarıdır (konu, dersini ve
+        düzeyini belirler); tekrar yoktur, sıra korunur. Yeni seçimde etiket
+        ve üstleri `active` olmalı, derinliği `min_depth`–`max_depth`
+        aralığında olmalıdır; etkinliğin o alandaki mevcut değerinde olan
+        emekli etiket düzenlemede kalabilir. Aykırı değer `validation`
+        (`fields.<anahtar>`) alır.
       required: [key, kind, labels]
       properties:
         key: { type: string, description: "Tür içinde tekil: `^[a-z][a-z0-9_]{1,39}$`." }
         kind:
           type: string
-          description: "`text`, `long_text`, `integer`, `decimal`, `choice`, `multi_choice`, `boolean`, `date`, `duration`."
+          description: "`text`, `long_text`, `integer`, `decimal`, `choice`, `multi_choice`, `boolean`, `date`, `duration`, `study_tags`."
         required: { type: boolean, description: "Etkinlik oluştururken zorunlu mu; yoksa `false`." }
         labels: { $ref: "#/components/schemas/CatalogLabels" }
         max_length: { type: integer, format: int32, description: "`text`, `long_text`: en fazla karakter." }
@@ -14736,7 +14747,15 @@ components:
           type: object
           description: Seçenek anahtarı → adlar (dil → metin). Adı olmayan seçenek olduğu gibi gösterilir (`"1"` … `"5"`).
           additionalProperties: { $ref: "#/components/schemas/CatalogLabels" }
-        max_selected: { type: integer, format: int32, description: "`multi_choice`: en fazla seçim; yoksa seçenek sayısı." }
+        max_selected: { type: integer, format: int32, description: "`multi_choice`: en fazla seçim, yoksa seçenek sayısı; `study_tags`: 1–10, yoksa 1." }
+        min_depth:
+          type: string
+          enum: [level, subject]
+          description: "`study_tags`: seçilebilecek en sığ etiket (`level` düzey, `subject` ders); yoksa `subject`."
+        max_depth:
+          type: string
+          enum: [level, subject, topic]
+          description: "`study_tags`: seçilebilecek en derin etiket (`topic` konu); `min_depth`'ten sığ olamaz; yoksa `topic`."
         vocabulary: { $ref: "#/components/schemas/CatalogVocabulary" }
     CatalogVocabulary:
       type: object

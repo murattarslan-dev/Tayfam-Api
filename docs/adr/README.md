@@ -32,7 +32,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0022](0022-uygulama-butunlugu.md) | Uygulama bütünlüğü (Play Integrity / App Attest) oturuma bağlanır | Kabul edildi |
 | [0023](0023-demo-verisi.md) | Prod'da kalıcı demo tayfaları ve sahte hesaplar | Kabul edildi; kısmen 0035 |
 | [0024](0024-kanal-kitlesi.md) | Kanal kitlesi: etkinlik ve seçili üye kanalları | Kabul edildi |
-| [0025](0025-etkinlik-turu-katalogu-ve-bilesenler.md) | Etkinlik türü kataloğu ve bileşen modeli (v3) | Kabul edildi; kısmen 0037, 0041, 0042 |
+| [0025](0025-etkinlik-turu-katalogu-ve-bilesenler.md) | Etkinlik türü kataloğu ve bileşen modeli (v3) | Kabul edildi; kısmen 0037, 0041, 0042, 0043 |
 | [0026](0026-tayfa-istatistikleri-ve-vitrin.md) | Tayfa istatistikleri, kişisel istatistik ve Keşfet vitrini (v3) | Kabul edildi; kısmen 0037 |
 | [0027](0027-tayfa-ana-sayfa-bilesenleri.md) | Tayfa ana sayfa bileşenleri ve günün içeriği (v3) | Kabul edildi |
 | [0028](0028-etkinlik-fotograf-albumu.md) | Etkinlik fotoğraf albümü | Kabul edildi |
@@ -50,6 +50,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0040](0040-tayfa-modulleri-v3.md) | v3 tayfa modülleri: ortak kütüphane, soru havuzu, materyal kütüphanesi, üye garajı, ders-konu listesi | Kabul edildi |
 | [0041](0041-v3-tek-seferde-gecis-ve-yayin.md) | v3'e tek seferde geçiş ve yayın | Kabul edildi |
 | [0042](0042-katalog-degisikligi-olayi.md) | Katalog değişikliği olayı (`catalog.changed`) ve identity'deki kopya | Kabul edildi |
+| [0043](0043-ders-konu-alan-turu.md) | Ders/konu listesine bağlı tür alanı (`study_tags`) | Kabul edildi |
 
 Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
 yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu

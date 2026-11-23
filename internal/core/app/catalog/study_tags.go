@@ -2,8 +2,10 @@ package catalog
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -26,9 +28,9 @@ import (
 
 // Depths of a study tag.
 const (
-	StudyLevel   = 1
-	StudySubject = 2
-	StudyTopic   = 3
+	StudyLevel   = definition.StudyDepthLevel
+	StudySubject = definition.StudyDepthSubject
+	StudyTopic   = definition.StudyDepthTopic
 )
 
 // OtherSuffix ends the key of the "Diğer" child of a level or a subject.
@@ -187,4 +189,44 @@ func studyTag(ctx context.Context, q *store.Queries, key, field string) (store.G
 		return store.GetCatalogStudyTagRow{}, fmt.Errorf("ders/konu etiketi: %w", err)
 	}
 	return r, nil
+}
+
+// CheckStudyValues checks the study_tags field values of an event
+// (ADR-0043 §2) inside the caller's transaction, after
+// definition.CleanValues checked their form. values are the cleaned
+// values by field key; previous are the event's values before an update
+// (nil when the event is new). Every tag must be in the list at a depth
+// the field allows, and selectable (it and the tags above it active);
+// a retired tag the field already held may stay.
+//
+// A value that does not pass is a *definition.ValueError naming the field.
+func CheckStudyValues(ctx context.Context, q *store.Queries, d *definition.Definition, values, previous map[string]json.RawMessage) error {
+	for _, f := range d.Fields {
+		raw, ok := values[f.Key]
+		if f.Kind != definition.KindStudyTags || !ok {
+			continue
+		}
+		bad := &definition.ValueError{Field: f.Key}
+		keys, ok := definition.StudyKeys(raw)
+		if !ok {
+			return bad
+		}
+		kept, _ := definition.StudyKeys(previous[f.Key])
+		for _, k := range keys {
+			r, err := q.GetCatalogStudyTag(ctx, k)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return bad
+			}
+			if err != nil {
+				return fmt.Errorf("ders/konu etiketi: %w", err)
+			}
+			if int(r.Depth) < f.MinDepth || int(r.Depth) > f.MaxDepth {
+				return bad
+			}
+			if !r.Selectable && !slices.Contains(kept, k) {
+				return bad
+			}
+		}
+	}
+	return nil
 }

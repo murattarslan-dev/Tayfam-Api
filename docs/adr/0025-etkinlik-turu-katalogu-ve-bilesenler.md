@@ -2,6 +2,9 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Revizyon:** 2026-11-23 (platform sahibi, sohbette, issue #333;
+  [ADR-0043](0043-ders-konu-alan-turu.md)): §3'teki alan türlerine ders/konu
+  listesine bağlı `study_tags` eklendi.
 - **Uygulama notları:** 2026-11-23 (platform sahibi, sohbette, issue #323):
   Faz 3 bileşenlerinin ayrıntı kararları onaylandı; "Uygulama notları —
   bileşenler" bölümü.
@@ -140,6 +143,8 @@ anahtar reddedilir; boyut üst sınırı 16 KiB):
   (en fazla 1000), `integer`, `decimal`, `choice`, `multi_choice`,
   `boolean`, `date`, `duration`. Para birimi, URL, dosya, konum ve kişi alanı
   **yoktur**. Seçenek listeleri, sınırlar ve zorunluluk tanımdadır.
+  (2026-11-23, [ADR-0043](0043-ders-konu-alan-turu.md): `study_tags`, ders/konu
+  listesinden seçim; yalnızca tür alanında.)
 - Alan değerleri `event_field_values` (event_id, field_key, değer jsonb)
   tablosunda tutulur ve yazılırken etkinliğin tür sürümüne göre doğrulanır.
   Serbest metin alanları kötüye kullanım filtresinden geçer (ADR-0012).

@@ -165,6 +165,21 @@ func TestParseFieldKinds(t *testing.T) {
 		{"duration", `{"key":"planned","kind":"duration","min":5,"max":600,` + trLabel + `}`, true},
 		{"duration sıfır", `{"key":"planned","kind":"duration","min":0,` + trLabel + `}`, false},
 		{"duration birimli", `{"key":"planned","kind":"duration","unit":"hour",` + trLabel + `}`, false},
+		// study_tags (ADR-0043)
+		{"study_tags", `{"key":"subjects","kind":"study_tags",` + trLabel + `}`, true},
+		{"study_tags çoklu", `{"key":"subjects","kind":"study_tags","max_selected":10,` + trLabel + `}`, true},
+		{"study_tags düzey", `{"key":"exam","kind":"study_tags","min_depth":"level","max_depth":"subject",` + trLabel + `}`, true},
+		{"study_tags yalnızca düzey", `{"key":"exam","kind":"study_tags","min_depth":"level","max_depth":"level",` + trLabel + `}`, true},
+		{"study_tags yalnızca ders", `{"key":"subject","kind":"study_tags","max_depth":"subject","required":true,` + trLabel + `}`, true},
+		{"study_tags ters derinlik", `{"key":"exam","kind":"study_tags","max_depth":"level",` + trLabel + `}`, false},
+		{"study_tags konudan başlayan", `{"key":"exam","kind":"study_tags","min_depth":"topic",` + trLabel + `}`, false},
+		{"study_tags bilinmeyen derinlik", `{"key":"exam","kind":"study_tags","max_depth":"unit",` + trLabel + `}`, false},
+		{"study_tags derinlik sayı", `{"key":"exam","kind":"study_tags","max_depth":3,` + trLabel + `}`, false},
+		{"study_tags fazla seçim", `{"key":"subjects","kind":"study_tags","max_selected":11,` + trLabel + `}`, false},
+		{"study_tags sıfır seçim", `{"key":"subjects","kind":"study_tags","max_selected":0,` + trLabel + `}`, false},
+		{"study_tags seçenekli", `{"key":"subjects","kind":"study_tags","options":["tyt_math"],` + trLabel + `}`, false},
+		{"study_tags kök", `{"key":"subjects","kind":"study_tags","root":"tyt",` + trLabel + `}`, false},
+		{"derinlik başka türde", `{"key":"game","kind":"text","min_depth":"level",` + trLabel + `}`, false},
 		// closed list (ADR-0025 §3): no money, URL, file, location, person
 		{"para", `{"key":"stake","kind":"money",` + trLabel + `}`, false},
 		{"url", `{"key":"link","kind":"url",` + trLabel + `}`, false},
@@ -362,6 +377,8 @@ func TestParseComponents(t *testing.T) {
 		{"log", "bilinmeyen gizlilik", comps(`{"kind":"log","key":"catches",` + trLabel + `,"params":{` + logFields + `,"location":true,"location_default":"public"}}`), false},
 		{"log", "kayıt alanı tekrar", comps(`{"kind":"log","key":"catches",` + trLabel + `,"params":{"fields":[{"key":"species","kind":"text",` + trLabel + `},{"key":"species","kind":"text",` + trLabel + `}]}}`), false},
 		{"log", "kayıt alanı para", comps(`{"kind":"log","key":"catches",` + trLabel + `,"params":{"fields":[{"key":"price","kind":"money",` + trLabel + `}]}}`), false},
+		// A record's fields are checked without the database (ADR-0043 §1).
+		{"log", "kayıt alanı ders/konu", comps(`{"kind":"log","key":"read",` + trLabel + `,"params":{"fields":[{"key":"subject","kind":"study_tags",` + trLabel + `}]}}`), false},
 		{"log", "kişisel yasakken", `{"flags":{"personal_scope_forbidden":true},"components":[{"kind":"log","key":"donors",` + trLabel + `,"params":{` + logFields + `}}]}`, false},
 		// questions
 		{"questions", "anonim", comps(`{"kind":"questions","params":{"anonymous":true}}`), true},
@@ -503,7 +520,8 @@ func valuesDef(t *testing.T) *Definition {
 	  {"key":"langs","kind":"multi_choice","options":["tr","en","de"],"max_selected":2,"labels":{"tr":"Diller"}},
 	  {"key":"water","kind":"boolean","labels":{"tr":"Su"}},
 	  {"key":"deadline","kind":"date","labels":{"tr":"Son gün"}},
-	  {"key":"planned","kind":"duration","min":5,"max":600,"labels":{"tr":"Süre"}}
+	  {"key":"planned","kind":"duration","min":5,"max":600,"labels":{"tr":"Süre"}},
+	  {"key":"subjects","kind":"study_tags","max_selected":2,"labels":{"tr":"Dersler"}}
 	]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -523,6 +541,7 @@ func TestCleanValues(t *testing.T) {
 		"water":     json.RawMessage(`false`),
 		"deadline":  json.RawMessage(`"2026-12-31"`),
 		"planned":   json.RawMessage(`90`),
+		"subjects":  json.RawMessage(`["tyt_math", "ayt_math"]`),
 	}
 	out, err := d.CleanValues(in, true)
 	if err != nil {
@@ -531,6 +550,8 @@ func TestCleanValues(t *testing.T) {
 	want := map[string]string{
 		"game": `"Tavla"`, "notes": `"satır 1\nsatır 2"`, "elevation": `1200`, "distance": `12.35`,
 		"platform": `"xbox"`, "langs": `["tr","en"]`, "water": `false`, "deadline": `"2026-12-31"`, "planned": `90`,
+		// Study tags keep the order given; the list is checked by catalog.
+		"subjects": `["tyt_math","ayt_math"]`,
 	}
 	if len(out) != len(want) {
 		t.Fatalf("çıktı = %v", out)
@@ -590,6 +611,13 @@ func TestCleanValuesRefuses(t *testing.T) {
 		"süre kısa":            {"planned", `4`, "planned"},
 		"süre uzun":            {"planned", `601`, "planned"},
 		"süre kesirli":         {"planned", `7.5`, "planned"},
+		"ders metin":           {"subjects", `"tyt_math"`, "subjects"},
+		"ders boş":             {"subjects", `[]`, "subjects"},
+		"ders fazla":           {"subjects", `["tyt_math","ayt_math","hs_math"]`, "subjects"},
+		"ders tekrar":          {"subjects", `["tyt_math","tyt_math"]`, "subjects"},
+		"ders bozuk anahtar":   {"subjects", `["TYT Matematik"]`, "subjects"},
+		"ders sayı":            {"subjects", `[1]`, "subjects"},
+		"ders nesne":           {"subjects", `[{"subject_key":"tyt_math"}]`, "subjects"},
 		"bozuk json":           {"water", `tru`, "water"},
 		"fazladan veri":        {"water", `true false`, "water"},
 		"boş değer":            {"water", ``, "water"},
@@ -620,6 +648,34 @@ func TestCleanValuesRefuses(t *testing.T) {
 	// A value far larger than any field allows is refused unread.
 	if _, err := d.CleanValues(map[string]json.RawMessage{"game": json.RawMessage(`"` + strings.Repeat("a", maxValueBytes) + `"`)}, false); err == nil {
 		t.Fatal("dev değer kabul edildi")
+	}
+}
+
+func TestStudyKeys(t *testing.T) {
+	if keys, ok := StudyKeys(json.RawMessage(`["tyt_math","ayt_phy_vectors"]`)); !ok || !slices.Equal(keys, []string{"tyt_math", "ayt_phy_vectors"}) {
+		t.Fatalf("anahtarlar = %v, %v", keys, ok)
+	}
+	for _, bad := range []string{``, `null`, `[]`, `"tyt_math"`, `["Tyt"]`, `[1]`, `{"a":1}`} {
+		if keys, ok := StudyKeys(json.RawMessage(bad)); ok {
+			t.Errorf("%q: anahtarlar = %v", bad, keys)
+		}
+	}
+	if _, ok := StudyKeys(nil); ok {
+		t.Error("değersiz alan anahtar döndürdü")
+	}
+}
+
+// A study_tags field's defaults (ADR-0043 §1): a subject or a topic, one.
+func TestStudyFieldDefaults(t *testing.T) {
+	d, err := Parse([]byte(fieldDef(`{"key":"subject","kind":"study_tags",` + trLabel + `},{"key":"exam","kind":"study_tags","min_depth":"level","max_depth":"subject","max_selected":3,` + trLabel + `}`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := d.Fields[0]; f.MinDepth != StudyDepthSubject || f.MaxDepth != StudyDepthTopic || f.MaxSelected != 1 {
+		t.Errorf("varsayılanlar = %+v", f)
+	}
+	if f := d.Fields[1]; f.MinDepth != StudyDepthLevel || f.MaxDepth != StudyDepthSubject || f.MaxSelected != 3 {
+		t.Errorf("verilenler = %+v", f)
 	}
 }
 

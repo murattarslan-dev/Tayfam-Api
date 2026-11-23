@@ -2883,8 +2883,8 @@ func (x *AdminBlockedDomain) GetInitial() bool {
 type CatalogPreviewField struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// text, long_text, integer, decimal, choice, multi_choice, boolean, date
-	// or duration.
+	// text, long_text, integer, decimal, choice, multi_choice, boolean, date,
+	// duration or study_tags (ADR-0043).
 	Kind          string            `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	Required      bool              `protobuf:"varint,3,opt,name=required,proto3" json:"required,omitempty"`
 	Labels        map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
