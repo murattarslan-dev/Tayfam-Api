@@ -658,6 +658,10 @@ type Querier interface {
 	// kaynaktan (yazboz, eşleşme ağacı, derece) gelen kazanmalar o bileşenlerin
 	// bölümlerindedir.
 	ExportCelebrationWins(ctx context.Context, arg ExportCelebrationWinsParams) ([]ExportCelebrationWinsRow, error)
+	// Liste maddeleri (`checklist` bileşeni, issue #241; dışa aktarma #275):
+	// eklediğiniz ya da üstlendiğiniz maddeler. Maddeyi kimin eklediği ya da
+	// üstlendiği yalnızca "ben mi" olarak yer alır.
+	ExportChecklistItems(ctx context.Context, arg ExportChecklistItemsParams) ([]ExportChecklistItemsRow, error)
 	// Etkinliklere yazılan araçlar (`vehicles` bileşeni, issue #240). Bölümün adı
 	// Faz 1'den kalmadır (convoy_vehicles); bütün türlerin araçlarını taşır.
 	ExportConvoyVehicles(ctx context.Context, arg ExportConvoyVehiclesParams) ([]ExportConvoyVehiclesRow, error)
@@ -679,6 +683,12 @@ type Querier interface {
 	// işaretlediği de.
 	ExportEventQuestions(ctx context.Context, arg ExportEventQuestionsParams) ([]ExportEventQuestionsRow, error)
 	ExportEventRSVPs(ctx context.Context, arg ExportEventRSVPsParams) ([]ExportEventRSVPsRow, error)
+	// Hakem atamalarınız (issue #238; dışa aktarma #275): hangi etkinlikte,
+	// hangi bileşende ve kapsamda (masa, maç) hakemsiniz. Atayan ve diğer
+	// hakemler dışa aktarılmaz.
+	ExportEventReferees(ctx context.Context, arg ExportEventRefereesParams) ([]ExportEventRefereesRow, error)
+	// Açtığınız etkinlikler; katalog türünün alan değerleri (`fields`, issue
+	// #237) ve "Şimdi başlat"ın açık uçlu işareti (issue #263) dahil (#275).
 	ExportEvents(ctx context.Context, arg ExportEventsParams) ([]ExportEventsRow, error)
 	// Kişiye yapılan öneriler, kapatılanlar dahil. Engellemede yazılan kayıt
 	// (source = blocked) bir öneri değildir; engel zaten blocks bölümündedir.
@@ -756,6 +766,10 @@ type Querier interface {
 	// Kişinin başkasının aracına yazdığı koltuk istekleri. Aracın sahibi ve
 	// plakası başkasının verisidir, dışa aktarılmaz.
 	ExportVehicleSeatRequests(ctx context.Context, arg ExportVehicleSeatRequestsParams) ([]ExportVehicleSeatRequestsRow, error)
+	// Tayfa sözlüğüne ilk eklediğiniz değerler (issue #244; dışa aktarma #275).
+	// Değer tayfanın ortak verisidir: hesap silinince kalır, ekleyen boşalır.
+	// Birleştirildiyse hedef değerin kimliği yer alır.
+	ExportVocabulary(ctx context.Context, arg ExportVocabularyParams) ([]ExportVocabularyRow, error)
 	FilterActiveMembers(ctx context.Context, arg FilterActiveMembersParams) ([]pgtype.UUID, error)
 	// Verilen kullanıcılardan hâlâ etkin üye olanlar (tek alıcılı bildirimler
 	// ve arka plan işlerinin seçtiği alıcılar).

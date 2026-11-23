@@ -365,6 +365,54 @@ func (q *Queries) ExportCelebrationWins(ctx context.Context, arg ExportCelebrati
 	return items, nil
 }
 
+const exportChecklistItems = `-- name: ExportChecklistItems :many
+SELECT c.id AS k, jsonb_build_object(
+  'id', c.id, 'event_id', c.event_id, 'component_key', c.component_key,
+  'name', c.name, 'quantity', c.quantity,
+  'assigned_to_me', COALESCE(c.assigned_user_id = $1, false),
+  'added_by_me', COALESCE(c.created_by = $1, false),
+  'created_at', c.created_at, 'updated_at', c.updated_at
+) AS data
+FROM event_checklist_items c
+WHERE (c.assigned_user_id = $1 OR c.created_by = $1) AND c.id > $2
+ORDER BY c.id
+LIMIT $3
+`
+
+type ExportChecklistItemsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportChecklistItemsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Liste maddeleri (`checklist` bileşeni, issue #241; dışa aktarma #275):
+// eklediğiniz ya da üstlendiğiniz maddeler. Maddeyi kimin eklediği ya da
+// üstlendiği yalnızca "ben mi" olarak yer alır.
+func (q *Queries) ExportChecklistItems(ctx context.Context, arg ExportChecklistItemsParams) ([]ExportChecklistItemsRow, error) {
+	rows, err := q.db.Query(ctx, exportChecklistItems, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportChecklistItemsRow{}
+	for rows.Next() {
+		var i ExportChecklistItemsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportConvoyVehicles = `-- name: ExportConvoyVehicles :many
 SELECT v.id AS k, jsonb_build_object(
   'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
@@ -642,6 +690,52 @@ func (q *Queries) ExportEventRSVPs(ctx context.Context, arg ExportEventRSVPsPara
 	return items, nil
 }
 
+const exportEventReferees = `-- name: ExportEventReferees :many
+SELECT r.id AS k, jsonb_build_object(
+  'event_id', r.event_id, 'tayfa_id', e.tayfa_id, 'component_key', r.component_key,
+  'scope_id', r.scope_id, 'created_at', r.created_at
+) AS data
+FROM event_referees r
+JOIN events e ON e.id = r.event_id
+WHERE r.user_id = $1 AND r.id > $2
+ORDER BY r.id
+LIMIT $3
+`
+
+type ExportEventRefereesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportEventRefereesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Hakem atamalarınız (issue #238; dışa aktarma #275): hangi etkinlikte,
+// hangi bileşende ve kapsamda (masa, maç) hakemsiniz. Atayan ve diğer
+// hakemler dışa aktarılmaz.
+func (q *Queries) ExportEventReferees(ctx context.Context, arg ExportEventRefereesParams) ([]ExportEventRefereesRow, error) {
+	rows, err := q.db.Query(ctx, exportEventReferees, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportEventRefereesRow{}
+	for rows.Next() {
+		var i ExportEventRefereesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportEvents = `-- name: ExportEvents :many
 SELECT e.id AS k, jsonb_build_object(
   'id', e.id, 'tayfa_id', e.tayfa_id, 'type', e.type, 'mode', e.mode, 'title', e.title,
@@ -649,6 +743,10 @@ SELECT e.id AS k, jsonb_build_object(
   'meeting_point_name', e.meeting_point_name, 'meeting_lat', e.meeting_lat, 'meeting_lng', e.meeting_lng,
   'city', e.city, 'district', e.district, 'online_url', e.online_url, 'capacity', e.capacity,
   'status', e.status, 'cancelled_at', e.cancelled_at, 'cancel_reason', e.cancel_reason,
+  'type_version', e.type_version, 'open_ended', e.open_ended,
+  'fields', COALESCE((
+    SELECT jsonb_object_agg(f.field_key, f.value ORDER BY f.field_key)
+    FROM event_field_values f WHERE f.event_id = e.id), '{}'::jsonb),
   'created_at', e.created_at, 'updated_at', e.updated_at, 'deleted_at', e.deleted_at
 ) AS data
 FROM events e
@@ -668,6 +766,8 @@ type ExportEventsRow struct {
 	Data []byte
 }
 
+// Açtığınız etkinlikler; katalog türünün alan değerleri (`fields`, issue
+// #237) ve "Şimdi başlat"ın açık uçlu işareti (issue #263) dahil (#275).
 func (q *Queries) ExportEvents(ctx context.Context, arg ExportEventsParams) ([]ExportEventsRow, error) {
 	rows, err := q.db.Query(ctx, exportEvents, arg.UserID, arg.After, arg.N)
 	if err != nil {
@@ -1782,6 +1882,51 @@ func (q *Queries) ExportVehicleSeatRequests(ctx context.Context, arg ExportVehic
 	items := []ExportVehicleSeatRequestsRow{}
 	for rows.Next() {
 		var i ExportVehicleSeatRequestsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportVocabulary = `-- name: ExportVocabulary :many
+SELECT v.id AS k, jsonb_build_object(
+  'id', v.id, 'tayfa_id', v.tayfa_id, 'namespace', v.namespace, 'value', v.value,
+  'merged_into', v.merged_into, 'created_at', v.created_at
+) AS data
+FROM tayfa_vocabulary v
+WHERE v.created_by = $1 AND v.id > $2
+ORDER BY v.id
+LIMIT $3
+`
+
+type ExportVocabularyParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportVocabularyRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Tayfa sözlüğüne ilk eklediğiniz değerler (issue #244; dışa aktarma #275).
+// Değer tayfanın ortak verisidir: hesap silinince kalır, ekleyen boşalır.
+// Birleştirildiyse hedef değerin kimliği yer alır.
+func (q *Queries) ExportVocabulary(ctx context.Context, arg ExportVocabularyParams) ([]ExportVocabularyRow, error) {
+	rows, err := q.db.Query(ctx, exportVocabulary, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportVocabularyRow{}
+	for rows.Next() {
+		var i ExportVocabularyRow
 		if err := rows.Scan(&i.K, &i.Data); err != nil {
 			return nil, err
 		}

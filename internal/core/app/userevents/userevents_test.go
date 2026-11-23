@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	coredb "github.com/murattarslan-dev/tayfam-api/db/core"
@@ -176,56 +177,21 @@ func TestApplyRejectsMalformed(t *testing.T) {
 func (e *env) userRefs(t *testing.T, u id.ID) map[string]int {
 	t.Helper()
 	refs := map[string]int{}
-	for name, sql := range map[string]string{
-		"memberships.user_id":             `SELECT count(*) FROM memberships WHERE user_id = $1`,
-		"memberships.invited_by_user_id":  `SELECT count(*) FROM memberships WHERE invited_by_user_id = $1`,
-		"memberships.approved_by":         `SELECT count(*) FROM memberships WHERE approved_by = $1`,
-		"memberships.muted_by":            `SELECT count(*) FROM memberships WHERE muted_by = $1`,
-		"tayfas":                          `SELECT count(*) FROM tayfas WHERE $1 IN (created_by, deletion_requested_by, suspended_by, deleted_by)`,
-		"invites.created_by":              `SELECT count(*) FROM invites WHERE created_by = $1`,
-		"audit_logs.actor_id":             `SELECT count(*) FROM audit_logs WHERE actor_id = $1`,
-		"domain_events.actor_id":          `SELECT count(*) FROM domain_events WHERE actor_id = $1`,
-		"announcements":                   `SELECT count(*) FROM announcements WHERE $1 IN (author_id, deleted_by)`,
-		"events":                          `SELECT count(*) FROM events WHERE $1 IN (created_by, cancelled_by, deleted_by)`,
-		"event_series.created_by":         `SELECT count(*) FROM event_series WHERE created_by = $1`,
-		"event_rsvps":                     `SELECT count(*) FROM event_rsvps WHERE $1 IN (user_id, attendance_marked_by)`,
-		"event_vehicles.user_id":          `SELECT count(*) FROM event_vehicles WHERE user_id = $1`,
-		"event_vehicle_seat_requests":     `SELECT count(*) FROM event_vehicle_seat_requests WHERE user_id = $1`,
-		"event_referees.user_id":          `SELECT count(*) FROM event_referees WHERE user_id = $1`,
-		"event_checklist_items":           `SELECT count(*) FROM event_checklist_items WHERE $1 IN (assigned_user_id, created_by)`,
-		"event_roll_call_checkins":        `SELECT count(*) FROM event_roll_call_checkins WHERE user_id = $1`,
-		"event_log_entries":               `SELECT count(*) FROM event_log_entries WHERE $1 IN (user_id, deleted_by)`,
-		"tayfa_vocabulary.created_by":     `SELECT count(*) FROM tayfa_vocabulary WHERE created_by = $1`,
-		"event_measurements":              `SELECT count(*) FROM event_measurements WHERE $1 IN (user_id, entered_by)`,
-		"event_team_members.user_id":      `SELECT count(*) FROM event_team_members WHERE user_id = $1`,
-		"event_draw_entries.user_id":      `SELECT count(*) FROM event_draw_entries WHERE user_id = $1`,
-		"event_score_players.user_id":     `SELECT count(*) FROM event_score_players WHERE user_id = $1`,
-		"event_ranking_entries":           `SELECT count(*) FROM event_ranking_entries WHERE $1 IN (user_id, entered_by)`,
-		"event_celebrations.announced_by": `SELECT count(*) FROM event_celebrations WHERE announced_by = $1`,
-		"event_celebration_winners":       `SELECT count(*) FROM event_celebration_winners WHERE user_id = $1`,
-		"user_badges.user_id":             `SELECT count(*) FROM user_badges WHERE user_id = $1`,
-		"user_stats.user_id":              `SELECT count(*) FROM user_stats WHERE user_id = $1`,
-		"event_questions":                 `SELECT count(*) FROM event_questions WHERE $1 IN (author_id, answered_by, deleted_by)`,
-		"event_question_votes.user_id":    `SELECT count(*) FROM event_question_votes WHERE user_id = $1`,
-		"event_photos":                    `SELECT count(*) FROM event_photos WHERE $1 IN (uploader_id, deleted_by)`,
-		"user_activity_records.user_id":   `SELECT count(*) FROM user_activity_records WHERE user_id = $1`,
-		"questions":                       `SELECT count(*) FROM questions WHERE $1 IN (author_id, deleted_by)`,
-		"answers":                         `SELECT count(*) FROM answers WHERE $1 IN (author_id, deleted_by)`,
-		"answer_votes.user_id":            `SELECT count(*) FROM answer_votes WHERE user_id = $1`,
-		"polls":                           `SELECT count(*) FROM polls WHERE $1 IN (created_by, deleted_by)`,
-		"poll_votes.user_id":              `SELECT count(*) FROM poll_votes WHERE user_id = $1`,
-		"friendships":                     `SELECT count(*) FROM friendships WHERE $1 IN (user_low_id, user_high_id, requested_by)`,
-		"user_blocks":                     `SELECT count(*) FROM user_blocks WHERE $1 IN (blocker_id, blocked_id)`,
-		"friend_scores":                   `SELECT count(*) FROM friend_scores WHERE $1 IN (user_low_id, user_high_id)`,
-		"friend_suggestions":              `SELECT count(*) FROM friend_suggestions WHERE $1 IN (user_id, suggested_user_id)`,
-		"social_settings":                 `SELECT count(*) FROM social_settings WHERE user_id = $1`,
-		"user_availability":               `SELECT count(*) FROM user_availability WHERE user_id = $1`,
-		"reports":                         `SELECT count(*) FROM reports WHERE $1 IN (reporter_id, subject_user_id, handled_by, platform_handled_by)`,
-		"user_profiles (kişisel)":         `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`,
-	} {
-		if n := e.count(t, sql, u.PG()); n != 0 {
+	// Every column of the KVKK inventory (kvkk_test.go) that account
+	// deletion removes or clears (issue #275).
+	for name, c := range personColumns {
+		if c.fate == kept {
+			continue
+		}
+		table, column, _ := strings.Cut(name, ".")
+		sql := "SELECT count(*) FROM " + pgx.Identifier{table}.Sanitize() + " WHERE " + pgx.Identifier{column}.Sanitize() + " = $1"
+		if n := e.adminCount(t, sql, u.PG()); n != 0 {
 			refs[name] = n
 		}
+	}
+	// The profile stays as a tombstone with nothing personal on it.
+	if n := e.count(t, `SELECT count(*) FROM user_profiles WHERE user_id = $1 AND (display_name IS NOT NULL OR avatar_upload_id IS NOT NULL OR deleted_at IS NULL)`, u.PG()); n != 0 {
+		refs["user_profiles (kişisel)"] = n
 	}
 	return refs
 }
