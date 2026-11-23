@@ -216,10 +216,10 @@ DELETE FROM user_stats WHERE user_id = @user_id;
 -- çalışır). Yazdığı seçenekler ve kapattığı oylamalar etkinliğindir; kalır,
 -- yazan ve kapatan boşalır.
 -- name: DeleteUserEventVotes :exec
-DELETE FROM event_votes
-WHERE user_id = @user_id OR candidate_user_id = @user_id
-  OR event_vehicle_id IN (SELECT v.id FROM event_vehicles v WHERE v.user_id = @user_id)
-  OR photo_id IN (SELECT p.id FROM event_photos p WHERE p.uploader_id = @user_id);
+DELETE FROM event_votes AS ev
+WHERE ev.user_id = @user_id::uuid OR ev.candidate_user_id = @user_id::uuid
+  OR ev.event_vehicle_id IN (SELECT v.id FROM event_vehicles AS v WHERE v.user_id = @user_id::uuid)
+  OR ev.photo_id IN (SELECT p.id FROM event_photos AS p WHERE p.uploader_id = @user_id::uuid);
 
 -- name: ClearVoteOptionCreator :exec
 UPDATE event_vote_options SET created_by = NULL WHERE created_by = @user_id;
