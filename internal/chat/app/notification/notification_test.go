@@ -659,3 +659,21 @@ func TestLibraryStepNoticeRules(t *testing.T) {
 		t.Fatalf("library_due hedefi = %q", typ)
 	}
 }
+
+// The queue turn notice (issue #332) is about a library item of a tayfa
+// and has no actor.
+func TestLibraryQueueTurnNoticeRules(t *testing.T) {
+	r := Request{Event: id.New(), Tayfa: id.New(), Type: TypeLibraryQueueTurn, TargetType: TargetLibraryItem, Target: id.New(), Recipients: []id.ID{id.New()}}
+	if err := r.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for name, bad := range map[string]Request{
+		"aktörlü":       func() Request { b := r; b.Actor = id.New(); return b }(),
+		"tayfasız":      func() Request { b := r; b.Tayfa = id.ID{}; return b }(),
+		"tayfa hedefli": func() Request { b := r; b.TargetType = TargetTayfa; return b }(),
+	} {
+		if err := bad.Validate(); err == nil {
+			t.Errorf("%s kabul edildi", name)
+		}
+	}
+}

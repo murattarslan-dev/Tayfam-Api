@@ -31,8 +31,10 @@
 // The steps tell the other side (issue #321; ADR-0040 §1, revised
 // 2026-11-23), in-app and by push, by IDs only: a new request and a queue
 // place the owner, approving, declining and handing over the borrower
-// (tell). Nobody hears across a block. Taking back, a request opened from
-// the queue and requests ended by a withdrawal or a departure tell nobody.
+// (tell). Nobody hears across a block. A request opened from the queue
+// tells the one whose turn came, without an actor (lending.Promote, issue
+// #332). Taking back and requests ended by a withdrawal or a departure
+// tell nobody.
 //
 // Only the two sides see a loan: members see an item's status (available,
 // on_loan) and how many wait; the owner sees the active loan and the queue,

@@ -12954,8 +12954,14 @@ components:
             sayıldığı için `mentions` seviyesinde de gider, `none` durdurur.
             Kalem bu arada geri çekildiyse ya da üyeliğiniz bittiyse kalem
             ucu `library-item-not-found` ya da tayfa hatası döner.
+            `library_queue_turn` (#332, ADR-0040 §1): sıranız geldi, kalemin
+            önceki ödüncü bitti ve ödünç isteğiniz açıldı (sahibinin onayını
+            bekliyor). Hedef `library_item`, `actor_id` yoktur; kalemin
+            sahibiyle aranızda iki yönden engel varsa yazılmaz. Eşyayı ve
+            kişileri adlandırmaz; push gider (`push_library_queue_turn_title`
+            / `push_library_queue_turn_body`), kişisel sayılır.
             Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, now_started, library_due, library_loan_orphaned, library_loan_requested, library_queue_joined, library_loan_approved, library_loan_declined, library_loan_handed_over, unknown]
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, now_started, library_due, library_loan_orphaned, library_loan_requested, library_queue_joined, library_loan_approved, library_loan_declined, library_loan_handed_over, library_queue_turn, unknown]
         tayfa_id:
           type: string
           format: uuid

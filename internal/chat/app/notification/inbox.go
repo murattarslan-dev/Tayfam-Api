@@ -105,6 +105,10 @@ const (
 	TypeLibraryLoanApproved   = "library_loan_approved"
 	TypeLibraryLoanDeclined   = "library_loan_declined"
 	TypeLibraryLoanHandedOver = "library_loan_handed_over"
+	// TypeLibraryQueueTurn (issue #332): the recipient's turn in an item's
+	// queue came and their loan request opened. About the item
+	// (TargetLibraryItem), without an actor; pushed, personal.
+	TypeLibraryQueueTurn = "library_queue_turn"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -158,7 +162,7 @@ func targetOf(typ string) (string, bool) {
 	case TypeDataExportReady:
 		return TargetDataExport, true
 	case TypeLibraryLoanRequested, TypeLibraryQueueJoined, TypeLibraryLoanApproved, TypeLibraryLoanDeclined,
-		TypeLibraryLoanHandedOver:
+		TypeLibraryLoanHandedOver, TypeLibraryQueueTurn:
 		return TargetLibraryItem, true
 	}
 	return "", false
@@ -236,7 +240,7 @@ func (r Request) Validate() error {
 	// message notice does not say who wrote.
 	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || r.Type == TypeFriendSuggestion ||
 		r.Type == TypeSafetyAlert || r.Type == TypeBadgeEarned || r.Type == TypeLibraryDue ||
-		r.Type == TypeLibraryLoanOrphaned || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
+		r.Type == TypeLibraryLoanOrphaned || r.Type == TypeLibraryQueueTurn || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {

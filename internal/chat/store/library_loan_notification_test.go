@@ -15,7 +15,7 @@ func TestLibraryLoanStepNotificationsArePushed(t *testing.T) {
 	ctx := context.Background()
 	for _, typ := range []string{
 		"library_loan_requested", "library_queue_joined", "library_loan_approved", "library_loan_declined",
-		"library_loan_handed_over",
+		"library_loan_handed_over", "library_queue_turn",
 	} {
 		user, n, tayfa := id.New(), id.New(), id.New()
 		if _, err := pool.Exec(ctx, `INSERT INTO notifications (id, user_id, tayfa_id, actor_id, type, target_type, target_id, source_event_id)

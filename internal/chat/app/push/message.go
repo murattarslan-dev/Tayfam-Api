@@ -121,6 +121,8 @@ var personal = map[string]bool{
 	notification.TypeLibraryLoanApproved:   true,
 	notification.TypeLibraryLoanDeclined:   true,
 	notification.TypeLibraryLoanHandedOver: true,
+	// The recipient's own turn in an item's queue (issue #332).
+	notification.TypeLibraryQueueTurn: true,
 }
 
 // scope returns the preference scope of a notification, or ok false when

@@ -102,6 +102,7 @@ var notificationTypeNames = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED:    "library_loan_approved",
 	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED:    "library_loan_declined",
 	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER: "library_loan_handed_over",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN:       "library_queue_turn",
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         "tayfa_invitation",
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          "report_resolved",
 	chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST:               "dm_request",

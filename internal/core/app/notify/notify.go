@@ -109,6 +109,12 @@ const (
 	TypeLibraryLoanApproved   = "library_loan_approved"
 	TypeLibraryLoanDeclined   = "library_loan_declined"
 	TypeLibraryLoanHandedOver = "library_loan_handed_over"
+	// TypeLibraryQueueTurn (issue #332; ADR-0040 §1, revised 2026-11-23):
+	// the recipient's place in an item's queue came and their loan request
+	// opened (lending.Promote). About the item (TargetLibraryItem), no
+	// actor, never across a block with the item's owner (Unblocked).
+	// Pushed; never the item or the people.
+	TypeLibraryQueueTurn = "library_queue_turn"
 )
 
 // Target types: what the client opens (and reads from core).

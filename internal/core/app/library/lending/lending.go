@@ -58,6 +58,13 @@ func optional(v id.ID) pgtype.UUID {
 // Promote opens a loan request for the first member in item's queue and
 // takes them out of it; item must have no active loan and not be
 // withdrawn (a withdrawn item has no queue). ok is false when nobody waits.
+//
+// The member whose turn came hears it (issue #332; ADR-0040 §1, revised
+// 2026-11-23): one TypeLibraryQueueTurn about the item, without an actor
+// (nobody took this step for them), in-app and by push, by IDs only. Not
+// while they are not an active member or they and the item's owner have
+// blocked each other either way; then nobody hears about it, without a
+// trace (notify.Unblocked).
 func Promote(ctx context.Context, q *store.Queries, item id.ID, now time.Time) (borrower id.ID, ok bool, err error) {
 	b, err := q.PromoteLibraryQueue(ctx, store.PromoteLibraryQueueParams{ItemID: item.PG(), ID: id.New().PG(), Now: ts(now)})
 	switch {
@@ -69,7 +76,32 @@ func Promote(ctx context.Context, q *store.Queries, item id.ID, now time.Time) (
 	if !b.Valid {
 		return id.ID{}, false, nil
 	}
-	return id.ID(b.Bytes), true, nil
+	borrower = id.ID(b.Bytes)
+	if err = queueTurn(ctx, q, item, borrower); err != nil {
+		return id.ID{}, false, err
+	}
+	return borrower, true, nil
+}
+
+// queueTurn writes the TypeLibraryQueueTurn notification for borrower,
+// whose loan request of item was just opened from the queue.
+func queueTurn(ctx context.Context, q *store.Queries, item, borrower id.ID) error {
+	it, err := q.GetLibraryItemParties(ctx, item.PG())
+	if err != nil {
+		return fmt.Errorf("sıra bildirimi: %w", err)
+	}
+	tayfa := id.ID(it.TayfaID.Bytes)
+	var owner id.ID // zero: no owner left to be blocked with
+	if it.OwnerID.Valid {
+		owner = id.ID(it.OwnerID.Bytes)
+	}
+	to, err := notify.Unblocked(ctx, q, tayfa, []id.ID{borrower}, owner)
+	if err != nil {
+		return err
+	}
+	return notify.Write(ctx, q, notify.Request{
+		Type: notify.TypeLibraryQueueTurn, Tayfa: tayfa, TargetType: notify.TargetLibraryItem, Target: item,
+	}, to)
 }
 
 // Withdraw withdraws the tayfa's item: its note and photo go (the photo

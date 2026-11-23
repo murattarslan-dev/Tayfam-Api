@@ -113,7 +113,7 @@ henüz yoktur.
   kütüphanenin ödünç adımları `library_loan_requested`,
   `library_queue_joined`, `library_loan_approved`, `library_loan_declined`,
   `library_loan_handed_over` (ADR-0040 §1, #321; alıcının kendi kalemi ya
-  da kendi isteği).
+  da kendi isteği) ve sıranın gelmesi `library_queue_turn` (#332).
 - `hike_overdue` hiçbir tercihle engellenemez (v14).
 - `now_started` (ADR-0038 §4, #265) önce tayfanın tercihinden, sonra
   tayfanın "Şimdi bildirimleri" tercihinden (`tayfa_now`, yalnızca `all`
