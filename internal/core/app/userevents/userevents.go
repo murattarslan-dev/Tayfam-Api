@@ -289,6 +289,9 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			return fmt.Errorf("etkinlikler: %w", err)
 		}
 		for _, clear := range []func(context.Context, pgtype.UUID) error{
+			// Oylama (issue #254): before the vehicles and photos go, so
+			// that the votes for them go too.
+			q.DeleteUserEventVotes, q.ClearVoteOptionCreator, q.ClearVoteCloser,
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
 			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserVehicles, q.DeleteUserSeatRequests, q.ClearChecklistItemUserFields,

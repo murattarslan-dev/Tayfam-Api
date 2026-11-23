@@ -1,7 +1,8 @@
 # ADR-0037: Katalog ayrıntıları ve şema ekleri (v3)
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-18, sohbette)
-- **Tarih:** 2026-11-18
+- **Tarih:** 2026-11-18 (revizyon 2026-11-23: §3 `vote` kaynakları, §1
+  sohbet kanalı istisnası)
 - **Karar veren:** Murat Arslan (2026-11-18 katalog oturumu). Ürün kararları
   Notion "Faz 3 — Katalog ayrıntıları ve şema ekleri (2026-11-18)"
   sayfasındadır; bu ADR onların mimariye taşınmasıdır.
@@ -59,6 +60,10 @@ modelin ifade edemediği ihtiyaçlar çıktı:
     Kontrol sunucudadır; istemcide atlanamaz. Bayrağı taşıyan tür:
     Ziyaret.
 - `personal_scope_forbidden` (ADR-0025 §4) tür bayrakları arasına taşınır.
+- **İstisna, etkinlik sohbet kanalı** (platform sahibi, 2026-11-23, #301):
+  `sensitive_attendance` türünde de etkinliğin sohbet kanalı ve üye
+  listesi olduğu gibi kalır. Kanala katılan kendi isteğiyle görünür kabul
+  edilir; chat'te kod değişikliği yoktur, bildirim alıcıları etkilenmez.
 
 ### 2. Tanım şeması ekleri
 
@@ -92,7 +97,7 @@ ADR-0025 §3'teki şemaya, bilinen anahtar listesine eklenerek:
 | `scoreboard` | **Masalar** ve **ön ayarlar** (§5), sonuç modu `wdl`, **misafir oyuncu** (§6). |
 | `bracket` | İsviçre eşitlik bozma sırası sabit: puan → aralarındaki maç → Buchholz. Rating/ELO yok. |
 | `vehicles` | `seats: true`: araç sahibi boş koltuk sayısını (0–8) yazar; katılımcı bir araca yer ister, araç sahibi onaylar. Masraf ya da para alanı yok. |
-| `vote` | Seçenek kaynağı: `free`, `participants`, `vehicles`, `album`, `route_stops`. |
+| `vote` | Seçenek kaynağı: `free`, `participants`, `vehicles`, `album`. (`route_stops` platform sahibinin 2026-11-23 kararıyla kaldırıldı: mola yeri gibi oylamalar serbest seçenekle yapılır, rota bileşeni değişmez; #254.) `participants` kaynağı `sensitive_attendance` türünde kullanılamaz (seçenekler kimin geldiğini gösterirdi). |
 | `timer` (yeni) | Modlar `countdown` / `stopwatch` / `chess_clock` (`organizer_choice` olabilir), `presets` (saniye, en fazla 6). **Sunucuda veri yok**: tablo, uç ve olay yoktur; yalnızca tanımda yer alır ki istemci çizsin. |
 | `pool_link` (yeni) | Etkinliği tayfanın soru havuzundaki sorulara bağlar (en fazla 50). Soru havuzu modülü kapalıysa bileşen gösterilmez. Modülün ADR'siyle birlikte gelir. |
 
@@ -103,6 +108,20 @@ Bileşen listesi (20): `route`, `meeting_point`, `schedule`, `checklist`,
 
 Yeni birimler: `night`, `nm` (deniz mili), `box` (koli), `section`
 (bölüm), `net`.
+
+Uygulama notu (#254, `vote`): kişi başına bileşen başına bir oy, yeni oy
+öncekinin yerine geçer. Oy veren `going` ya da katılımı doğrulanmış etkin
+üyedir; kendine, kendi aracına ve kendi fotoğrafına oy veremez. Yalnızca
+serbest seçenekler saklanır (organizatör yazar, en fazla 20); diğer
+kaynakların seçenekleri her okumada kaynaktan gelir, kaynaktan çıkan
+seçeneğe (gelmekten vazgeçen katılımcı) verilen oy sayılmaz, silinen araç
+ya da fotoğraf oylarıyla gider. Oy gizlidir: kimin neye oy verdiği hiçbir
+yanıtta, denetim kaydında ve olayda yer almaz. Seçenek başına sayılar ve
+kazananlar organizatör oylamayı kapatınca (geri alınmaz) ya da bileşen
+donunca görünür; kutlama yalnızca kapatılmış oylamanın kazananını okur
+(kazanan seçeneğin arkasındaki kişi: katılımcı, aracın sahibi, fotoğrafı
+yükleyen; serbest seçenekte kişi yoktur ve ana sayfa şampiyon kartına
+girmez).
 
 ### 4. Tayfa sözlüğü
 

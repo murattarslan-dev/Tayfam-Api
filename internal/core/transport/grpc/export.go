@@ -74,6 +74,7 @@ var exportSections = map[string]corev1.CoreExportSection{
 	export.SectionEventReferees:       corev1.CoreExportSection_CORE_EXPORT_SECTION_EVENT_REFEREES,
 	export.SectionChecklistItems:      corev1.CoreExportSection_CORE_EXPORT_SECTION_CHECKLIST_ITEMS,
 	export.SectionVocabulary:          corev1.CoreExportSection_CORE_EXPORT_SECTION_VOCABULARY,
+	export.SectionEventVotes:          corev1.CoreExportSection_CORE_EXPORT_SECTION_EVENT_VOTES,
 }
 
 // ExportMyData implements corev1.ExportServiceServer.

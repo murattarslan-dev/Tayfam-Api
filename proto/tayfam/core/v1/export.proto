@@ -159,6 +159,11 @@ enum CoreExportSection {
   // The values the caller first added to a tayfa's vocabulary (issue #244;
   // exported since #275).
   CORE_EXPORT_SECTION_VOCABULARY = 44;
+  // The caller's votes (the vote component, issue #254): event, component,
+  // the kind of target, a free option's label and times. Who, which vehicle
+  // or which photo the caller voted for (other people's data), other
+  // people's votes and the options the caller wrote are not exported.
+  CORE_EXPORT_SECTION_EVENT_VOTES = 45;
 }
 
 message ExportMyDataRequest {}

@@ -270,6 +270,14 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_NOT_PARTICIPANT, true
 	case errors.Is(err, apperr.ErrRankingFromMeasure):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_FROM_MEASURE, true
+	case errors.Is(err, apperr.ErrVoteClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_CLOSED, true
+	case errors.Is(err, apperr.ErrVoteOwnOption):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_OWN_OPTION, true
+	case errors.Is(err, apperr.ErrVoteOptionsFixed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_OPTIONS_FIXED, true
+	case errors.Is(err, apperr.ErrVoteOptionExists):
+		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_VOTE_OPTION_EXISTS, true
 	case errors.Is(err, apperr.ErrCelebrationNotStarted):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CELEBRATION_NOT_STARTED, true
 	case errors.Is(err, apperr.ErrCelebrationNoWinner):

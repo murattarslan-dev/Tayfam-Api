@@ -91,6 +91,10 @@ var personColumns = map[string]personColumn{
 	"event_team_members.user_id":             {removed, export.SectionTeamMemberships, ""},
 	"event_vehicle_seat_requests.user_id":    {removed, export.SectionVehicleSeatRequests, ""},
 	"event_vehicles.user_id":                 {removed, export.SectionConvoyVehicles, ""},
+	"event_vote_closures.closed_by":          {cleared, "", noteModeration},
+	"event_vote_options.created_by":          {cleared, "", "oylamanın seçeneği etkinliğin planıdır; organizatör işlemi"},
+	"event_votes.candidate_user_id":          {removed, "", noteOthers + " (size verilen oy)"},
+	"event_votes.user_id":                    {removed, export.SectionEventVotes, ""},
 	"events.cancelled_by":                    {cleared, "", noteModeration},
 	"events.created_by":                      {cleared, export.SectionEvents, ""},
 	"events.deleted_by":                      {cleared, "", noteModeration},
@@ -259,6 +263,13 @@ INSERT INTO event_questions (id, event_id, component_key, author_id, anonymous, 
   ('%[11]s', '%[4]s', 'questions', '%[2]s', false, 'Onun sorusu?', gen_random_uuid(), now(), '%[1]s');
 INSERT INTO event_question_votes (question_id, event_id, component_key, user_id) VALUES
   ('%[11]s', '%[4]s', 'questions', '%[1]s'), ('%[10]s', '%[4]s', 'questions', '%[2]s');
+INSERT INTO event_vote_options (id, event_id, component_key, label, label_normalized, position, created_by) VALUES
+  (gen_random_uuid(), '%[4]s', 'vote', 'Suç ve Ceza', 'suç ve ceza', 1, '%[1]s');
+INSERT INTO event_votes (id, event_id, component_key, user_id, option_id, created_at, updated_at)
+  SELECT gen_random_uuid(), '%[4]s', 'vote', '%[1]s', o.id, now(), now() FROM event_vote_options o WHERE o.event_id = '%[4]s';
+INSERT INTO event_votes (id, event_id, component_key, user_id, candidate_user_id, created_at, updated_at) VALUES
+  (gen_random_uuid(), '%[4]s', 'mvp', '%[2]s', '%[1]s', now(), now());
+INSERT INTO event_vote_closures (event_id, component_key, closed_by, closed_at) VALUES ('%[4]s', 'vote', '%[1]s', now());
 INSERT INTO user_badges (id, user_id, badge_key, period_key, earned_at) VALUES
   (gen_random_uuid(), '%[1]s', 'first_event', 'all', now()), (gen_random_uuid(), '%[2]s', 'first_event', 'all', now());
 INSERT INTO user_stats (id, user_id, tayfa_id, year, metric_key, source, value, event_count, computed_at) VALUES
@@ -337,6 +348,7 @@ func TestV3PersonalDataExportAndDeletion(t *testing.T) {
 		export.SectionMaterials:        1,
 		export.SectionGarageVehicles:   1,
 		export.SectionGarageVisibility: 1,
+		export.SectionEventVotes:       1, // the own vote; the vote for the person is the voter's
 	} {
 		if len(got[sec]) != want {
 			t.Errorf("dışa aktarma %s: %d kayıt, %d bekleniyordu", sec, len(got[sec]), want)
@@ -359,6 +371,9 @@ func TestV3PersonalDataExportAndDeletion(t *testing.T) {
 	}
 	if v := got[export.SectionVocabulary]; len(v) == 1 && v[0]["value"] != "Levrek" {
 		t.Errorf("sözlük: %v", v)
+	}
+	if v := got[export.SectionEventVotes]; len(v) == 1 && (v[0]["target"] != "option" || v[0]["option_label"] != "Suç ve Ceza") {
+		t.Errorf("oy: %v", v)
 	}
 	for sec, recs := range got {
 		for _, r := range recs {
@@ -392,6 +407,9 @@ func TestV3PersonalDataExportAndDeletion(t *testing.T) {
 		"materyal kalır":                 `SELECT count(*) FROM materials WHERE title = 'Ders notu' AND author_id IS NULL`,
 		"başkasının garajı kalır":        `SELECT count(*) FROM garage_vehicles WHERE owner_id = $3`,
 		"tayfanın sayacı kalır":          `SELECT count(*) FROM now_notification_counters WHERE scope = 'tayfa'`,
+		"oylama seçeneği kalır":          `SELECT count(*) FROM event_vote_options WHERE event_id = $1 AND created_by IS NULL`,
+		"oylama kapanışı kalır":          `SELECT count(*) FROM event_vote_closures WHERE event_id = $1 AND closed_by IS NULL`,
+		"kişiye verilen oy gider":        `SELECT (count(*) = 0)::int FROM event_votes WHERE event_id = $1`,
 		"başkasının rozeti kalır":        `SELECT count(*) FROM user_badges WHERE user_id = $3`,
 		"başkasının istatistiği kalır":   `SELECT count(*) FROM user_stats WHERE user_id = $3`,
 		"başkasının etkinliği kalır":     `SELECT count(*) FROM events WHERE id = $1`,

@@ -580,3 +580,24 @@ FROM tayfa_vocabulary v
 WHERE v.created_by = @user_id AND v.id > @after
 ORDER BY v.id
 LIMIT @n;
+
+-- Oylarınız (`vote` bileşeni, issue #254): etkinlik, bileşen, hedefin türü,
+-- serbest seçenekte seçeneğin etiketi ve zamanlar. Oy verdiğiniz kişinin,
+-- aracın ya da fotoğrafın kimliği (başkasının verisi), başkalarının oyları ve
+-- yazdığınız seçenekler (etkinliğin planı) dışa aktarılmaz.
+-- name: ExportEventVotes :many
+SELECT v.id AS k, jsonb_build_object(
+  'event_id', v.event_id, 'component_key', v.component_key,
+  'target', CASE
+    WHEN v.option_id IS NOT NULL THEN 'option'
+    WHEN v.candidate_user_id IS NOT NULL THEN 'participant'
+    WHEN v.event_vehicle_id IS NOT NULL THEN 'vehicle'
+    ELSE 'photo' END,
+  'option_label', o.label,
+  'created_at', v.created_at, 'updated_at', v.updated_at
+) AS data
+FROM event_votes AS v
+LEFT JOIN event_vote_options AS o ON o.id = v.option_id
+WHERE v.user_id = @user_id AND v.id > @after
+ORDER BY v.id
+LIMIT @n;

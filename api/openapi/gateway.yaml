@@ -4240,12 +4240,195 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: oylama (`vote`; core VoteComponentService, #254, ADR-0025 §4, §5, ADR-0037 §3) ---
+  # Etkinliğe bağlı oylama; kişi başına bir oy. Seçenekler tanımdaki
+  # `source`'a göre: `free` organizatörün yazdığı seçenekler (en fazla 20),
+  # `participants` etkinliğin katılımcıları (`going` ya da katılımı
+  # doğrulanmış etkin üyeler; seçeneğin `id`'si kişinin kimliği), `vehicles`
+  # türün araçlar bileşenine yazılmış araçlar (plaka yok; araçlar bileşeni
+  # kapalıysa seçenek yok), `album` etkinlik albümünün fotoğrafları
+  # (`route_stops` 2026-11-23'te kaldırıldı). Oy gizlidir: kimin neye oy
+  # verdiği hiçbir yanıtta (organizatöre, moderatöre ve yöneticiye de) yer
+  # almaz; yalnızca kendi oyunuz (`caller_option_id`) döner. Seçenek başına
+  # oy sayısı ve kazananlar oylama kapatılınca ya da bileşen donunca
+  # (bitişten 7 gün sonra) görünür (`results_visible`); o zamana kadar
+  # yalnızca oy veren sayısı görünür. Kaynaktan çıkan seçeneğe (gelmekten
+  # vazgeçen katılımcı) verilen oy sayılmaz; silinen araç ya da fotoğraf
+  # oylarıyla gider. Kapatılmış oylama kutlama bileşeninin kaynağı olabilir.
+  # Değişiklikler canlı güncellenir (`event.component_changed`).
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vote:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventVote
+      summary: Etkinliğin oylaması
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Bileşen uçlarının ortak kuralları
+        geçerlidir (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Oylama
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: castEventVote
+      summary: Oy verir ya da oyunuzu değiştirir
+      description: |
+        Etkinliğe `going` cevabı vermiş ya da katılımı doğrulanmış olmalısınız
+        (`event-not-going`); susturulmuş üye oy veremez. Kişi başına bir oy;
+        yeni oy öncekinin yerine geçer, aynı oyu yeniden vermek bir şey
+        değiştirmez. Kendinize, kendi aracınıza ya da kendi fotoğrafınıza oy
+        veremezsiniz (`vote-own-option`). Oylamanın şu anki seçeneği
+        olmayan `option_id` `event-item-not-found`. Kapatılmış oylamada
+        `vote-closed`; bitişten 7 gün sonra donar (`component-frozen`); iptal
+        edilmiş etkinlikte oy verilmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventVoteCastRequest" }
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: withdrawEventVote
+      summary: Oyunuzu geri alır
+      description: |
+        Oyu olmayan için hata değildir. Oylama açıkken ve yazma penceresi
+        içinde (`vote-closed`, `component-frozen`); susturulmuş üye geri
+        alamaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vote/options:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: addEventVoteOption
+      summary: Serbest seçenek ekler (organizatör, moderatör, yönetici)
+      description: |
+        Yalnızca `free` kaynaklı oylamada (`vote-options-fixed`) ve oylama
+        açıkken (`vote-closed`). Etiket kırpılır, iç boşlukları teke
+        indirilir; 1–100 karakter, denetim ve biçim karakteri olmadan
+        (`invalid-request`, alan `label`). Aynı etiket (Türkçe küçük harfle)
+        `vote-option-exists`; en fazla 20 seçenek (`event-limit`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventVoteOptionRequest" }
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vote/options/{option_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/OptionID"
+    delete:
+      operationId: removeEventVoteOption
+      summary: Serbest seçeneği ve ona verilen oyları kaldırır (organizatör, moderatör, yönetici)
+      description: |
+        Yalnızca `free` kaynaklı oylamada (`vote-options-fixed`) ve oylama
+        açıkken (`vote-closed`). Bilinmeyen seçenek `event-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vote/close:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: closeEventVote
+      summary: Oylamayı kapatır (organizatör, moderatör, yönetici)
+      description: |
+        Kapanış geri alınmaz: oy ve seçenek değişikliği biter, seçenek başına
+        oy sayıları ve kazananlar herkese görünür. Yazma penceresi içinde
+        (`component-frozen`). Kapalı oylamayı yeniden kapatmak bir şey
+        değiştirmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Etkinlik bileşenleri: kutlama (`celebration`; core CelebrationComponentService, #255, ADR-0025 §4, §5) ---
   # Etkinliğin kazanan ekranı ve tayfaya kazananın ilan edildiği bildirimi.
-  # Tanımda `source` (aynı türdeki yazboz, eşleşme ağacı ya da derece
+  # Tanımda `source` (aynı türdeki yazboz, eşleşme ağacı, derece ya da oylama
   # bileşeninin anahtarı) varsa kazananlar her okumada kaynağın kaydedilmiş
   # sonucundan hesaplanır: biten her masanın kazananları, sonuçlanan eşleşme
-  # ağacının şampiyonları, derecenin birinci sırası; ayrı kayıt yoktur ve
+  # ağacının şampiyonları, derecenin birinci sırası, kapatılmış oylamanın en
+  # çok oy alan seçenekleri (#254); ayrı kayıt yoktur ve
   # kaynaktaki düzeltme hemen görünür. `source` yoksa organizatör ilan
   # ederken etkinliğin katılımcılarından 1–10 kazanan seçer. Kazanan kişi,
   # takım ya da misafir oyuncu olabilir. Hassas ölçümden hesaplanan derecenin
@@ -9355,6 +9538,11 @@ components:
         - ranking-not-started
         - ranking-not-participant
         - ranking-from-measure
+        # core: oylama bileşeni (#254, ADR-0037 §3)
+        - vote-closed
+        - vote-own-option
+        - vote-options-fixed
+        - vote-option-exists
         # core: kutlama bileşeni (#255, ADR-0025 §4)
         - celebration-not-started
         - celebration-no-winner
@@ -11347,6 +11535,65 @@ components:
           exclusiveMinimum: 0
           maximum: 1000000
           description: "`duration` ölçütünde saniye (iki basamağa yuvarlanır, en çok 1000000), `rank` ölçütünde 1–10000 arası tam sayı."
+    EventVote:
+      type: object
+      required: [source, options, voter_count, closed, results_visible, caller_can_vote, caller_can_edit_options, caller_can_close, max_options]
+      description: Bir etkinliğin bir oylama bileşeni, isteği yapanın gördüğü haliyle (#254). Kimin neye oy verdiği hiçbir zaman yer almaz.
+      properties:
+        source:
+          type: string
+          enum: [free, participants, vehicles, album]
+          description: Seçeneklerin kaynağı (tanımdaki `source`).
+        options:
+          type: array
+          description: "`free` yazılış sırasıyla, `participants` kimlik sırasıyla, `vehicles` yazılış sırasıyla, `album` albüm sırasıyla. Kaynakta seçenek yoksa boş."
+          items: { $ref: "#/components/schemas/EventVoteOption" }
+        voter_count: { type: integer, minimum: 0, description: "Seçeneklerden birine oy veren kişi sayısı; her zaman görünür." }
+        caller_option_id: { type: string, format: uuid, description: "Kendi oyunuz; oy vermediyseniz (ya da seçeneği artık yoksa) yoktur." }
+        closed: { type: boolean, description: Organizatör oylamayı kapattı. }
+        closed_at: { type: string, format: date-time, description: Yalnızca kapatıldıysa. }
+        results_visible: { type: boolean, description: "Seçenek başına oy sayıları ve kazananlar görünür: oylama kapatıldı ya da bileşen dondu." }
+        caller_can_vote:
+          type: boolean
+          description: "Şu an oy verebilirsiniz (`going` ya da katılımı doğrulanmış, susturulmamış; oylama açık, etkinlik iptal değil, donmamış, tayfa salt okunur değil)."
+        caller_can_edit_options:
+          type: boolean
+          description: "Şu an seçenek ekleyip kaldırabilirsiniz (yalnızca `free`; organizatör, moderatör, yönetici; oylama açık)."
+        caller_can_close: { type: boolean, description: "Şu an oylamayı kapatabilirsiniz (organizatör, moderatör, yönetici; oylama açık)." }
+        max_options: { type: integer, minimum: 1, description: "Serbest oylamada en fazla seçenek (20)." }
+    EventVoteOption:
+      type: object
+      required: [id, vote_count, winner]
+      description: "Bir oylama seçeneği. Kaynağa göre: `free` `label`; `participants` `user_id` (kişi, `id` ile aynı); `vehicles` `vehicle` ve `user_id` (aracın sahibi); `album` `upload_id` ve `user_id` (fotoğrafı yükleyen)."
+      properties:
+        id: { type: string, format: uuid, description: "Oy verirken gönderilen değer: serbest seçeneğin, katılımcının, etkinlik aracının ya da albüm fotoğrafının kimliği." }
+        label: { type: string, minLength: 1, maxLength: 100, description: Yalnızca serbest seçenekte. }
+        user_id: { type: string, format: uuid, description: "Seçeneğin arkasındaki kişi; serbest seçenekte yoktur." }
+        vehicle: { $ref: "#/components/schemas/EventVoteVehicle" }
+        upload_id: { type: string, format: uuid, description: "Yalnızca albümde; fotoğrafın dosyası (linkleri `POST /v1/media/urls`)." }
+        vote_count: { type: integer, minimum: 0, description: "Seçeneğe verilen oy; `results_visible` değilse 0." }
+        winner: { type: boolean, description: "En çok oy alanlardan (en az bir oy); yalnızca `results_visible` iken." }
+    EventVoteVehicle:
+      type: object
+      required: [make]
+      description: Araç kaynaklı seçeneğin aracı; plaka yoktur.
+      properties:
+        make: { type: string }
+        model: { type: string, description: Verilmemişse yoktur. }
+        model_year: { type: integer, description: Verilmemişse yoktur. }
+        color: { type: string, description: Verilmemişse yoktur. }
+    EventVoteCastRequest:
+      type: object
+      required: [option_id]
+      additionalProperties: false
+      properties:
+        option_id: { type: string, format: uuid, description: "Oylamanın bir seçeneğinin `id`'si." }
+    EventVoteOptionRequest:
+      type: object
+      required: [label]
+      additionalProperties: false
+      properties:
+        label: { type: string, minLength: 1, maxLength: 656, description: "Seçenek; kırpıldıktan ve iç boşluklar teke indirildikten sonra 1–100 karakter." }
     EventCelebration:
       type: object
       required: [winners, hidden, announced, caller_can_announce]
@@ -11369,12 +11616,13 @@ components:
           description: Şu an ilan edebilirsiniz (organizatör, moderatör, yönetici; etkinlik başlamış, iptal değil, donmamış, tayfa salt okunur değil). Kazanan olup olmadığı `winners`'tadır.
     EventCelebrationWinner:
       type: object
-      description: "Bir kazanan: `user_id`, `team_id` ve `guest_id`'den tam olarak biri vardır."
+      description: "Bir kazanan: `user_id`, `team_id` ve `guest_id`'den tam olarak biri vardır. Oylama kaynağında `vote_option_id` vardır; `user_id` seçeneğin arkasındaki kişidir (katılımcı, aracın sahibi, fotoğrafı yükleyen), serbest seçenekte yoktur."
       properties:
         user_id: { type: string, format: uuid }
         team_id: { type: string, format: uuid, description: Kaynağın oturttuğu takım bileşenindeki takım. }
         guest_id: { type: string, format: uuid, description: Etkinliğin misafir oyuncusu; takma adı etkinliğin misafirlerinden okunur. }
         table_id: { type: string, format: uuid, description: "Yalnızca yazboz kaynağında; kazanılan masa." }
+        vote_option_id: { type: string, format: uuid, description: "Yalnızca oylama kaynağında; kazanan seçeneğin `id`'si (`EventVoteOption`)." }
     EventCelebrationRequest:
       type: object
       additionalProperties: false
@@ -14488,7 +14736,7 @@ components:
         | `bracket` | `format` (`elimination`, `league`, `swiss`; seçimli), `best_of` (1, 3, 5; seçimli) |
         | `scoreboard` | `side` (`player`, `team`), `tables` (boolean), `presets` (ön ayar anahtarları), `rounds` (`round`, `single`, `first_to`; seçimli), `target` (1–100000), `winner` (`high`, `low`, `first`; seçimli), `result` (`points`, `wdl`), `best_of` (1, 3, 5; seçimli), `guests` (boolean) |
         | `ranking` | `source` (kişisel bir ölçümün `key`'i) ya da `metric` (`duration`, `rank`); biri zorunlu, ikisi birlikte olmaz; `direction` (`asc`, `desc`) |
-        | `vote` | `source` (`free`, `participants`, `vehicles`, `album`, `route_stops`; zorunlu) |
+        | `vote` | `source` (`free`, `participants`, `vehicles`, `album`; zorunlu). `vehicles` türde `vehicles` bileşeni ister; `participants` hassas katılımlı (`sensitive_attendance`) türde olmaz |
         | `celebration` | `source` (bir `scoreboard`, `bracket`, `ranking` ya da `vote` bileşeninin `key`'i) |
         | `measure` | `unit`, `scope` (`personal`, `total`), `entered_by` (`self`, `organizer`) zorunlu; `min`, `max`, `decimals` (0–3), `showcase`, `sensitive` (boolean), `prefill_from` (bir alanın `key`'i) |
         | `goal` | `measure` (bir ölçümün `key`'i; zorunlu), `default_target` |

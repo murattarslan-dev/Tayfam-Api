@@ -34,6 +34,8 @@ type celebrationWinnerJSON struct {
 	TeamID  string `json:"team_id,omitempty"`
 	GuestID string `json:"guest_id,omitempty"`
 	TableID string `json:"table_id,omitempty"`
+	// VoteOptionID is a vote source's winning option (issue #254).
+	VoteOptionID string `json:"vote_option_id,omitempty"`
 }
 
 type eventCelebrationJSON struct {
@@ -58,6 +60,7 @@ func eventCelebrationFrom(c *corev1.EventCelebration) eventCelebrationJSON {
 	for _, w := range c.GetWinners() {
 		out.Winners = append(out.Winners, celebrationWinnerJSON{
 			UserID: w.GetUserId(), TeamID: w.GetTeamId(), GuestID: w.GetGuestId(), TableID: w.GetTableId(),
+			VoteOptionID: w.GetVoteOptionId(),
 		})
 	}
 	return out

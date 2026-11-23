@@ -142,6 +142,11 @@ var wantAppPrivileges = map[string]string{
 	// replaced, never changed.
 	"event_celebrations":        "INSERT,SELECT,UPDATE(announced_by,updated_at)",
 	"event_celebration_winners": "DELETE,INSERT,SELECT",
+	// Issue #254: an option never moves or changes its label; a vote
+	// changes only its target and time; a closure is never deleted.
+	"event_vote_options":  "DELETE,INSERT,SELECT,UPDATE(created_by)",
+	"event_votes":         "DELETE,INSERT,SELECT,UPDATE(candidate_user_id,event_vehicle_id,option_id,photo_id,updated_at)",
+	"event_vote_closures": "INSERT,SELECT,UPDATE(closed_by)",
 	// Issue #256: a question never moves to another event, component or
 	// author, and its text and anonymity do not change; only the answered
 	// mark and the soft delete are written. A vote is added or deleted.

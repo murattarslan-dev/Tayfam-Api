@@ -31,13 +31,14 @@ const (
 // "celebration", issue #255; ADR-0025 §4, §5): the winner's screen of an
 // event and the tayfa's notice that the winner was announced.
 //
-// With source (the key of a scoreboard, bracket or ranking component of the
-// same type version) the winners are read from the source's stored result
-// whenever the celebration is read: the winning seats of every finished
-// table, the bracket's champions once it finished, the ranking's first
-// place. Without source the organizer names one to ten winners from the
-// event's participants when announcing. A winner is a person, a team or a
-// guest player. A ranking of a sensitive measure, and every celebration of
+// With source (the key of a scoreboard, bracket, ranking or vote component
+// of the same type version) the winners are read from the source's stored
+// result whenever the celebration is read: the winning seats of every
+// finished table, the bracket's champions once it finished, the ranking's
+// first place, the closed vote's most voted options. Without source the
+// organizer names one to ten winners from the event's participants when
+// announcing. A winner is a person, a team, a guest player or a vote's
+// option. A ranking of a sensitive measure, and every celebration of
 // a type whose attendance is sensitive, has no winner for anyone.
 //
 // Only gateway calls it with the user's access token. Authentication,
@@ -98,13 +99,14 @@ func (c *celebrationComponentServiceClient) AnnounceCelebration(ctx context.Cont
 // "celebration", issue #255; ADR-0025 §4, §5): the winner's screen of an
 // event and the tayfa's notice that the winner was announced.
 //
-// With source (the key of a scoreboard, bracket or ranking component of the
-// same type version) the winners are read from the source's stored result
-// whenever the celebration is read: the winning seats of every finished
-// table, the bracket's champions once it finished, the ranking's first
-// place. Without source the organizer names one to ten winners from the
-// event's participants when announcing. A winner is a person, a team or a
-// guest player. A ranking of a sensitive measure, and every celebration of
+// With source (the key of a scoreboard, bracket, ranking or vote component
+// of the same type version) the winners are read from the source's stored
+// result whenever the celebration is read: the winning seats of every
+// finished table, the bracket's champions once it finished, the ranking's
+// first place, the closed vote's most voted options. Without source the
+// organizer names one to ten winners from the event's participants when
+// announcing. A winner is a person, a team, a guest player or a vote's
+// option. A ranking of a sensitive measure, and every celebration of
 // a type whose attendance is sensitive, has no winner for anyone.
 //
 // Only gateway calls it with the user's access token. Authentication,

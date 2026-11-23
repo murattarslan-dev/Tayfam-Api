@@ -313,9 +313,11 @@ var (
 	ScoreResults    = []string{"points", "wdl"}
 	RankingMetrics  = []string{"duration", "rank"}
 	Directions      = []string{"asc", "desc"}
-	VoteSources     = []string{"free", "participants", "vehicles", "album", "route_stops"}
-	MeasureScopes   = []string{"personal", "total"}
-	EnteredBy       = []string{"self", "organizer"}
+	// VoteSources are where a vote's options come from (ADR-0037 §3; the
+	// platform owner dropped route_stops on 2026-11-23, issue #254).
+	VoteSources   = []string{"free", "participants", "vehicles", "album"}
+	MeasureScopes = []string{"personal", "total"}
+	EnteredBy     = []string{"self", "organizer"}
 	// LocationLevels are who sees a log record's location (ADR-0025 §4).
 	LocationLevels = []string{"self", "participants", "tayfa"}
 	TimerModes     = []string{"countdown", "stopwatch", "chess_clock"}
@@ -1078,9 +1080,16 @@ func (p *parser) crossCheck(d *Definition) {
 				}
 			}
 		case CompVote:
-			need := map[string]string{"vehicles": CompVehicles, "route_stops": CompRoute}[c.Params["source"].String()]
-			if need != "" && !slices.ContainsFunc(d.Components, func(o Component) bool { return o.Kind == need }) {
-				p.fail(join(pp, "source"), "kaynak bileşen bu türde yok")
+			switch c.Params["source"].String() {
+			case "vehicles":
+				if !slices.ContainsFunc(d.Components, func(o Component) bool { return o.Kind == CompVehicles }) {
+					p.fail(join(pp, "source"), "kaynak bileşen bu türde yok")
+				}
+			case "participants":
+				// The options would list who came (issue #254; ADR-0037 §1).
+				if d.Flags.SensitiveAttendance {
+					p.fail(join(pp, "source"), "katılımı hassas türde katılımcı oylaması olmaz")
+				}
 			}
 		}
 		if p.failed() {

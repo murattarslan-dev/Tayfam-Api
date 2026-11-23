@@ -211,6 +211,22 @@ DELETE FROM user_badges WHERE user_id = @user_id;
 -- name: DeleteUserStats :exec
 DELETE FROM user_stats WHERE user_id = @user_id;
 
+-- Oylama (issue #254): kişinin verdiği oylar ve kişiye, aracına ya da
+-- fotoğrafına verilen oylar silinir (araçlar ve fotoğraflar silinmeden önce
+-- çalışır). Yazdığı seçenekler ve kapattığı oylamalar etkinliğindir; kalır,
+-- yazan ve kapatan boşalır.
+-- name: DeleteUserEventVotes :exec
+DELETE FROM event_votes AS ev
+WHERE ev.user_id = @user_id::uuid OR ev.candidate_user_id = @user_id::uuid
+  OR ev.event_vehicle_id IN (SELECT v.id FROM event_vehicles AS v WHERE v.user_id = @user_id::uuid)
+  OR ev.photo_id IN (SELECT p.id FROM event_photos AS p WHERE p.uploader_id = @user_id::uuid);
+
+-- name: ClearVoteOptionCreator :exec
+UPDATE event_vote_options SET created_by = NULL WHERE created_by = @user_id;
+
+-- name: ClearVoteCloser :exec
+UPDATE event_vote_closures SET closed_by = NULL WHERE closed_by = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec

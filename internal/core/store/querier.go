@@ -238,9 +238,12 @@ type Querier interface {
 	// Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 	// boşalır (issue #244; ADR-0037 §4).
 	ClearVocabularyCreator(ctx context.Context, userID pgtype.UUID) error
+	ClearVoteCloser(ctx context.Context, userID pgtype.UUID) error
+	ClearVoteOptionCreator(ctx context.Context, userID pgtype.UUID) error
 	// Taraflardan biri ayrıldıktan 30 gün sonra kapanmamış ödünç kapanır.
 	CloseOrphanedLibraryLoans(ctx context.Context, arg CloseOrphanedLibraryLoansParams) ([]pgtype.UUID, error)
 	ClosePoll(ctx context.Context, arg ClosePollParams) (int64, error)
+	CloseVote(ctx context.Context, arg CloseVoteParams) (int64, error)
 	// chat dosyayı tutan mesajı söyledi: bağlama o mesajla onaylanır. Arada
 	// taşındıysa (asked_id değişti) bir şey olmaz.
 	ConfirmChatAttachment(ctx context.Context, arg ConfirmChatAttachmentParams) (int64, error)
@@ -324,6 +327,7 @@ type Querier interface {
 	CountUserLogEntries(ctx context.Context, arg CountUserLogEntriesParams) (int64, error)
 	// Bağlanabilecek sorular: tayfanın havuzundaki görünür sorular.
 	CountVisiblePoolQuestions(ctx context.Context, arg CountVisiblePoolQuestionsParams) (int32, error)
+	CountVoteOptions(ctx context.Context, arg CountVoteOptionsParams) (int64, error)
 	// Duyurular (issue #48). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 	// ve izin kontrolü app katmanındadır (access, authz).
 	CreateAnnouncement(ctx context.Context, arg CreateAnnouncementParams) error
@@ -416,6 +420,7 @@ type Querier interface {
 	CreateUpload(ctx context.Context, arg CreateUploadParams) (pgtype.UUID, error)
 	// Aynı değer eşzamanlı eklenirse satır dönmez; çağıran yeniden arar.
 	CreateVocabularyValue(ctx context.Context, arg CreateVocabularyValueParams) (pgtype.UUID, error)
+	CreateVoteOption(ctx context.Context, arg CreateVoteOptionParams) error
 	DeleteActivityRecord(ctx context.Context, arg DeleteActivityRecordParams) (int64, error)
 	DeleteAllFriendScores(ctx context.Context) error
 	DeleteAnswerVotes(ctx context.Context, answerID pgtype.UUID) error
@@ -444,6 +449,7 @@ type Querier interface {
 	DeleteEventSeatRequest(ctx context.Context, arg DeleteEventSeatRequestParams) (int64, error)
 	// Aracın koltuk istekleri foreign key ile birlikte gider.
 	DeleteEventVehicle(ctx context.Context, arg DeleteEventVehicleParams) (int64, error)
+	DeleteEventVote(ctx context.Context, arg DeleteEventVoteParams) (int64, error)
 	// Aynı transaction'da, yazılan puanlardan profillemesi kapalı olanlarınki
 	// ve engelli çiftler silinir (hesaplama sırasında değişen ayar ve engel).
 	DeleteExcludedFriendScores(ctx context.Context) (int64, error)
@@ -540,6 +546,11 @@ type Querier interface {
 	// "Geliyorum"dan vazgeçen kişinin aracı (plakası ve aracına gelen istekler)
 	// ve kendi koltuk isteği kalmaz; etkinliğin bütün araçlar bileşenlerinde.
 	DeleteUserEventVehicles(ctx context.Context, arg DeleteUserEventVehiclesParams) (int64, error)
+	// Oylama (issue #254): kişinin verdiği oylar ve kişiye, aracına ya da
+	// fotoğrafına verilen oylar silinir (araçlar ve fotoğraflar silinmeden önce
+	// çalışır). Yazdığı seçenekler ve kapattığı oylamalar etkinliğindir; kalır,
+	// yazan ve kapatan boşalır.
+	DeleteUserEventVotes(ctx context.Context, userID pgtype.UUID) error
 	// Profilleme kapatma ve hesap silme: kişinin bütün puanları.
 	DeleteUserFriendScores(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserFriendSuggestions(ctx context.Context, userID pgtype.UUID) error
@@ -589,6 +600,8 @@ type Querier interface {
 	// koltuk istekleri foreign key ile gider). Kişinin başkasının aracına
 	// yazdığı koltuk isteği de silinir (`vehicles` bileşeni, issue #240).
 	DeleteUserVehicles(ctx context.Context, userID pgtype.UUID) error
+	// Seçeneğe verilen oylar yabancı anahtarla birlikte silinir.
+	DeleteVoteOption(ctx context.Context, arg DeleteVoteOptionParams) (int64, error)
 	// Hiçbir mesaj dosyayı tutmuyor: bağlama kaldırılır; dosya bağlanmamış
 	// hazır dosya olarak 7 günlük temizliğe döner (ready_at'ten sayılır).
 	DetachChatAttachment(ctx context.Context, arg DetachChatAttachmentParams) (int64, error)
@@ -687,6 +700,11 @@ type Querier interface {
 	// hangi bileşende ve kapsamda (masa, maç) hakemsiniz. Atayan ve diğer
 	// hakemler dışa aktarılmaz.
 	ExportEventReferees(ctx context.Context, arg ExportEventRefereesParams) ([]ExportEventRefereesRow, error)
+	// Oylarınız (`vote` bileşeni, issue #254): etkinlik, bileşen, hedefin türü,
+	// serbest seçenekte seçeneğin etiketi ve zamanlar. Oy verdiğiniz kişinin,
+	// aracın ya da fotoğrafın kimliği (başkasının verisi), başkalarının oyları ve
+	// yazdığınız seçenekler (etkinliğin planı) dışa aktarılmaz.
+	ExportEventVotes(ctx context.Context, arg ExportEventVotesParams) ([]ExportEventVotesRow, error)
 	// Açtığınız etkinlikler; katalog türünün alan değerleri (`fields`, issue
 	// #237) ve "Şimdi başlat"ın açık uçlu işareti (issue #263) dahil (#275).
 	ExportEvents(ctx context.Context, arg ExportEventsParams) ([]ExportEventsRow, error)
@@ -1076,6 +1094,7 @@ type Querier interface {
 	GetUserProfile(ctx context.Context, userID pgtype.UUID) (GetUserProfileRow, error)
 	GetVocabularyValue(ctx context.Context, arg GetVocabularyValueParams) (GetVocabularyValueRow, error)
 	GetVocabularyValueForUpdate(ctx context.Context, arg GetVocabularyValueForUpdateParams) (GetVocabularyValueForUpdateRow, error)
+	GetVoteClosure(ctx context.Context, arg GetVoteClosureParams) (pgtype.Timestamptz, error)
 	// Kanalı açanlardan hangileri o etkinliğe gidiyor.
 	GoingAmong(ctx context.Context, arg GoingAmongParams) ([]GoingAmongRow, error)
 	// Misafir bir masada ya da kurada yer alıyor mu: yer alan misafir
@@ -1267,6 +1286,9 @@ type Querier interface {
 	// çalışır (IDOR). Yetki app katmanındadır
 	// (internal/core/app/component/vehicles).
 	ListEventVehicles(ctx context.Context, arg ListEventVehiclesParams) ([]ListEventVehiclesRow, error)
+	// Bileşenin oyları. Sayım ve kişinin kendi oyu app katmanında çıkarılır;
+	// oy verenler istemciye dönmez.
+	ListEventVotes(ctx context.Context, arg ListEventVotesParams) ([]ListEventVotesRow, error)
 	// Kişinin arkadaşları ve istekleri. Silinmiş hesapların satırı hesap
 	// silmede gider; profili henüz gelmemiş kişi listede adsız görünmez, atlanır.
 	// Kabul edilmiş arkadaşlıkta arkadaşın @today ile @badge_until (dahil)
@@ -1539,6 +1561,24 @@ type Querier interface {
 	ListUserStatSums(ctx context.Context, userID pgtype.UUID) ([]ListUserStatSumsRow, error)
 	// Kişinin bütün tayfalardaki toplamları bir yıl (0: tüm zamanlar) için.
 	ListUserStats(ctx context.Context, arg ListUserStatsParams) ([]ListUserStatsRow, error)
+	// participants kaynağının seçenekleri: tayfanın etkin üyesi olan ve
+	// "geliyorum" demiş ya da katılımı doğrulanmış katılımcılar, kimlik sırasıyla.
+	ListVoteCandidates(ctx context.Context, eventID pgtype.UUID) ([]pgtype.UUID, error)
+	// Oylama bileşeni (`vote`; issue #254; ADR-0025 §4, §5; ADR-0037 §3).
+	// Etkinlik her zaman önce tayfa kapsamında yüklenir ve bileşen etkinliğin
+	// tür sürümünde çözülür (internal/core/app/component: View / Change);
+	// buradaki sorgular o etkinliğin kimliği ve bileşenin anahtarıyla çalışır
+	// (IDOR). Yetki, kaynağa göre seçenekler, oy gizliliği ve sonucun ne zaman
+	// görüneceği app katmanındadır (internal/core/app/component/vote): kimin
+	// neye oy verdiği istemciye hiçbir zaman dönmez.
+	// Serbest seçenekler, sırasıyla.
+	ListVoteOptions(ctx context.Context, arg ListVoteOptionsParams) ([]ListVoteOptionsRow, error)
+	// album kaynağının seçenekleri: albümün silinmemiş fotoğrafları, eklenme
+	// sırasıyla (albüm başına en fazla 500).
+	ListVotePhotos(ctx context.Context, eventID pgtype.UUID) ([]ListVotePhotosRow, error)
+	// vehicles kaynağının seçenekleri: aynı türdeki araçlar bileşenine yazılmış
+	// araçlar, yazılış sırasıyla. Plaka okunmaz.
+	ListVoteVehicles(ctx context.Context, arg ListVoteVehiclesParams) ([]ListVoteVehiclesRow, error)
 	// ---------------------------------------------------------------------------
 	// safety-alerts işi
 	// Alarmı gelmiş satırlar: döndüm yok, alarm gitmemiş, bitiş + tolerans
@@ -1648,6 +1688,8 @@ type Querier interface {
 	NextDailyPosition(ctx context.Context, tayfaID pgtype.UUID) (int32, error)
 	// Sıradaki: from_position ya da sonrasındaki ilk sabitlenmemiş canlı içerik.
 	NextDailyRotationItem(ctx context.Context, arg NextDailyRotationItemParams) (TayfaDailyItem, error)
+	// Etkinlik satırı kilitliyken okunur (component.Service.Change).
+	NextVoteOptionPosition(ctx context.Context, arg NextVoteOptionPositionParams) (int16, error)
 	// Bekleme listesinin başı: en eski kayıt önce. Çağıran etkinlik satırını
 	// zaten kilitlemiştir; satır kilidi aynı kaydın iki kez terfisini de önler.
 	NextWaitlisted(ctx context.Context, arg NextWaitlistedParams) ([]pgtype.UUID, error)
@@ -1895,6 +1937,8 @@ type Querier interface {
 	// Günü ekler ya da bütünüyle değiştirir; id yalnızca yeni satırda kullanılır.
 	UpsertAvailability(ctx context.Context, arg UpsertAvailabilityParams) (UpsertAvailabilityRow, error)
 	UpsertEventFeedback(ctx context.Context, arg UpsertEventFeedbackParams) (UpsertEventFeedbackRow, error)
+	// Kişi başına bir oy; yeniden vermek öncekinin yerine geçer.
+	UpsertEventVote(ctx context.Context, arg UpsertEventVoteParams) error
 	// Alarm gittiyse değişmez (0 satır).
 	UpsertSafetyContact(ctx context.Context, arg UpsertSafetyContactParams) (int64, error)
 	// Verilmeyen alan (NULL) olduğu gibi kalır; satır yoksa varsayılanlardan
@@ -1916,6 +1960,7 @@ type Querier interface {
 	// Değere (ve ona birleştirilmiş değerlere) bağlı silinmemiş günlük
 	// kayıtlarının etkinlik yılları (Europe/Istanbul; istatistik, ADR-0026 §2).
 	VocabularyEntryYears(ctx context.Context, arg VocabularyEntryYearsParams) ([]int32, error)
+	VoteOptionLabelTaken(ctx context.Context, arg VoteOptionLabelTakenParams) (bool, error)
 	// Uyarı iki sebeple verilir:
 	//   inactive:    last_activity_at @inactive_before'dan eski (30 gün).
 	//   few_members: açılışından (dönüşen anlık tayfada dönüşümünden)

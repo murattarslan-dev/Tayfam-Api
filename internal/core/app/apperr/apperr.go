@@ -224,6 +224,21 @@ var (
 	ErrRankingFromMeasure = errors.New("derece ölçümden hesaplanır")
 )
 
+// Vote component errors (issue #254; ADR-0025 §4, ADR-0037 §3).
+var (
+	// ErrVoteClosed: a vote or an option change after the organizer closed
+	// the vote.
+	ErrVoteClosed = errors.New("oylama kapandı")
+	// ErrVoteOwnOption: a vote for oneself, one's own vehicle or one's own
+	// photo.
+	ErrVoteOwnOption = errors.New("kendine oy verilmez")
+	// ErrVoteOptionsFixed: an option change in a vote whose options come
+	// from its source.
+	ErrVoteOptionsFixed = errors.New("oylamanın seçenekleri kaynağından gelir")
+	// ErrVoteOptionExists: a free option with the same label.
+	ErrVoteOptionExists = errors.New("aynı seçenek var")
+)
+
 // Celebration component errors (issue #255; ADR-0025 §4).
 var (
 	// ErrCelebrationNotStarted: an announcement before the event's start.

@@ -328,6 +328,24 @@ func (q *Queries) ClearVocabularyCreator(ctx context.Context, userID pgtype.UUID
 	return err
 }
 
+const clearVoteCloser = `-- name: ClearVoteCloser :exec
+UPDATE event_vote_closures SET closed_by = NULL WHERE closed_by = $1
+`
+
+func (q *Queries) ClearVoteCloser(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearVoteCloser, userID)
+	return err
+}
+
+const clearVoteOptionCreator = `-- name: ClearVoteOptionCreator :exec
+UPDATE event_vote_options SET created_by = NULL WHERE created_by = $1
+`
+
+func (q *Queries) ClearVoteOptionCreator(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearVoteOptionCreator, userID)
+	return err
+}
+
 const createSystemAuditLog = `-- name: CreateSystemAuditLog :exec
 INSERT INTO audit_logs (id, tayfa_id, actor_id, action, target_type, target_id, metadata)
 VALUES ($1, $2, NULL, $3, $4, $5, $6)
@@ -437,6 +455,22 @@ DELETE FROM event_questions WHERE author_id = $1
 // #256; ADR-0025 §11).
 func (q *Queries) DeleteUserEventQuestions(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserEventQuestions, userID)
+	return err
+}
+
+const deleteUserEventVotes = `-- name: DeleteUserEventVotes :exec
+DELETE FROM event_votes AS ev
+WHERE ev.user_id = $1::uuid OR ev.candidate_user_id = $1::uuid
+  OR ev.event_vehicle_id IN (SELECT v.id FROM event_vehicles AS v WHERE v.user_id = $1::uuid)
+  OR ev.photo_id IN (SELECT p.id FROM event_photos AS p WHERE p.uploader_id = $1::uuid)
+`
+
+// Oylama (issue #254): kişinin verdiği oylar ve kişiye, aracına ya da
+// fotoğrafına verilen oylar silinir (araçlar ve fotoğraflar silinmeden önce
+// çalışır). Yazdığı seçenekler ve kapattığı oylamalar etkinliğindir; kalır,
+// yazan ve kapatan boşalır.
+func (q *Queries) DeleteUserEventVotes(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserEventVotes, userID)
 	return err
 }
 
