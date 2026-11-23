@@ -93,6 +93,18 @@ const (
 	// trigger opens no push job for them).
 	TypeLibraryDue          = "library_due"
 	TypeLibraryLoanOrphaned = "library_loan_orphaned"
+	// The library's loan steps (issue #321; ADR-0040 §1, revised
+	// 2026-11-23): about one item (TargetLibraryItem) of the tayfa, with
+	// the member who took the step as actor, to the other side. Pushed
+	// with the push_<type> keys only; personal (level mentions pushes
+	// them). To the owner: TypeLibraryLoanRequested, TypeLibraryQueueJoined;
+	// to the borrower: TypeLibraryLoanApproved, TypeLibraryLoanDeclined,
+	// TypeLibraryLoanHandedOver.
+	TypeLibraryLoanRequested  = "library_loan_requested"
+	TypeLibraryQueueJoined    = "library_queue_joined"
+	TypeLibraryLoanApproved   = "library_loan_approved"
+	TypeLibraryLoanDeclined   = "library_loan_declined"
+	TypeLibraryLoanHandedOver = "library_loan_handed_over"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -109,6 +121,9 @@ const (
 	// TargetDataExport: a data export request of the recipient
 	// (identity's DataExportService).
 	TargetDataExport = "data_export"
+	// TargetLibraryItem: a library item of the notification's tayfa (core's
+	// TayfaLibraryService.GetLibraryItem).
+	TargetLibraryItem = "library_item"
 )
 
 // Reasons of TypeTayfaWarned.
@@ -142,6 +157,9 @@ func targetOf(typ string) (string, bool) {
 		return TargetDMConversation, true
 	case TypeDataExportReady:
 		return TargetDataExport, true
+	case TypeLibraryLoanRequested, TypeLibraryQueueJoined, TypeLibraryLoanApproved, TypeLibraryLoanDeclined,
+		TypeLibraryLoanHandedOver:
+		return TargetLibraryItem, true
 	}
 	return "", false
 }

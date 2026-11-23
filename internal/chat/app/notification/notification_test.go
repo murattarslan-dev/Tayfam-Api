@@ -634,3 +634,28 @@ func TestListResolutions(t *testing.T) {
 		}
 	}
 }
+
+// The library's loan step notices (issue #321) are about an item of a
+// tayfa, never to the one who took the step.
+func TestLibraryStepNoticeRules(t *testing.T) {
+	for _, typ := range []string{TypeLibraryLoanRequested, TypeLibraryQueueJoined, TypeLibraryLoanApproved,
+		TypeLibraryLoanDeclined, TypeLibraryLoanHandedOver} {
+		r := Request{Event: id.New(), Tayfa: id.New(), Actor: id.New(), Type: typ, TargetType: TargetLibraryItem, Target: id.New(), Recipients: []id.ID{id.New()}}
+		if err := r.Validate(); err != nil {
+			t.Fatalf("%s: %v", typ, err)
+		}
+		for name, bad := range map[string]Request{
+			"tayfasız":      func() Request { b := r; b.Tayfa = id.ID{}; return b }(),
+			"tayfa hedefli": func() Request { b := r; b.TargetType = TargetTayfa; return b }(),
+			"kendisine":     func() Request { b := r; b.Recipients = []id.ID{r.Actor}; return b }(),
+			"gerekçeli":     func() Request { b := r; b.Reason = ReasonInactive; return b }(),
+		} {
+			if err := bad.Validate(); err == nil {
+				t.Errorf("%s, %s kabul edildi", typ, name)
+			}
+		}
+	}
+	if typ, ok := targetOf(TypeLibraryDue); !ok || typ != TargetTayfa {
+		t.Fatalf("library_due hedefi = %q", typ)
+	}
+}

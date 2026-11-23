@@ -114,6 +114,13 @@ var personal = map[string]bool{
 	notification.TypeDMRequest:       true,
 	// The user's own data export (ADR-0021, ADR-0019 item 3).
 	notification.TypeDataExportReady: true,
+	// A step of a loan of the recipient's item or of their own request
+	// (issue #321; ADR-0019 item 3).
+	notification.TypeLibraryLoanRequested:  true,
+	notification.TypeLibraryQueueJoined:    true,
+	notification.TypeLibraryLoanApproved:   true,
+	notification.TypeLibraryLoanDeclined:   true,
+	notification.TypeLibraryLoanHandedOver: true,
 }
 
 // scope returns the preference scope of a notification, or ok false when

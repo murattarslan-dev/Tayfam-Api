@@ -28,6 +28,12 @@
 // passes the borrower gets one in-app reminder (jobs). No money, deposit or
 // fine can be expressed.
 //
+// The steps tell the other side (issue #321; ADR-0040 §1, revised
+// 2026-11-23), in-app and by push, by IDs only: a new request and a queue
+// place the owner, approving, declining and handing over the borrower
+// (tell). Nobody hears across a block. Taking back, a request opened from
+// the queue and requests ended by a withdrawal or a departure tell nobody.
+//
 // Only the two sides see a loan: members see an item's status (available,
 // on_loan) and how many wait; the owner sees the active loan and the queue,
 // the borrower their own loan and place.
@@ -59,6 +65,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/component"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/library/lending"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/vocabulary"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -691,7 +698,7 @@ func (s *Service) Request(ctx context.Context, user, tayfa, item id.ID) (Item, e
 			}); err != nil {
 				return fmt.Errorf("ödünç isteği: %w", err)
 			}
-			return nil
+			return tell(ctx, q, notify.TypeLibraryLoanRequested, tayfa, item, user, r.OwnerID)
 		case err != nil:
 			return fmt.Errorf("etkin ödünç: %w", err)
 		}
@@ -715,7 +722,7 @@ func (s *Service) Request(ctx context.Context, user, tayfa, item id.ID) (Item, e
 		}); err != nil {
 			return fmt.Errorf("sıra: %w", err)
 		}
-		return nil
+		return tell(ctx, q, notify.TypeLibraryQueueJoined, tayfa, item, user, r.OwnerID)
 	})
 	if err != nil {
 		return Item{}, err
@@ -776,6 +783,24 @@ func end(ctx context.Context, q *store.Queries, loan store.LibraryLoan, state st
 		return apperr.ErrLibraryLoanState
 	}
 	return lending.Freed(ctx, q, id.ID(loan.ItemID.Bytes), state == StateReturned, now)
+}
+
+// tell writes the loan step notification typ about item, taken by actor,
+// for the other side to (issue #321; ADR-0040 §1, revised 2026-11-23):
+// only while to is an active member and neither has blocked the other;
+// otherwise nobody hears about it, without a trace. It names the item by
+// ID only. It runs last in the step's transaction (notify.Write).
+func tell(ctx context.Context, q *store.Queries, typ string, tayfa, item, actor id.ID, to pgtype.UUID) error {
+	if !to.Valid {
+		return nil // the account was deleted
+	}
+	rcpt, err := notify.Unblocked(ctx, q, tayfa, []id.ID{id.ID(to.Bytes)}, actor)
+	if err != nil {
+		return err
+	}
+	return notify.Write(ctx, q, notify.Request{
+		Type: typ, Tayfa: tayfa, Actor: actor, TargetType: notify.TargetLibraryItem, Target: item,
+	}, rcpt)
 }
 
 // Loans returns the caller's loans in the tayfa, as borrower and as owner:
@@ -846,8 +871,12 @@ func (s *Service) lend(ctx context.Context, user, tayfa, loan id.ID, step string
 			if n != 1 {
 				return apperr.ErrLibraryLoanState
 			}
+			return tell(ctx, q, notify.TypeLibraryLoanApproved, tayfa, id.ID(l.ItemID.Bytes), user, l.BorrowerID)
 		case stepDecline:
-			return end(ctx, q, l, StateDeclined, sc.Now)
+			if err := end(ctx, q, l, StateDeclined, sc.Now); err != nil {
+				return err
+			}
+			return tell(ctx, q, notify.TypeLibraryLoanDeclined, tayfa, id.ID(l.ItemID.Bytes), user, l.BorrowerID)
 		case stepHandOver:
 			var dueAt pgtype.Timestamptz
 			if !due.IsZero() {
@@ -866,12 +895,12 @@ func (s *Service) lend(ctx context.Context, user, tayfa, loan id.ID, step string
 			if err := q.SetLibraryItemStatus(ctx, store.SetLibraryItemStatusParams{Status: StatusOnLoan, Now: ts(sc.Now), ID: l.ItemID}); err != nil {
 				return fmt.Errorf("kalem durumu: %w", err)
 			}
+			return tell(ctx, q, notify.TypeLibraryLoanHandedOver, tayfa, id.ID(l.ItemID.Bytes), user, l.BorrowerID)
 		case stepReturn:
 			return end(ctx, q, l, StateReturned, sc.Now)
 		default:
 			return errors.New("bilinmeyen adım")
 		}
-		return nil
 	})
 	if err != nil {
 		return Loan{}, err

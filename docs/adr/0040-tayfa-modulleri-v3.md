@@ -2,6 +2,11 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-18, sohbette)
 - **Tarih:** 2026-11-18
+- **Revizyon:** 2026-11-23 (platform sahibi, sohbette; issue #321): ortak
+  kütüphanede ödünç adımları bildirim üretir — uygulama içi **ve push**
+  (içeriksiz). Yeni istek ve sıraya girme kalemin sahibine; onay, ret ve
+  teslim isteyene. `library_due` ve `library_loan_orphaned` uygulama içi
+  kalır. Ayrıntı §1 "Uygulama notları (#321)".
 - **Karar veren:** Murat Arslan (2026-11-18). Ürün kararları Notion "Faz 3 —
   Katalog ayrıntıları ve şema ekleri (2026-11-18)" §E.3–E.4 ve "Eğitim —
   Ders ve konu etiket listesi".
@@ -82,8 +87,8 @@ Ortak kurallar (dördü için):
   gün). Geçince borç alana tek hatırlatma: `library_due`. Ayrılmada iki
   tarafa `library_loan_orphaned`. İkisi de uygulama içidir (push yok),
   aktörsüzdür, hedefi ödüncün tayfasıdır, eşyayı ve kişiyi adlandırmaz.
-  ADR'nin istemediği diğer adımlar (yeni istek, onay, teslim) bildirim
-  üretmez.
+  ~~ADR'nin istemediği diğer adımlar (yeni istek, onay, teslim) bildirim
+  üretmez.~~ 2026-11-23'te değişti: aşağıda "Uygulama notları (#321)".
 - **Yetki:** ekleme ve istek üye (susturulmuş üye yapamaz); düzenleme
   sahibi; geri çekme sahibi, kaldırma moderatör (izin
   `library.item_remove_any`); onay, ret, teslim, iade sahibi. Geri çekme,
@@ -102,6 +107,31 @@ Ortak kurallar (dördü için):
   borç alan boşalır, sıradaki yerler silinir; karşı tarafa uyarı gider.
 - Dışa aktarma bölümleri 37 (`library_items`) ve 38 (`library_loans`,
   sıradaki yerler `queued` durumuyla); karşı taraf dışa aktarılmaz.
+
+**Uygulama notları (#321, platform sahibinin 2026-11-23 kararı):**
+
+- Beş yeni bildirim türü (chat enum 29–33, chat 00024):
+  `library_loan_requested` (bir üye istedi, ödünç isteği onda) ve
+  `library_queue_joined` (bir üye sıraya girdi) kalemin sahibine;
+  `library_loan_approved`, `library_loan_declined`,
+  `library_loan_handed_over` isteyene. İade alındı (`returned`) bildirim
+  üretmez: adımı sahibi atar, borç alan eşyayı kendi elinden verir.
+- Hedef kalemdir: yeni hedef türü `library_item` (chat enum 10), kimlik
+  kalemin kimliği; istemci kalemi açar (sahibi sırayı ve etkin ödüncü,
+  borç alan kendi ödüncünü görür). Gruplama da kalem başınadır. Aktör
+  adımı atan üyedir. Eşya adı, kişi adı, tarih taşınmaz.
+- Alıcı yalnızca öbür taraftır; etkin üye olmalıdır ve aktörle arasında iki
+  yönden engel varsa bildirim hiç yazılmaz (uygulama içi de, push da;
+  `notify.Unblocked`). Aynı istek tekrarlanınca (zaten istemiş ya da
+  sırada) yeni bildirim yoktur.
+- Push gider: yalnızca `push_<tür>_title` / `_body` anahtarları ve
+  kimlikler (ADR-0019 madde 4). Kapsam tayfanın tercihidir; beşi de
+  kişisel sayılır (ADR-0019 madde 3 listesi): `mentions` seviyesinde gider,
+  `none` durdurur.
+- Bildirim üretmeyen yan etkiler: ödüncün bitmesiyle sıradakine otomatik
+  açılan istek (`lending.Promote`), kalemin geri çekilmesi ya da üyenin
+  ayrılmasıyla iptal olan istekler ve borç alanın kendi isteğini geri
+  alması. Bunlar sonraki bir kararın konusudur.
 
 ### 2. Soru havuzu (`question_pool`)
 
