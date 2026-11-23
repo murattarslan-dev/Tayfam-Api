@@ -25,6 +25,9 @@
 //	                or dropped out, or whose vocabulary was merged, and
 //	                gives the threshold and first badges (#266, ADR-0026;
 //	                stats.go)
+//	catalog-publish publishes catalog.changed when the catalog's version is
+//	                above the last published one (#280, ADR-0042;
+//	                catalog.go)
 //
 // The outcome of every pass (finish time, success, rows changed) is written
 // to job_runs for the panel's dashboard (issue #110).
@@ -193,6 +196,8 @@ type Intervals struct {
 	Stats time.Duration
 	// Issue #270.
 	Library time.Duration
+	// Issue #280.
+	CatalogPublish time.Duration
 }
 
 func (i Intervals) withDefaults() Intervals {
@@ -215,6 +220,7 @@ func (i Intervals) withDefaults() Intervals {
 	def(&i.ChampionBadges, DefaultChampionBadgesInterval)
 	def(&i.Stats, DefaultStatsInterval)
 	def(&i.Library, DefaultLibraryInterval)
+	def(&i.CatalogPublish, DefaultCatalogPublishInterval)
 	return i
 }
 
@@ -275,6 +281,7 @@ func (s *Service) Workers() []Worker {
 		{JobChampionBadges, s.every(JobChampionBadges, iv.ChampionBadges, s.AwardChampionBadges)},
 		{JobStats, s.every(JobStats, iv.Stats, s.ComputeStats)},
 		{JobLibrary, s.every(JobLibrary, iv.Library, s.RunLibrary)},
+		{JobCatalogPublish, s.every(JobCatalogPublish, iv.CatalogPublish, s.PublishCatalog)},
 	}
 }
 

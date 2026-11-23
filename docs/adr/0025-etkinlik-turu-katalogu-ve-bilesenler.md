@@ -2,6 +2,10 @@
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-15)
 - **Tarih:** 2026-11-15
+- **Revizyon:** 2026-11-23 (platform sahibi, sohbette, issue #280;
+  [ADR-0042](0042-katalog-degisikligi-olayi.md)): §10'daki `catalog.changed`
+  olayı yalnızca sürüm değil, ilgi alanı anahtarlarını ve durumlarını da
+  taşır; core → identity outbox ile teslim edilir.
 - **Revizyon:** 2026-11-18 (platform sahibi, sohbette;
   [ADR-0041](0041-v3-tek-seferde-gecis-ve-yayin.md)): §10'daki aşamalı
   taşıma ve §8'deki geriye uyumluluk kaldırıldı; v3 tek seferde yayınlanır.
@@ -292,8 +296,10 @@ Yedi türün her biri bir ilgi alanına eşlenir (örnek anahtarlar: `convoy` �
 `interest_key` tutar; aynı ilgi alanına düşen iki tür tek satır olur.
 identity'deki `profile_details.interests` için de aynı eşleme yapılır;
 CHECK kısıtı kaldırılır, değerler core'un katalog olayıyla
-(`catalog.changed`, yalnızca sürüm numarası) doğrulanan bir kopyaya karşı
-denetlenir (ADR-0009 kopya modeli).
+(`catalog.changed`) güncellenen bir kopyaya karşı denetlenir (ADR-0009
+kopya modeli). Olay sürümle birlikte ilgi alanı anahtarlarını ve durumlarını
+taşır ([ADR-0042](0042-katalog-degisikligi-olayi.md), 2026-11-23; önceki
+metin "yalnızca sürüm numarası").
 
 ### 11. KVKK
 
