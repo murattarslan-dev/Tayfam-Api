@@ -4840,11 +4840,13 @@ paths:
       - $ref: "#/components/parameters/TayfaID"
     get:
       operationId: getTayfaStats
-      summary: Tayfanın istatistikleri ve kişisel katkılar
+      summary: Tayfanın istatistikleri ve sizin katkınız
       description: |
         Her etkin üyeye açıktır (susturulmuş üye de okur). `year` yoksa tüm
-        zamanlar. Kişisel katkılar yalnızca ölçüm ve günlük metrikleridir,
-        yalnızca tayfanın etkin üyelerininki.
+        zamanlar. Tayfa toplamları herkese açıktır; kişisel katkıdan
+        yalnızca çağıranın kendi katkısı döner (`own_contributions`, ölçüm
+        ve günlük metrikleri). Başka üyelerin katkısı yönetici ve moderatör
+        dahil kimseye listelenmez (#322).
       parameters:
         - name: year
           in: query
@@ -11765,8 +11767,12 @@ components:
         event_count: { type: integer, minimum: 0, description: Değere katkı veren etkinlik sayısı. }
     TayfaStatContribution:
       type: object
+      deprecated: true
       required: [user_id, metric_key, value, event_count]
-      description: Etkin bir üyenin ölçüm ya da günlük metriğindeki katkısı.
+      description: |
+        Kullanılmıyor (#322): üye katkıları artık listelenmez. Yalnızca
+        eski istemciler için `TayfaStats.contributions`'ın öğe türü olarak
+        durur.
       properties:
         user_id: { type: string, format: uuid }
         metric_key: { $ref: "#/components/schemas/TayfaStatMetricKey" }
@@ -11774,7 +11780,7 @@ components:
         event_count: { type: integer, minimum: 0 }
     TayfaStats:
       type: object
-      required: [years, totals, contributions]
+      required: [years, totals, own_contributions, contributions]
       properties:
         year: { type: integer, description: "İstenen yıl; tüm zamanlarda yoktur." }
         years:
@@ -11783,9 +11789,23 @@ components:
           items: { type: integer }
         totals:
           type: array
+          description: Tayfa toplamları; her üyeye açık.
+          items: { $ref: "#/components/schemas/TayfaStat" }
+        own_contributions:
+          type: array
+          description: |
+            Çağıranın bu tayfadaki kendi katkısı: ölçüm ve günlük metrikleri
+            (`source` `measure` ya da `log`; hassas ölçüm yok), `metric_key`
+            sırasıyla. Başka üyenin katkısı hiçbir zaman yoktur (#322).
           items: { $ref: "#/components/schemas/TayfaStat" }
         contributions:
           type: array
+          deprecated: true
+          maxItems: 0
+          description: |
+            Kullanılmıyor (#322): her zaman boş dizi. Yalnızca eski
+            istemciler bozulmasın diye durur; `own_contributions`'ı okuyun.
+            Sonraki bir sürümde kalkacak.
           items: { $ref: "#/components/schemas/TayfaStatContribution" }
         computed_at:
           type: string
