@@ -290,7 +290,7 @@ func TestVoteFree(t *testing.T) {
 	// Options: cleaned, unique in Turkish lower case, at most MaxOptions;
 	// the organizer's only.
 	for name, label := range map[string]string{
-		"boş": "  ", "uzun": strings.Repeat("ş", vote.LabelMax+1), "denetim karakteri": "Kitap\u0000", "görünmez": "Kit​ap",
+		"boş": "  ", "uzun": strings.Repeat("ş", vote.LabelMax+1), "denetim karakteri": "Kitap\u0000", "görünmez": "Kit\u200bap",
 	} {
 		_, err := e.votes.AddOption(ctx, r(organizer), label)
 		wantField(t, name, err, "label")
@@ -423,8 +423,9 @@ func TestVoteFree(t *testing.T) {
 	}
 
 	// The ballot is secret: no audit record, event or log names a vote.
-	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE target_id = $1 AND (metadata::text LIKE '%' || $2 || '%' OR metadata::text LIKE '%' || $3 || '%')`,
-		ev.ID.PG(), a.String(), suc.String()); n != 0 {
+	if n := e.count(t, `SELECT count(*) FROM audit_logs WHERE target_id = $1 AND action LIKE 'event.vote%'
+		AND (action NOT IN ($2, $3, $4) OR metadata::text LIKE '%' || $5 || '%' OR actor_id = $6)`,
+		ev.ID.PG(), vote.AuditOptionAdded, vote.AuditOptionRemoved, vote.AuditClosed, a.String(), a.PG()); n != 0 {
 		t.Errorf("denetim kaydında oy: %d", n)
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE subject_id = $1 AND payload::text LIKE '%' || $2 || '%'`, ev.ID.PG(), suc.String()); n != 0 {
