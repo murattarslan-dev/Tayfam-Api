@@ -9,6 +9,10 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 )
 
+// studyTypes are the Eğitim types that have a study tag field since their
+// second version (00068, issue #333; ADR-0043 §6).
+var studyTypes = []string{"study_group", "problem_session", "peer_teaching", "mock_exam"}
+
 // seedTypes is the number of active types the migrations leave (00066,
 // issue #260).
 const seedTypes = 65
@@ -73,15 +77,15 @@ func TestSeedCatalogData(t *testing.T) {
 		t.Fatalf("ilgi alanları = %v", interests)
 	}
 
-	// The types, in order; the Faz 1 types but fishing are at version 2,
-	// the others at 1.
+	// The types, in order; the Faz 1 types but fishing and the Eğitim types
+	// are at version 2 (00068, issue #333), the others at 1.
 	var types []string
 	byKey := map[string]EventType{}
 	for _, et := range c.Types {
 		types = append(types, et.Key)
 		byKey[et.Key] = et
 		want := int32(1)
-		if slices.Contains(faz1Types, et.Key) && et.Key != "fishing" {
+		if (slices.Contains(faz1Types, et.Key) && et.Key != "fishing") || slices.Contains(studyTypes, et.Key) {
 			want = 2
 		}
 		if et.Version != want || et.Status != StatusActive || et.Parsed == nil || !slices.Contains(clientIcons, et.Icon) {
@@ -174,6 +178,43 @@ func TestSeedCatalogData(t *testing.T) {
 	// version keeps its choice (its events stay there).
 	if f, ok := byKey["sports"].Parsed.Field("sport"); !ok || f.Kind != definition.KindText || f.Vocabulary != "sport" || !f.Required {
 		t.Errorf("spor dalı = %+v", f)
+	}
+
+	// The Eğitim types' study tag fields (ADR-0043 §6); no other type has
+	// one.
+	for typ, want := range map[string]definition.Field{
+		"study_group":     {Key: "subjects", MinDepth: definition.StudyDepthSubject, MaxDepth: definition.StudyDepthTopic, MaxSelected: 5},
+		"problem_session": {Key: "subjects", MinDepth: definition.StudyDepthSubject, MaxDepth: definition.StudyDepthTopic, MaxSelected: 5},
+		"peer_teaching":   {Key: "subject", Required: true, MinDepth: definition.StudyDepthSubject, MaxDepth: definition.StudyDepthTopic, MaxSelected: 1},
+		"mock_exam":       {Key: "exam", MinDepth: definition.StudyDepthLevel, MaxDepth: definition.StudyDepthSubject, MaxSelected: 1},
+	} {
+		fs := byKey[typ].Parsed.Fields
+		if len(fs) != 1 {
+			t.Errorf("%s: alanlar = %+v", typ, fs)
+			continue
+		}
+		f := fs[0]
+		if f.Kind != definition.KindStudyTags || f.Key != want.Key || f.Required != want.Required || f.MinDepth != want.MinDepth ||
+			f.MaxDepth != want.MaxDepth || f.MaxSelected != want.MaxSelected || f.Labels["tr"] == "" {
+			t.Errorf("%s: ders/konu alanı = %+v", typ, f)
+		}
+	}
+	for _, et := range c.Types {
+		for _, f := range et.Parsed.Fields {
+			if f.Kind == definition.KindStudyTags && !slices.Contains(studyTypes, et.Key) {
+				t.Errorf("%s: beklenmeyen ders/konu alanı %s", et.Key, f.Key)
+			}
+		}
+	}
+	// Version 1 keeps the definition the types were seeded with.
+	for _, typ := range studyTypes {
+		v1, err := svc.TypeVersion(ctx, typ, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(v1.Parsed.Fields) != 0 || len(v1.Parsed.Components) != len(byKey[typ].Parsed.Components) {
+			t.Errorf("%s sürüm 1 = %+v", typ, v1.Parsed)
+		}
 	}
 
 	// Every scoreboard preset a type offers is in the catalog.

@@ -281,3 +281,82 @@ func TestFieldValueGuard(t *testing.T) {
 		t.Fatalf("alan değerleri = %d", n)
 	}
 }
+
+// The study tag fields of the Eğitim types (issue #333; ADR-0043): a tag
+// of the list at a depth the field allows, selectable when chosen; a
+// retired tag the event already holds stays.
+func TestStudyTagFields(t *testing.T) {
+	e := setup(t)
+	tf, admin := e.newTayfa(t)
+	typed := func(typ string, fields map[string]json.RawMessage) Input {
+		in := input()
+		in.Type = typ
+		in.Fields = fields
+		in.ClientRequestID = id.New().String()
+		return in
+	}
+
+	// Peer teaching: one subject or topic, required.
+	teach := e.create(t, tf, admin, typed("peer_teaching", values("subject", `["ayt_phy_vectors"]`)))
+	if teach.TypeVersion != 2 {
+		t.Fatalf("akran konu anlatımının sürümü = %d", teach.TypeVersion)
+	}
+	wantValues(t, "konu", teach.Fields, "subject", `["ayt_phy_vectors"]`)
+	// A study group: up to five, in the order given.
+	group := e.create(t, tf, admin, typed("study_group", values("subjects", `["tyt_math","ayt_physics_other","hs_math"]`)))
+	wantValues(t, "dersler", group.Fields, "subjects", `["tyt_math","ayt_physics_other","hs_math"]`)
+	// Optional: a problem session without subjects.
+	if ps := e.create(t, tf, admin, typed("problem_session", nil)); len(ps.Fields) != 0 {
+		t.Fatalf("soru çözüm oturumunun alanları = %v", ps.Fields)
+	}
+	// A mock exam: a level or a subject.
+	for _, exam := range []string{`["tyt"]`, `["ayt_math"]`, `["other_exams_other"]`} {
+		got := e.create(t, tf, admin, typed("mock_exam", values("exam", exam)))
+		wantValues(t, "deneme "+exam, got.Fields, "exam", exam)
+	}
+
+	for name, tc := range map[string]struct {
+		typ    string
+		fields map[string]json.RawMessage
+		field  string
+	}{
+		"zorunlu alan yok":       {"peer_teaching", nil, "fields.subject"},
+		"düzey ders alanında":    {"peer_teaching", values("subject", `["ayt"]`), "fields.subject"},
+		"tek seçimde iki":        {"peer_teaching", values("subject", `["ayt_math","ayt_physics"]`), "fields.subject"},
+		"bilinmeyen etiket":      {"peer_teaching", values("subject", `["ayt_astrology"]`), "fields.subject"},
+		"liste değil":            {"peer_teaching", values("subject", `"ayt_math"`), "fields.subject"},
+		"boş liste":              {"peer_teaching", values("subject", `[]`), "fields.subject"},
+		"bozuk anahtar":          {"peer_teaching", values("subject", `["AYT"]`), "fields.subject"},
+		"tekrar":                 {"study_group", values("subjects", `["tyt_math","tyt_math"]`), "fields.subjects"},
+		"altıdan fazla":          {"study_group", values("subjects", `["tyt_math","tyt_physics","tyt_chemistry","tyt_biology","tyt_history","tyt_geography"]`), "fields.subjects"},
+		"konu sınav alanında":    {"mock_exam", values("exam", `["ayt_phy_vectors"]`), "fields.exam"},
+		"Diğer konu sınav alanı": {"mock_exam", values("exam", `["ayt_physics_other"]`), "fields.exam"},
+	} {
+		_, err := e.svc.Create(ctx, admin, tf, typed(tc.typ, tc.fields))
+		wantField(t, name, err, tc.field)
+	}
+
+	// The topic is retired: no new event chooses it ...
+	e.exec(t, `UPDATE catalog_study_tags SET status = 'retired' WHERE key = 'ayt_phy_vectors'`)
+	_, err := e.svc.Create(ctx, admin, tf, typed("peer_teaching", values("subject", `["ayt_phy_vectors"]`)))
+	wantField(t, "emekli konu", err, "fields.subject")
+	// ... nor a topic under a retired subject ...
+	e.exec(t, `UPDATE catalog_study_tags SET status = 'retired' WHERE key = 'ayt_math'`)
+	_, err = e.svc.Create(ctx, admin, tf, typed("study_group", values("subjects", `["ayt_math_other"]`)))
+	wantField(t, "emekli dersin konusu", err, "fields.subjects")
+	// ... but the event that holds it keeps it through an edit.
+	v, err := e.svc.Update(ctx, admin, tf, teach.ID, []string{FieldFields}, Input{Fields: values("subject", `["ayt_phy_vectors"]`)})
+	must(t, err)
+	wantValues(t, "emekli konuyu tutan düzenleme", v.Fields, "subject", `["ayt_phy_vectors"]`)
+	// Another field's retired tag is not kept: the study group never held it.
+	_, err = e.svc.Update(ctx, admin, tf, group.ID, []string{FieldFields}, Input{Fields: values("subjects", `["tyt_math","ayt_phy_vectors"]`)})
+	wantField(t, "başka etkinliğin emekli konusu", err, "fields.subjects")
+	// Once changed, the retired topic cannot come back.
+	_, err = e.svc.Update(ctx, admin, tf, teach.ID, []string{FieldFields}, Input{Fields: values("subject", `["ayt_physics"]`)})
+	must(t, err)
+	_, err = e.svc.Update(ctx, admin, tf, teach.ID, []string{FieldFields}, Input{Fields: values("subject", `["ayt_phy_vectors"]`)})
+	wantField(t, "geri eklenen emekli konu", err, "fields.subject")
+	got, err := e.svc.Get(ctx, admin, tf, teach.ID)
+	must(t, err)
+	wantValues(t, "reddedilen düzenlemeden sonra", got.Fields, "subject", `["ayt_physics"]`)
+}

@@ -55,10 +55,11 @@ func TestCatalogDataMigration(t *testing.T) {
 		return scalar(`SELECT catalog_version::text FROM catalog_meta`)
 	}
 
-	// 15 interests, 65 types (58 new; six Faz 1 types at version 2), the
-	// study tag list and five badges.
+	// 15 interests, 65 types (58 new; six Faz 1 types and, since 00068,
+	// the four Eğitim types at version 2), the study tag list and five
+	// badges.
 	seeded, before := snapshot(), version()
-	if got := counts(); got != "15/65/71/294/5/6/15" {
+	if got := counts(); got != "15/65/75/294/5/10/15" {
 		t.Fatalf("seed = %s", got)
 	}
 
@@ -70,9 +71,12 @@ func TestCatalogDataMigration(t *testing.T) {
 		t.Fatal("katalog sürümü artmadı")
 	}
 
-	// 00067's Down first, as on the real way back: its trigger keeps a
+	// 00068's and 00067's Downs first, as on the real way back: 00068 gave
+	// the Eğitim types their second version (#333), 00067's trigger keeps a
 	// type's version and the catalog's version from going back (#262).
+	studyUp, studyDown := migrationParts(t, coredb.Migrations(), "00068_study_tag_fields.sql")
 	_, panelDown := migrationParts(t, coredb.Migrations(), "00067_catalog_panel.sql")
+	exec(studyDown)
 	exec(panelDown)
 	exec(down)
 	if got := counts(); got != "6/7/7/0/0/0/0" {
@@ -90,6 +94,7 @@ func TestCatalogDataMigration(t *testing.T) {
 	}
 
 	exec(up)
+	exec(studyUp)
 	if snapshot() != seeded {
 		t.Fatal("geri alıp yeniden kurunca katalog farklı")
 	}

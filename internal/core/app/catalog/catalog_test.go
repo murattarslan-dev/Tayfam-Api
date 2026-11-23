@@ -43,8 +43,9 @@ func TestNewNeedsPool(t *testing.T) {
 // seed (00030), raised by every migration that changes a type in place
 // (00036: the camp's fields, issue #241; 00037: the hike's fields, issue
 // #242; 00038: the fishing log's fields, issue #243; 00040: the hike's
-// measures, issue #245; 00066: the full catalog, issue #260).
-const seedVersion = 6
+// measures, issue #245; 00066: the full catalog, issue #260; 00068: the
+// Eğitim types' study tag fields, issue #333).
+const seedVersion = 7
 
 // faz1Types are the seven Faz 1 types; their version 1 is today's
 // behaviour of Faz 1 (ADR-0025 §10 step 1).
