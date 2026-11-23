@@ -122,6 +122,9 @@ const (
 	// TargetMaterial: a material of the tayfa's material library (issue
 	// #261, ADR-0040 §3); its subject is the author.
 	TargetMaterial TargetType = "material"
+	// TargetGarageVehicle: a vehicle of a member's garage that shows in the
+	// tayfa (issue #272, ADR-0040 §4); its subject is the owner.
+	TargetGarageVehicle TargetType = "garage_vehicle"
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
 	// createDirect.
 	TargetDMMessage TargetType = "dm_message"
@@ -135,7 +138,8 @@ const (
 func (t TargetType) content() bool {
 	switch t {
 	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetLogEntry, TargetEventPhoto,
-		TargetChannelMessage, TargetEventQuestion, TargetDailyItem, TargetLibraryItem, TargetMaterial:
+		TargetChannelMessage, TargetEventQuestion, TargetDailyItem, TargetLibraryItem, TargetMaterial,
+		TargetGarageVehicle:
 		return true
 	}
 	return false
@@ -619,6 +623,8 @@ func moduleOf(t TargetType) string {
 		return access.ModuleLibrary
 	case TargetMaterial:
 		return access.ModuleMaterials
+	case TargetGarageVehicle:
+		return access.ModuleGarage
 	}
 	return access.ModuleEvents // events, log entries, album photos and event questions
 }
@@ -701,6 +707,10 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 	case TargetMaterial:
 		var r store.GetReportTargetMaterialRow
 		r, err = q.GetReportTargetMaterial(ctx, store.GetReportTargetMaterialParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetGarageVehicle:
+		var r store.GetReportTargetGarageVehicleRow
+		r, err = q.GetReportTargetGarageVehicle(ctx, store.GetReportTargetGarageVehicleParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
 	default:
 		return content{}, errors.New("içerik olmayan hedef")

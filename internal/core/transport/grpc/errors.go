@@ -316,6 +316,10 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_BLOCKED_LINK, true
 	case errors.Is(err, apperr.ErrMaterialLimit):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MATERIAL_LIMIT, true
+	case errors.Is(err, apperr.ErrGarageVehicleNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrGarageLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GARAGE_LIMIT, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

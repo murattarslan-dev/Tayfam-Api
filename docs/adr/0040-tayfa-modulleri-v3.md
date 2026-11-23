@@ -238,6 +238,36 @@ Ortak kurallar (dördü için):
 - Satılık/ilan alanı yoktur.
 - KVKK: araçlar dışa aktarmaya girer; hesap silinince silinir.
 
+**Uygulama notları (#272):**
+
+- **Tablolar:** `garage_vehicles` (`owner_id`, `make` 1–40, `model` ≤ 40,
+  `model_year` 1900–gelecek yıl, `color` ≤ 30, `note` ≤ 200; metinler tek
+  satır, boşluklar tekleştirilir; `photo1..3_upload_id`; soft delete;
+  plaka kolonu yok) ve `garage_tayfa_visibility` (`user_id`, `tayfa_id`,
+  `visible`). Kişi başına en fazla 10 silinmemiş araç (`garage-limit`;
+  sahibin yazımları danışma kilidiyle sıraya girer).
+- **Görünürlük:** tek kaynak SQL `garage_visible_in(owner, tayfa)` (satır
+  ya da `automotive` varsayılanı). Tayfa garajı yalnızca sahibi etkin üye
+  olan araçları döner. Fotoğraf görünürlüğü `garage_vehicle_seen_by`:
+  aracın görünür olduğu, `garage` modülü açık ortak bir tayfada ikisi de
+  etkin üye. Göstermek `garage.show` (üye, susturulmuşken değil), gizlemek
+  `TayfaView`.
+- **Araçlar bileşeni:** `SetVehicle`'da `garage_vehicle_id` yalnızca
+  çağıranın kendi garajından; marka/model/yıl/renk kopyalanır (istekte boş
+  olmalı), `event_vehicles.vehicle_id` garaj aracına foreign key (kalıcı
+  silinince `NULL`). Garajdaki sonraki düzenleme etkinlikteki kopyayı
+  değiştirmez. Plaka yalnızca etkinlik kaydında.
+- **Silme:** sahibin silmesi fotoğrafları hemen bırakır; moderatörün
+  (`garage.remove_any`, aracın görünür olduğu tayfada) ya da platformun
+  kaldırması aracı her yerde gizler; 30 gün sonra kalıcı silme. Hesap
+  silinince araçlar ve görünürlük satırları hemen silinir.
+- Yükleme amacı `garage_vehicle` (tayfasız, avatar gibi); şikâyet hedefi
+  `garage_vehicle` (konusu sahibi); kötüye kullanım filtresinin takılma
+  noktası `garage.checkTerms`. Dışa aktarma bölümleri `garage_vehicles`
+  (40) ve `garage_visibility` (41); ana sayfa bileşeni `garage` (modül
+  bileşeni). Hatalar 2730–2731: `garage-vehicle-not-found`,
+  `garage-limit`.
+
 ### 5. Ders ve konu listesi (Eğitim)
 
 - `catalog_study_tags` (core): `key` (değişmez), `parent_key` (NULL =

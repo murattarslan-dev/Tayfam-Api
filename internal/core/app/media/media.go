@@ -67,6 +67,10 @@ const (
 	// material, seen by the tayfa's active members while the materials
 	// module is on.
 	PurposeMaterialNote = "material_note"
+	// PurposeGarageVehicle is a photo of a vehicle in the member's garage
+	// (issue #272, ADR-0040 §4): at most three per vehicle, not a tayfa's
+	// (no tayfa_id), seen by the members of the tayfas the garage shows in.
+	PurposeGarageVehicle = "garage_vehicle"
 )
 
 // Statuses (uploads.status). statusDeleting is never returned.
@@ -92,6 +96,8 @@ const (
 	TargetAnswer   = "answer"
 	// TargetMaterial is a material of the material library (issue #261).
 	TargetMaterial = "material"
+	// TargetGarageVehicle is a vehicle of a member's garage (issue #272).
+	TargetGarageVehicle = "garage_vehicle"
 	// Chat's message IDs (ADR-0031); chat decides who sees them.
 	TargetChannelMessage = "channel_message"
 	TargetDMMessage      = "dm_message"

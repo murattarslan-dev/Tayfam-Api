@@ -87,6 +87,8 @@ func componentRegistrars() []componentRegistrar {
 		registerTayfaLibrary,
 		// material library (#261)
 		registerTayfaMaterials,
+		// member garage (#272)
+		registerMemberGarage,
 	}
 }
 

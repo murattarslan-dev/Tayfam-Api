@@ -58,6 +58,8 @@ var uploadPurposes = map[corev1.UploadPurpose]string{
 	corev1.UploadPurpose_UPLOAD_PURPOSE_QUESTION_POOL: media.PurposeQuestionPool,
 	// Issue #261 (ADR-0040 §3).
 	corev1.UploadPurpose_UPLOAD_PURPOSE_MATERIAL_NOTE: media.PurposeMaterialNote,
+	// Issue #272 (ADR-0040 §4).
+	corev1.UploadPurpose_UPLOAD_PURPOSE_GARAGE_VEHICLE: media.PurposeGarageVehicle,
 }
 
 var uploadStatuses = map[string]corev1.UploadStatus{

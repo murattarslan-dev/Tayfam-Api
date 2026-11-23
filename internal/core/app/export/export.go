@@ -89,6 +89,10 @@ const (
 	SectionLibraryLoans = "library_loans"
 	// Issue #261: the materials one added (ADR-0040 §3).
 	SectionMaterials = "materials"
+	// Issue #272: one's garage vehicles and visibility choices (ADR-0040
+	// §4).
+	SectionGarageVehicles   = "garage_vehicles"
+	SectionGarageVisibility = "garage_visibility"
 )
 
 const (
@@ -281,6 +285,14 @@ var sections = []struct {
 	{SectionMaterials, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportMaterials(ctx, store.ExportMaterialsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportMaterialsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionGarageVehicles, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportGarageVehicles(ctx, store.ExportGarageVehiclesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportGarageVehiclesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionGarageVisibility, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportGarageVisibility(ctx, store.ExportGarageVisibilityParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportGarageVisibilityRow) row { return row{x.K, x.Data} })
 	}},
 }
 

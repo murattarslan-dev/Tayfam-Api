@@ -222,6 +222,9 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_MATERIAL_NOT_FOUND": {http.StatusNotFound, "material-not-found"},
 		"ERROR_REASON_BLOCKED_LINK":       {http.StatusBadRequest, "blocked-link"},
 		"ERROR_REASON_MATERIAL_LIMIT":     {http.StatusConflict, "material-limit"},
+		// Üye garajı (issue #272; ADR-0040 §4).
+		"ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND": {http.StatusNotFound, "garage-vehicle-not-found"},
+		"ERROR_REASON_GARAGE_LIMIT":             {http.StatusConflict, "garage-limit"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

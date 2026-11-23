@@ -327,6 +327,16 @@ var (
 	ErrMaterialLimit = errors.New("materyal sınırı")
 )
 
+// Member garage errors (issue #272; ADR-0040 §4).
+var (
+	// ErrGarageVehicleNotFound: a vehicle that is not in the caller's garage
+	// (an owner's step, the vehicles component), or that does not show in
+	// the tayfa (a moderator's removal).
+	ErrGarageVehicleNotFound = errors.New("garaj aracı yok")
+	// ErrGarageLimit: the owner already has garage.MaxVehicles vehicles.
+	ErrGarageLimit = errors.New("garaj sınırı")
+)
+
 // Attendance errors (issue #50). None of them carries the location that was
 // sent.
 var (

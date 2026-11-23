@@ -47,6 +47,9 @@ type eventVehicleJSON struct {
 	Seats          int32    `json:"seats"`
 	RiderUserIDs   []string `json:"rider_user_ids"`
 	PendingUserIDs []string `json:"pending_user_ids"`
+	// GarageVehicleID is the member garage vehicle it was copied from
+	// (issue #272).
+	GarageVehicleID string `json:"garage_vehicle_id,omitempty"`
 }
 
 type eventVehiclesJSON struct {
@@ -66,8 +69,9 @@ func eventVehiclesFrom(v *corev1.EventVehicles) eventVehiclesJSON {
 		out.Vehicles = append(out.Vehicles, eventVehicleJSON{
 			ID: it.GetId(), UserID: it.GetUserId(), Make: it.GetMake(), Model: it.GetModel(), ModelYear: it.GetModelYear(),
 			Color: it.GetColor(), Plate: it.GetPlate(), Seats: it.GetSeats(),
-			RiderUserIDs:   append([]string{}, it.GetRiderUserIds()...),
-			PendingUserIDs: append([]string{}, it.GetPendingUserIds()...),
+			RiderUserIDs:    append([]string{}, it.GetRiderUserIds()...),
+			PendingUserIDs:  append([]string{}, it.GetPendingUserIds()...),
+			GarageVehicleID: it.GetGarageVehicleId(),
 		})
 	}
 	return out
@@ -104,6 +108,9 @@ type eventVehicleBody struct {
 	Color     string `json:"color"`
 	Plate     string `json:"plate"`
 	Seats     int32  `json:"seats"`
+	// GarageVehicleID (issue #272): a vehicle of the caller's garage; make,
+	// model, model_year and color are then left empty.
+	GarageVehicleID string `json:"garage_vehicle_id"`
 }
 
 func (h componentHandlers) setVehicle(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -115,7 +122,16 @@ func (h componentHandlers) setVehicle(ctx context.Context, w http.ResponseWriter
 	if !decode(w, r, &b) {
 		return
 	}
-	if n := runes(b.Make); n < 1 || n > vehicleMakeMax || runes(b.Model) > vehicleMakeMax ||
+	minMake := 1
+	if b.GarageVehicleID != "" {
+		// The garage vehicle's values are copied by core.
+		if !validUUID(b.GarageVehicleID) {
+			badRequest(w, r)
+			return
+		}
+		minMake = 0
+	}
+	if n := runes(b.Make); n < minMake || n > vehicleMakeMax || runes(b.Model) > vehicleMakeMax ||
 		runes(b.Color) > vehicleColorMax || utf8.RuneCountInString(b.Plate) > vehiclePlateMax ||
 		b.ModelYear < 0 || b.Seats < 0 || b.Seats > vehicleMaxSeats {
 		badRequest(w, r)
@@ -123,6 +139,7 @@ func (h componentHandlers) setVehicle(ctx context.Context, w http.ResponseWriter
 	}
 	resp, err := h.vehicles().SetVehicle(ctx, &corev1.SetVehicleRequest{
 		Ref: ref, Make: b.Make, Model: b.Model, ModelYear: b.ModelYear, Color: b.Color, Plate: b.Plate, Seats: b.Seats,
+		GarageVehicleId: b.GarageVehicleID,
 	})
 	if err != nil {
 		h.fail(w, r, err)
