@@ -240,10 +240,25 @@ paths:
         Erişim token'ı iptal edilemez (ADR-0004): kalan ömrü boyunca (en
         fazla 15 dakika) hesap uçları onu reddeder, tayfa uçları üyelik
         kalmadığı için reddeder.
+
+        **Apple hesabı (ADR-0045):** yeniden girişte Apple'ın verdiği tek
+        kullanımlık yetkilendirme kodu gövdede `apple_authorization_code`
+        ile gönderilir. Sunucu, hiçbir şeyi silmeden önce kullanıcının Apple
+        token'larını iptal eder; kod ve token'lar saklanmaz. Kod yoksa,
+        geçersizse, kullanılmışsa ya da başka bir Apple hesabına aitse
+        `403 reauthentication-required` (kullanıcı Apple ile yeniden giriş
+        yapar); Apple'a ulaşılamıyorsa `503`. İki durumda da hesap silinmez.
+        Google hesabında gövde gerekmez; gönderilirse kod yok sayılır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteAccountRequest" }
       responses:
         "204": { description: Hesap silindi }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
@@ -9756,6 +9771,18 @@ components:
             İsteğe bağlı, Android: Play Integrity standard request token'ı
             (ADR-0022). `requestHash` = base64url(SHA-256("tayfam-integrity/v1/sign-in\n" + nonce)),
             dolgusuz.
+
+    DeleteAccountRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        apple_authorization_code:
+          type: string
+          maxLength: 1024
+          description: |
+            Yalnızca Apple hesabında: hesap silmeden önceki Apple girişinin
+            yetkilendirme kodu (tek kullanımlık, yaklaşık 5 dakika geçerli;
+            ADR-0045).
 
     RefreshRequest:
       type: object

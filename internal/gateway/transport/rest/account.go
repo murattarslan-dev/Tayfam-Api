@@ -57,8 +57,28 @@ type consentBody struct {
 	TermsVersion         string `json:"terms_version"`
 }
 
+// deleteAccountBody is the optional body of DELETE /v1/me (ADR-0045 §3).
+type deleteAccountBody struct {
+	AppleAuthorizationCode string `json:"apple_authorization_code"`
+}
+
+// maxAppleCode is the contract's limit for apple_authorization_code.
+const maxAppleCode = 1024
+
 func (h coreHandlers) deleteAccount(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	if _, err := h.d.Accounts.DeleteAccount(ctx, &identityv1.DeleteAccountRequest{}); err != nil {
+	// The body is optional: only an account with an Apple identity sends
+	// one. An empty request stays valid.
+	var b deleteAccountBody
+	if r.ContentLength != 0 {
+		if !decodeLimit(w, r, &b, maxAuthBodyBytes) {
+			return
+		}
+		if len(b.AppleAuthorizationCode) > maxAppleCode {
+			httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
+			return
+		}
+	}
+	if _, err := h.d.Accounts.DeleteAccount(ctx, &identityv1.DeleteAccountRequest{AppleAuthorizationCode: b.AppleAuthorizationCode}); err != nil {
 		h.identityFail(w, r, err)
 		return
 	}
