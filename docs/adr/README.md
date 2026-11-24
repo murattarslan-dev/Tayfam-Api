@@ -52,6 +52,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0042](0042-katalog-degisikligi-olayi.md) | Katalog değişikliği olayı (`catalog.changed`) ve identity'deki kopya | Kabul edildi |
 | [0043](0043-ders-konu-alan-turu.md) | Ders/konu listesine bağlı tür alanı (`study_tags`) | Kabul edildi |
 | [0044](0044-yazboz-esli-kip.md) | Yazbozda eşli kip (`side: pair`) | Kabul edildi |
+| [0045](0045-apple-ile-giris.md) | Apple ile giriş (yalnızca iOS) ve hesap silmede token iptali | Önerildi |
 
 Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
 yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu
