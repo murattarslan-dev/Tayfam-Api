@@ -166,7 +166,7 @@ Bileşen listesi kapalıdır ve kodla büyür. İlk liste (Notion Faz 3 §3):
 | `teams` | Takım kurma | rastgele / dengeli / elle; takım büyüklüğü (2 = ikili eşleştirme) | — |
 | `draw` | Kura | — | — |
 | `bracket` | Eşleşme ağacı | eleme / lig / İsviçre | — |
-| `scoreboard` | Yazboz ve skor | oyuncu/takım, el el ya da tek maç, hedef puan, yüksek/düşük kazanır | — |
+| `scoreboard` | Yazboz ve skor | oyuncu/takım/eşli (eşli: ADR-0044), el el ya da tek maç, hedef puan, yüksek/düşük kazanır | — |
 | `ranking` | Derece / sıralama | süre ya da sıra | — |
 | `vote` | Etkinliğe bağlı oylama | seçenek kaynağı (serbest, katılımcı, araç…) | — |
 | `celebration` | Kazanan ekranı ve tayfa bildirimi | kaynak bileşen | — |
