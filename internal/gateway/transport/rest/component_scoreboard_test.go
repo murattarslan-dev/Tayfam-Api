@@ -158,6 +158,17 @@ func TestScoreboardComponentRoutes(t *testing.T) {
 	if b := w.Body.String(); !strings.Contains(b, `{"player_id":"`+entryID+`","outcome":"draw"}`) {
 		t.Fatalf("wdl: %s", b)
 	}
+	// A pair table (ADR-0044): each seat's pair; none elsewhere.
+	if strings.Contains(w.Body.String(), `"pair"`) {
+		t.Fatalf("eşsiz masada eş: %s", w.Body)
+	}
+	f.out.Tables[0].Rules.Side = "pair"
+	f.out.Tables[0].Players[0].Pair, f.out.Tables[0].Players[1].Pair = 1, 2
+	w = as(h, "GET", scoreboardPath, "")
+	if b := w.Body.String(); !strings.Contains(b, `"side":"pair"`) || !strings.Contains(b, `{"id":"`+vehicleID+`","position":2,"pair":2}`) ||
+		!strings.Contains(b, `"user_id":"`+userID+`","pair":1}`) {
+		t.Fatalf("eşli masa: %s", b)
+	}
 }
 
 func TestScoreboardComponentRoutesValidateInput(t *testing.T) {

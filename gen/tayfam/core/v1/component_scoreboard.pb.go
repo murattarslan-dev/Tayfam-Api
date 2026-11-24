@@ -25,7 +25,8 @@ const (
 // ScoreRules are a table's (or the component's) rules.
 type ScoreRules struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "player" or "team".
+	// "player", "team" or "pair" (four seats, partners facing each other:
+	// ADR-0044).
 	Side string `protobuf:"bytes,1,opt,name=side,proto3" json:"side,omitempty"`
 	// "round" (round by round), "single" (one match) or "first_to" (until a
 	// total reaches the target).
@@ -216,7 +217,9 @@ type ScorePlayer struct {
 	// person's or the team was removed.
 	TeamId string `protobuf:"bytes,4,opt,name=team_id,json=teamId,proto3" json:"team_id,omitempty"`
 	// A guest player's ID (issue #252; GuestPlayerComponentService).
-	GuestId       string `protobuf:"bytes,5,opt,name=guest_id,json=guestId,proto3" json:"guest_id,omitempty"`
+	GuestId string `protobuf:"bytes,5,opt,name=guest_id,json=guestId,proto3" json:"guest_id,omitempty"`
+	// At a pair table: 1 (seats 1 and 3) or 2 (seats 2 and 4); 0 otherwise.
+	Pair          int32 `protobuf:"varint,6,opt,name=pair,proto3" json:"pair,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -284,6 +287,13 @@ func (x *ScorePlayer) GetGuestId() string {
 		return x.GuestId
 	}
 	return ""
+}
+
+func (x *ScorePlayer) GetPair() int32 {
+	if x != nil {
+		return x.Pair
+	}
+	return 0
 }
 
 // ScoreEntry is a seat's score in a round.
@@ -404,7 +414,8 @@ func (x *ScoreRound) GetScores() []*ScoreEntry {
 	return nil
 }
 
-// ScoreStanding is a seat's place at a table.
+// ScoreStanding is a seat's place at a table. At a pair table each seat
+// carries its pair's total, rounds won and rank.
 type ScoreStanding struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	PlayerId string                 `protobuf:"bytes,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
@@ -498,8 +509,8 @@ type ScoreTable struct {
 	Rounds []*ScoreRound `protobuf:"bytes,10,rep,name=rounds,proto3" json:"rounds,omitempty"`
 	// Ordered by rank, then by position.
 	Standings []*ScoreStanding `protobuf:"bytes,11,rep,name=standings,proto3" json:"standings,omitempty"`
-	// The seats ranked first at a finished table (more than one for a draw);
-	// empty while the table is open.
+	// The seats ranked first at a finished table (more than one for a draw;
+	// both seats of the winning pair); empty while the table is open.
 	WinnerIds []string `protobuf:"bytes,12,rep,name=winner_ids,json=winnerIds,proto3" json:"winner_ids,omitempty"`
 	// The caller may enter a round or finish the table now: a manager or a
 	// referee of the table who is not muted, an open table, a started event,
@@ -1753,13 +1764,14 @@ const file_tayfam_core_v1_component_scoreboard_proto_rawDesc = "" +
 	"\aretired\x18\x06 \x01(\bR\aretired\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x86\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9a\x01\n" +
 	"\vScorePlayer\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bposition\x18\x02 \x01(\x05R\bposition\x12\x17\n" +
 	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x17\n" +
 	"\ateam_id\x18\x04 \x01(\tR\x06teamId\x12\x19\n" +
-	"\bguest_id\x18\x05 \x01(\tR\aguestId\"[\n" +
+	"\bguest_id\x18\x05 \x01(\tR\aguestId\x12\x12\n" +
+	"\x04pair\x18\x06 \x01(\x05R\x04pair\"[\n" +
 	"\n" +
 	"ScoreEntry\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\tR\bplayerId\x12\x16\n" +

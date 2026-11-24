@@ -41,7 +41,11 @@ const (
 // A component holds up to 20 tables (one when its `tables` parameter is
 // off). A table seats participants of the event (an active member who
 // answered "going" or whose attendance was verified) or, in a team
-// scoreboard, the teams of a teams component of the event. Its rules are
+// scoreboard, the teams of a teams component of the event. A pair table
+// (side "pair", ADR-0044) seats four people or guests: seats 1 and 3 are
+// pair 1, seats 2 and 4 pair 2; a round's score is entered per pair and
+// written to both of its seats, and the pair is ranked and wins together.
+// Its rules are
 // resolved when it is created and kept on the table: the component's
 // parameters (the organizer's choice where the definition leaves it to
 // them), overridden by the table's preset and, for the target, by the
@@ -76,7 +80,8 @@ type ScoreboardComponentServiceClient interface {
 	// teams_key, target: 0–100000, or none where first_to or first needs
 	// one; players: a seat that is not exactly one person or team, a person
 	// or team twice, more than 50, fewer or more than the preset allows, a
-	// person on a team table or a team on a player table),
+	// person on a team table or a team on a player or pair table, a pair
+	// table with other than four seats),
 	// ERROR_REASON_EVENT_LIMIT (the component's tables are full),
 	// ERROR_REASON_SCORE_PRESET_UNAVAILABLE,
 	// ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT,
@@ -111,7 +116,9 @@ type ScoreboardComponentServiceClient interface {
 	// Errors: ERROR_REASON_VALIDATION (scores: none, more than 50, a seat
 	// that is not the table's or twice, points outside ±1000000, an outcome
 	// in points mode; in wdl mode fewer than two seats, points, or not one
-	// win and the rest losses or all draws), ERROR_REASON_EVENT_LIMIT (200
+	// win and the rest losses or all draws; at a pair table the rules hold
+	// per pair, a score names either seat of its pair, and both seats of a
+	// pair must carry the same score), ERROR_REASON_EVENT_LIMIT (200
 	// rounds), ERROR_REASON_SCORE_TABLE_FINISHED,
 	// ERROR_REASON_SCORE_TABLE_NOT_FOUND, ERROR_REASON_SCORE_NOT_STARTED,
 	// ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
@@ -251,7 +258,11 @@ func (c *scoreboardComponentServiceClient) FinishScoreTable(ctx context.Context,
 // A component holds up to 20 tables (one when its `tables` parameter is
 // off). A table seats participants of the event (an active member who
 // answered "going" or whose attendance was verified) or, in a team
-// scoreboard, the teams of a teams component of the event. Its rules are
+// scoreboard, the teams of a teams component of the event. A pair table
+// (side "pair", ADR-0044) seats four people or guests: seats 1 and 3 are
+// pair 1, seats 2 and 4 pair 2; a round's score is entered per pair and
+// written to both of its seats, and the pair is ranked and wins together.
+// Its rules are
 // resolved when it is created and kept on the table: the component's
 // parameters (the organizer's choice where the definition leaves it to
 // them), overridden by the table's preset and, for the target, by the
@@ -286,7 +297,8 @@ type ScoreboardComponentServiceServer interface {
 	// teams_key, target: 0–100000, or none where first_to or first needs
 	// one; players: a seat that is not exactly one person or team, a person
 	// or team twice, more than 50, fewer or more than the preset allows, a
-	// person on a team table or a team on a player table),
+	// person on a team table or a team on a player or pair table, a pair
+	// table with other than four seats),
 	// ERROR_REASON_EVENT_LIMIT (the component's tables are full),
 	// ERROR_REASON_SCORE_PRESET_UNAVAILABLE,
 	// ERROR_REASON_SCORE_PLAYER_NOT_PARTICIPANT,
@@ -321,7 +333,9 @@ type ScoreboardComponentServiceServer interface {
 	// Errors: ERROR_REASON_VALIDATION (scores: none, more than 50, a seat
 	// that is not the table's or twice, points outside ±1000000, an outcome
 	// in points mode; in wdl mode fewer than two seats, points, or not one
-	// win and the rest losses or all draws), ERROR_REASON_EVENT_LIMIT (200
+	// win and the rest losses or all draws; at a pair table the rules hold
+	// per pair, a score names either seat of its pair, and both seats of a
+	// pair must carry the same score), ERROR_REASON_EVENT_LIMIT (200
 	// rounds), ERROR_REASON_SCORE_TABLE_FINISHED,
 	// ERROR_REASON_SCORE_TABLE_NOT_FOUND, ERROR_REASON_SCORE_NOT_STARTED,
 	// ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED and the errors of
