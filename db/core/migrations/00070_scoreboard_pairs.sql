@@ -22,8 +22,9 @@
 -- Katalog bir kez değiştiği için catalog_meta.catalog_version bir artar;
 -- catalog.changed olayını catalog-publish işi yayınlar (ADR-0042 §5).
 --
--- Up idempotenttir: ön ayarlar ve sürüm satırı ON CONFLICT DO NOTHING ile
--- eklenir, tür yalnızca sürüm 1'deyse sürüm 2'ye geçer; yeniden çalıştırmak
+-- Up idempotenttir: kısıt ve tetikleyici yeniden kurulur, ön ayarlar ve
+-- sürüm satırı ON CONFLICT DO NOTHING ile eklenir, sıralar yalnızca bir kez
+-- taşınır, tür yalnızca sürüm 1'deyse sürüm 2'ye geçer; yeniden çalıştırmak
 -- yalnızca katalog sürümünü artırır.
 --
 -- Veri taşınmaz ve silinmez.
@@ -39,13 +40,13 @@
 
 -- +goose Up
 
-ALTER TABLE event_score_tables DROP CONSTRAINT event_score_tables_side;
+ALTER TABLE event_score_tables DROP CONSTRAINT IF EXISTS event_score_tables_side;
 ALTER TABLE event_score_tables ADD CONSTRAINT event_score_tables_side CHECK (
   (side IN ('player', 'pair') AND team_key IS NULL)
   OR (side = 'team' AND COALESCE(team_key ~ '^[a-z][a-z0-9_]{1,39}$', false)));
 
 -- +goose StatementBegin
-CREATE FUNCTION event_score_players_pair_guard() RETURNS trigger
+CREATE OR REPLACE FUNCTION event_score_players_pair_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
   IF (NEW.position > 4 OR NEW.team_key IS NOT NULL)
@@ -58,6 +59,7 @@ END;
 $$;
 -- +goose StatementEnd
 
+DROP TRIGGER IF EXISTS event_score_players_pair_guard ON event_score_players;
 CREATE TRIGGER event_score_players_pair_guard
   BEFORE INSERT OR UPDATE OF table_id, position, team_key ON event_score_players
   FOR EACH ROW EXECUTE FUNCTION event_score_players_pair_guard();

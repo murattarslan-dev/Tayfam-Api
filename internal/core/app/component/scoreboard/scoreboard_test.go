@@ -41,6 +41,11 @@ const (
 	matchV1   = `{"components":[{"kind":"teams","params":{"mode":"manual","team_count":2}},{"kind":"scoreboard","params":{"side":"team","rounds":"single","winner":"high"}}]}`
 	chessType = "test_chess"
 	chessV1   = `{"components":[{"kind":"scoreboard","key":"games","params":{"result":"wdl","best_of":3}}]}`
+	// pairType offers the pair presets (ADR-0044) with guests, and a wdl
+	// pair scoreboard of its own.
+	pairType = "test_pairs"
+	pairV1   = `{"components":[{"kind":"scoreboard","params":{"tables":true,"guests":true,"presets":["okey_101","okey_101_pairs","pisti_pairs"]}},` +
+		`{"kind":"scoreboard","key":"duel","params":{"side":"pair","result":"wdl"}}]}`
 )
 
 type clock struct {
@@ -113,7 +118,7 @@ func setup(t *testing.T) *env {
 	tayfas, err := tayfa.New(tayfa.Config{Pool: d.App, Log: log})
 	must(t, err)
 	e := &env{sb: scoreboard.New(fw), teams: teams.New(fw), fw: fw, events: events, tayfas: tayfas, pool: d.App, admin: d.Admin, clock: c}
-	for key, def := range map[string]string{gameType: gameV1, matchType: matchV1, chessType: chessV1} {
+	for key, def := range map[string]string{gameType: gameV1, matchType: matchV1, chessType: chessV1, pairType: pairV1} {
 		e.addType(t, key, def)
 	}
 	return e
@@ -898,5 +903,278 @@ func TestScoreboardExport(t *testing.T) {
 	if !strings.Contains(data, tb.ID.String()) || !strings.Contains(data, `"points": 2`) || !strings.Contains(data, `"position": 1`) ||
 		strings.Contains(data, p[1].String()) || strings.Contains(data, `"points": 1`) {
 		t.Fatalf("dışa aktarılan: %s", data)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Pairs (ADR-0044)
+
+// At a pair table partners face each other (1–3, 2–4); a pair's score is
+// on both of its seats and counts once; both seats share the pair's place,
+// and both win.
+func TestComputePairs(t *testing.T) {
+	p := seats(4)
+	low := scoreboard.Rules{Side: "pair", Rounds: "round", Winner: "low", Result: "points"}
+	both := func(n int32, a, b int32) scoreboard.Round {
+		return round(n, p, a, b, a, b)
+	}
+	rounds := []scoreboard.Round{both(1, -101, 40), both(2, 20, 10)}
+	got := scoreboard.Compute(low, p, rounds, true)
+	if len(got.Standings) != 4 {
+		t.Fatalf("sıralama: %+v", got)
+	}
+	want := []struct {
+		seat  id.ID
+		total float64
+		rank  int32
+	}{{p[0].ID, -81, 1}, {p[2].ID, -81, 1}, {p[1].ID, 50, 2}, {p[3].ID, 50, 2}}
+	for i, w := range want {
+		s := got.Standings[i]
+		if s.Player != w.seat || s.Total != w.total || s.Rank != w.rank {
+			t.Fatalf("sıra %d: %+v, %+v bekleniyordu", i, s, w)
+		}
+	}
+	if got.Standings[0].RoundsWon != 1 || got.Standings[2].RoundsWon != 1 {
+		t.Fatalf("kazanılan eller: %+v", got.Standings)
+	}
+	if len(got.Winners) != 2 || got.Winners[0] != p[0].ID || got.Winners[1] != p[2].ID {
+		t.Fatalf("kazanan eş: %+v", got.Winners)
+	}
+	if open := scoreboard.Compute(low, p, rounds, false); len(open.Winners) != 0 {
+		t.Fatalf("açık masada kazanan: %+v", open.Winners)
+	}
+
+	// A score on one seat of a pair counts the same as on both.
+	half := []scoreboard.Round{round(1, p, -101, 40)}
+	if got := scoreboard.Compute(low, p, half, true); got.Standings[1].Total != -101 || got.Standings[2].Total != 40 {
+		t.Fatalf("tek koltuktaki skor: %+v", got.Standings)
+	}
+
+	// A draw: all four first.
+	if got := scoreboard.Compute(low, p, []scoreboard.Round{both(1, 5, 5)}, true); len(got.Winners) != 4 {
+		t.Fatalf("berabere eşler: %+v", got)
+	}
+
+	// The target is the pair's (pişti to 151): 80 + 80 on both seats is
+	// 160 once, not 320 by seat.
+	pisti := scoreboard.Rules{Side: "pair", Rounds: "round", Winner: "high", Result: "points", Target: 151}
+	if scoreboard.Decided(pisti, p, []scoreboard.Round{both(1, 80, 10)}) {
+		t.Fatal("eşin skoru iki kez sayıldı")
+	}
+	if !scoreboard.Decided(pisti, p, []scoreboard.Round{both(1, 80, 10), both(2, 80, 10)}) {
+		t.Fatal("hedefe ulaşan eş masayı bitirmedi")
+	}
+	if got := scoreboard.Compute(pisti, p, []scoreboard.Round{both(1, 80, 10), both(2, 80, 10)}, true); got.Standings[0].Total != 160 {
+		t.Fatalf("eşin toplamı: %+v", got.Standings)
+	}
+	if scoreboard.PairOf(1) != 1 || scoreboard.PairOf(3) != 1 || scoreboard.PairOf(2) != 2 || scoreboard.PairOf(4) != 2 {
+		t.Fatal("koltuk–eş eşlemesi")
+	}
+}
+
+// The pair presets (00070): four seats, the rules of their single
+// versions; the reader keeps a pair preset's bounds around four.
+func TestPairPresets(t *testing.T) {
+	e := setup(t)
+	keys := []string{"batak_pairs", "okey_101_pairs", "okey_pairs", "pisti_pairs"}
+	got, err := scoreboard.LoadPresets(ctx, store.New(e.pool), []string{"pisti_pairs", "batak", "okey_pairs", "okey_101_pairs", "batak_pairs", "okey_101"})
+	must(t, err)
+	var order []string
+	for _, p := range got {
+		order = append(order, p.Key)
+	}
+	// Each pair preset follows its single one in catalog order.
+	if strings.Join(order, ",") != "batak,batak_pairs,okey_101,okey_101_pairs,okey_pairs,pisti_pairs" {
+		t.Fatalf("ön ayar sırası: %v", order)
+	}
+	byKey := map[string]scoreboard.Preset{}
+	for _, p := range got {
+		byKey[p.Key] = p
+	}
+	for _, k := range keys {
+		p := byKey[k]
+		if p.Rules.Side != scoreboard.SidePair || p.PlayersMin != scoreboard.PairSeats || p.PlayersMax != scoreboard.PairSeats ||
+			p.Rules.Rounds != "round" || p.Retired || !strings.Contains(p.Labels["tr"], "(eşli)") {
+			t.Errorf("%s: %+v", k, p)
+		}
+	}
+	if byKey["okey_101_pairs"].Rules.Winner != "low" || byKey["batak_pairs"].Rules.Winner != "high" ||
+		byKey["pisti_pairs"].Rules.Target != 151 {
+		t.Fatalf("eşli kurallar: %+v", byKey)
+	}
+	for name, params := range map[string]string{
+		"üç kişilik eşli":  `{"side": "pair", "players_max": 3}`,
+		"beş kişilik eşli": `{"side": "pair", "players_min": 5, "players_max": 6}`,
+		"bozuk taraf":      `{"side": "pairs"}`,
+	} {
+		if _, err := scoreboard.ParsePreset("x", []byte(`{"tr": "X"}`), []byte(params), "active"); err == nil {
+			t.Errorf("%s kabul edildi", name)
+		}
+	}
+	for _, params := range []string{`{"side": "pair"}`, `{"side": "pair", "players_min": 2, "players_max": 6}`} {
+		if _, err := scoreboard.ParsePreset("x", []byte(`{"tr": "X"}`), []byte(params), "active"); err != nil {
+			t.Errorf("%s: %v", params, err)
+		}
+	}
+}
+
+// A pair table: four seats (a guest may be a partner), partners facing each
+// other, a score per pair written to both seats, the pair ranked and
+// winning together.
+func TestScoreboardPairTable(t *testing.T) {
+	e := setup(t)
+	tf, admin := e.newTayfa(t)
+	ev := e.newEvent(t, tf, admin, pairType)
+	p := e.going(t, tf, ev.ID, 4)
+	guestID := id.New()
+	e.exec(t, `INSERT INTO event_guest_players (id, event_id, nickname, created_by) VALUES ($1, $2, 'Kuzen', $3)`,
+		guestID.PG(), ev.ID.PG(), admin.PG())
+	const key = "scoreboard"
+	r := ref(admin, tf, ev.ID, key)
+
+	got, err := e.sb.Get(ctx, r)
+	must(t, err)
+	if len(got.Presets) != 3 || got.Presets[1].Key != "okey_101_pairs" || got.Presets[1].Rules.Side != scoreboard.SidePair {
+		t.Fatalf("ön ayarlar: %+v", got.Presets)
+	}
+
+	// Exactly four seats.
+	_, err = e.sb.CreateTable(ctx, r, scoreboard.TableInput{Label: "Eşli", Preset: "okey_101_pairs", Players: players(p[:3]...)})
+	wantField(t, "üç kişilik eşli masa", err, "players")
+	_, err = e.sb.CreateTable(ctx, r, scoreboard.TableInput{Label: "Eşli", Preset: "okey_101_pairs", TeamsKey: "teams"})
+	wantField(t, "takım anahtarlı eşli masa", err, "teams_key")
+	got, err = e.sb.CreateTable(ctx, r, scoreboard.TableInput{Label: "Eşli 101", Preset: "okey_101_pairs"})
+	must(t, err)
+	tb := last(got)
+	if tb.Rules != (scoreboard.Rules{Side: "pair", Rounds: "round", Winner: "low", Result: "points"}) || tb.TeamsKey != "" || len(tb.Players) != 0 {
+		t.Fatalf("eşli masa: %+v", tb)
+	}
+	_, err = e.sb.SetPlayers(ctx, r, tb.ID, players(p...)[:2])
+	wantField(t, "iki kişilik eşli masa", err, "players")
+	// A guest is a partner like a person.
+	seated := append(players(p[0], p[1], p[2]), scoreboard.PlayerInput{Guest: guestID})
+	got, err = e.sb.SetPlayers(ctx, r, tb.ID, seated)
+	must(t, err)
+	tb = tableOf(t, got, tb.ID)
+	for i, want := range []int32{1, 2, 1, 2} {
+		if tb.Players[i].Position != int32(i+1) || tb.Players[i].Pair != want { //nolint:gosec // small
+			t.Fatalf("koltuk–eş: %+v", tb.Players)
+		}
+	}
+	if tb.Players[3].Guest != guestID {
+		t.Fatalf("misafir eş: %+v", tb.Players[3])
+	}
+
+	// The database keeps a pair table at four seats.
+	_, err = e.admin.Exec(ctx, `INSERT INTO event_score_players (id, table_id, event_id, component_key, position, user_id)
+		VALUES ($1, $2, $3, $4, 5, $5)`, id.New().PG(), tb.ID.PG(), ev.ID.PG(), key, p[3].PG())
+	if constraintOf(err) != "event_score_players_pair" {
+		t.Fatalf("beşinci koltuk: %v", err)
+	}
+
+	e.start(ev)
+	seat := func(i int) id.ID { return tb.Players[i].ID }
+	// Partners' scores differ: refused; a seat twice: refused.
+	for name, in := range map[string][]scoreboard.ScoreInput{
+		"eşlerin farklı skoru": {{Player: seat(0), Points: -101}, {Player: seat(2), Points: 5}},
+		"yabancı koltuk":       {{Player: id.New(), Points: 1}},
+	} {
+		_, err := e.sb.AddRound(ctx, r, tb.ID, in)
+		wantField(t, name, err, "scores")
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_scores WHERE table_id = $1`, tb.ID.PG()); n != 0 {
+		t.Fatalf("reddedilen el yazıldı: %d", n)
+	}
+
+	// One score per pair, on either seat: written to both seats.
+	got, err = e.sb.AddRound(ctx, r, tb.ID, []scoreboard.ScoreInput{{Player: seat(2), Points: -101}, {Player: seat(1), Points: 40}})
+	must(t, err)
+	tb = tableOf(t, got, tb.ID)
+	if len(tb.Rounds) != 1 || len(tb.Rounds[0].Scores) != 4 {
+		t.Fatalf("eşli el: %+v", tb.Rounds)
+	}
+	for i, want := range []int32{-101, 40, -101, 40} {
+		if sc := tb.Rounds[0].Scores[i]; sc.Player != seat(i) || sc.Points != want {
+			t.Fatalf("eldeki skorlar: %+v", tb.Rounds[0].Scores)
+		}
+	}
+	// Both seats of a pair with the same score (a client that does not
+	// know pairs) are taken as one.
+	got, err = e.sb.AddRound(ctx, r, tb.ID, pts(tb, 20, 10, 20, 10))
+	must(t, err)
+	tb = tableOf(t, got, tb.ID)
+	st := tb.Result.Standings
+	if len(st) != 4 || st[0].Player != seat(0) || st[1].Player != seat(2) || st[0].Total != -81 || st[1].Total != -81 ||
+		st[0].Rank != 1 || st[2].Rank != 2 || st[2].Total != 50 || st[3].Player != seat(3) {
+		t.Fatalf("eşli sıralama: %+v", st)
+	}
+	if n := e.count(t, `SELECT count(*) FROM event_scores WHERE table_id = $1`, tb.ID.PG()); n != 8 {
+		t.Fatalf("yazılan skor satırı: %d", n)
+	}
+	// A correction keeps the pair's score on both seats.
+	got, err = e.sb.CorrectRound(ctx, r, tb.ID, 2, []scoreboard.ScoreInput{{Player: seat(3), Points: -200}})
+	must(t, err)
+	tb = tableOf(t, got, tb.ID)
+	if sc := tb.Rounds[1].Scores; len(sc) != 2 || sc[0].Player != seat(1) || sc[1].Player != seat(3) || sc[1].Points != -200 {
+		t.Fatalf("düzeltilen el: %+v", sc)
+	}
+	// Finished: both seats of the winning pair win (pair 2 now: 40 − 200).
+	got, err = e.sb.FinishTable(ctx, r, tb.ID)
+	must(t, err)
+	tb = tableOf(t, got, tb.ID)
+	if w := tb.Result.Winners; len(w) != 2 || w[0] != seat(1) || w[1] != seat(3) {
+		t.Fatalf("kazanan eş: %+v", tb.Result)
+	}
+	loaded, err := scoreboard.Load(ctx, store.New(e.pool), ev.ID, key)
+	must(t, err)
+	if len(loaded) != 1 || len(loaded[0].Result.Winners) != 2 || loaded[0].Players[3].Pair != 2 {
+		t.Fatalf("Load: %+v", loaded)
+	}
+
+	// Pişti (eşli) to 151: the pair's total, counted once, ends the game.
+	got, err = e.sb.CreateTable(ctx, r, scoreboard.TableInput{Label: "Pişti", Preset: "pisti_pairs", Players: players(p...)})
+	must(t, err)
+	pisti := last(got)
+	got, err = e.sb.AddRound(ctx, r, pisti.ID, []scoreboard.ScoreInput{{Player: pisti.Players[0].ID, Points: 100}, {Player: pisti.Players[1].ID, Points: 20}})
+	must(t, err)
+	if tableOf(t, got, pisti.ID).Status != scoreboard.StatusOpen {
+		t.Fatal("hedefe ulaşmadan bitti")
+	}
+	got, err = e.sb.AddRound(ctx, r, pisti.ID, []scoreboard.ScoreInput{{Player: pisti.Players[2].ID, Points: 60}})
+	must(t, err)
+	pisti = tableOf(t, got, pisti.ID)
+	if pisti.Status != scoreboard.StatusFinished || len(pisti.Result.Winners) != 2 ||
+		pisti.Result.Winners[0] != pisti.Players[0].ID || pisti.Result.Winners[1] != pisti.Players[2].ID {
+		t.Fatalf("pişti: %+v", pisti)
+	}
+}
+
+// wdl at a pair table: the rule holds per pair (two pairs, a win and a loss
+// or a draw), each pair's outcome on both seats.
+func TestScoreboardPairWDL(t *testing.T) {
+	e := setup(t)
+	tf, admin := e.newTayfa(t)
+	ev := e.newEvent(t, tf, admin, pairType)
+	p := e.going(t, tf, ev.ID, 4)
+	r := ref(admin, tf, ev.ID, "duel")
+	got, err := e.sb.CreateTable(ctx, r, scoreboard.TableInput{Label: "Eşli maç", Players: players(p...)})
+	must(t, err)
+	tb := last(got)
+	if tb.Rules.Side != scoreboard.SidePair || tb.Rules.Result != scoreboard.ResultWDL {
+		t.Fatalf("kurallar: %+v", tb.Rules)
+	}
+	e.start(ev)
+	_, err = e.sb.AddRound(ctx, r, tb.ID, []scoreboard.ScoreInput{{Player: tb.Players[0].ID, Outcome: "win"}, {Player: tb.Players[2].ID, Outcome: "win"}})
+	wantField(t, "tek eşin sonucu", err, "scores")
+	got, err = e.sb.AddRound(ctx, r, tb.ID, []scoreboard.ScoreInput{{Player: tb.Players[0].ID, Outcome: "loss"}, {Player: tb.Players[3].ID, Outcome: "win"}})
+	must(t, err)
+	tb = tableOf(t, got, tb.ID)
+	for i, want := range []string{"loss", "win", "loss", "win"} {
+		if tb.Rounds[0].Scores[i].Outcome != want {
+			t.Fatalf("eşli sonuçlar: %+v", tb.Rounds[0].Scores)
+		}
+	}
+	if st := tb.Result.Standings; st[0].Player != tb.Players[1].ID || st[0].Total != 1 || st[0].RoundsWon != 1 || st[1].Rank != 1 || st[2].Rank != 2 {
+		t.Fatalf("eşli wdl sıralaması: %+v", st)
 	}
 }
