@@ -132,6 +132,20 @@ func decodeSegment(seg string, v any) error {
 
 // checkStandard validates issuer, audience, times, subject and nonce.
 func checkStandard(c *rawClaims, issuers, audiences map[string]bool, nonce string, now time.Time) error {
+	if err := checkIssued(c, issuers, audiences, now); err != nil {
+		return err
+	}
+	// The nonce binds the token to this sign-in attempt (ADR-0004). An empty
+	// expected nonce is never accepted.
+	if nonce == "" || subtle.ConstantTimeCompare([]byte(c.Nonce), []byte(nonce)) != 1 {
+		return fmt.Errorf("%w: nonce", ErrInvalidToken)
+	}
+	return nil
+}
+
+// checkIssued validates issuer, audience, times and subject: everything but
+// the nonce.
+func checkIssued(c *rawClaims, issuers, audiences map[string]bool, now time.Time) error {
 	if !issuers[c.Iss] {
 		return fmt.Errorf("%w: issuer", ErrInvalidToken)
 	}
@@ -148,11 +162,6 @@ func checkStandard(c *rawClaims, issuers, audiences map[string]bool, nonce strin
 		return fmt.Errorf("%w: süresi dolmuş", ErrInvalidToken)
 	case c.Sub == "" || len(c.Sub) > maxSubject:
 		return fmt.Errorf("%w: subject", ErrInvalidToken)
-	}
-	// The nonce binds the token to this sign-in attempt (ADR-0004). An empty
-	// expected nonce is never accepted.
-	if nonce == "" || subtle.ConstantTimeCompare([]byte(c.Nonce), []byte(nonce)) != 1 {
-		return fmt.Errorf("%w: nonce", ErrInvalidToken)
 	}
 	return nil
 }

@@ -2,6 +2,8 @@ package oidc
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"testing"
 	"time"
@@ -134,6 +136,45 @@ func TestGoogleRejectsAppleToken(t *testing.T) {
 	tok := sign(t, p.key, map[string]any{"alg": "RS256", "kid": p.kid}, appleClaims())
 	if _, err := g.Verify(context.Background(), tok, testNonce); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// TestAppleExchangedSubject: the identity token of a code exchange is checked
+// like a sign-in token, except for the nonce (ADR-0045 §4).
+func TestAppleExchangedSubject(t *testing.T) {
+	p := newProvider(t)
+	a := p.appleVerifier(t, now0)
+	hdr := map[string]any{"alg": "RS256", "kid": p.kid}
+	ctx := context.Background()
+
+	c := appleClaims()
+	delete(c, "nonce")
+	delete(c, "nonce_supported")
+	sub, err := a.ExchangedSubject(ctx, sign(t, p.key, hdr, c))
+	if err != nil || sub != "001234.abcdef0123456789abcdef0123456789.1234" {
+		t.Fatalf("sub = %q, err = %v", sub, err)
+	}
+
+	other, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod := func(k string, v any) map[string]any {
+		m := appleClaims()
+		m[k] = v
+		return m
+	}
+	for name, tok := range map[string]string{
+		"başka anahtarla imzalı":    sign(t, other, hdr, appleClaims()),
+		"başka uygulamanın token'ı": sign(t, p.key, hdr, mod("aud", "com.example.baska")),
+		"Google'ın issuer'ı":        sign(t, p.key, hdr, mod("iss", "https://accounts.google.com")),
+		"süresi dolmuş":             sign(t, p.key, hdr, mod("exp", now0.Add(-2*time.Minute).Unix())),
+		"subject boş":               sign(t, p.key, hdr, mod("sub", "")),
+		"boş":                       "",
+	} {
+		if _, err := a.ExchangedSubject(ctx, tok); !errors.Is(err, ErrInvalidToken) {
+			t.Errorf("%s: err = %v, ErrInvalidToken bekleniyordu", name, err)
+		}
 	}
 }
 

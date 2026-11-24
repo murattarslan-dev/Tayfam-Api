@@ -25,6 +25,7 @@ import (
 	corev1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1"
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/account"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/appleauth"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/birthdate"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/catalogcopy"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
@@ -85,8 +86,13 @@ func setup(rt *service.Runtime) error {
 	// Google OAuth client ID'leri gizli değildir; virgülle ayrılmış liste.
 	googleClients := splitList(c.Required("GOOGLE_CLIENT_IDS"))
 	// Apple ile giriş (ADR-0045): iOS bundle kimlikleri, gizli değildir.
-	// Boşsa Apple girişi kapalıdır (unsupported-provider).
+	// Boşsa Apple girişi kapalıdır (unsupported-provider). Doluysa hesap
+	// silmede token iptali için Team ID, Key ID (gizli değil) ve Sign in with
+	// Apple anahtarı (secret, SOPS) da gerekir.
 	appleClients := splitList(c.String("APPLE_CLIENT_IDS", ""))
+	appleTeam := c.String("APPLE_TEAM_ID", "")
+	appleKeyID := c.String("APPLE_KEY_ID", "")
+	applePrivateKey := c.String("APPLE_PRIVATE_KEY", "")
 	docs := registration.Documents{
 		PrivacyNotice: c.Required("CONSENT_PRIVACY_NOTICE_VERSION"),
 		Terms:         c.Required("CONSENT_TERMS_VERSION"),
@@ -117,12 +123,15 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	// ADR-0045 §5: an Apple account is accepted only when its tokens can be
-	// revoked at account deletion. Revocation is not built yet (issue #347),
-	// so Apple sign-in cannot be switched on: a wrong value stops the
-	// service rather than opening accounts that cannot be deleted properly.
+	verifiers := map[string]oidc.Verifier{"google": google}
+	var appleRevoker deletion.AppleRevoker
 	if len(appleClients) > 0 {
-		return errors.New("APPLE_CLIENT_IDS: Apple ile giriş, hesap silmede token iptali (ADR-0045 §4) gelmeden açılamaz")
+		apple, revoker, appleErr := appleSignIn(appleClients, appleTeam, appleKeyID, applePrivateKey)
+		if appleErr != nil {
+			return appleErr
+		}
+		verifiers["apple"], appleRevoker = apple, revoker
+		rt.Log.Info("apple ile giriş açık")
 	}
 	signer := func(aud string) (*auth.Signer, error) {
 		return auth.NewSigner(auth.SignerConfig{Key: ring.Active(), Issuer: issuer, Audience: aud, TTL: accessTokenTTL})
@@ -141,7 +150,7 @@ func setup(rt *service.Runtime) error {
 	}
 	sessions, err := session.New(session.Config{
 		Pool: pool, Log: rt.Log,
-		Verifiers:    map[string]oidc.Verifier{"google": google},
+		Verifiers:    verifiers,
 		API:          apiSigner,
 		Registration: regSigner,
 		Documents:    docs,
@@ -184,7 +193,7 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	deleter, err := deletion.New(deletion.Config{Pool: pool, Log: rt.Log})
+	deleter, err := deletion.New(deletion.Config{Pool: pool, Log: rt.Log, Apple: appleRevoker})
 	if err != nil {
 		return err
 	}
@@ -383,6 +392,36 @@ func splitList(s string) []string {
 		}
 	}
 	return out
+}
+
+// appleSignIn builds Apple sign-in (ADR-0045 §5): the identity token verifier
+// and the client that revokes a user's Apple tokens at account deletion. The
+// two come together or not at all: an Apple account is accepted only when
+// its tokens can be revoked, so a partial configuration stops the service.
+func appleSignIn(clients []string, team, keyID, privateKey string) (*oidc.Apple, *appleauth.Client, error) {
+	// Authorization codes are issued to one app; the exchange names it.
+	if len(clients) != 1 {
+		return nil, nil, errors.New("APPLE_CLIENT_IDS: tek bir bundle kimliği bekleniyor")
+	}
+	if team == "" || keyID == "" || privateKey == "" {
+		return nil, nil, errors.New("APPLE_CLIENT_IDS doluyken APPLE_TEAM_ID, APPLE_KEY_ID ve APPLE_PRIVATE_KEY zorunludur (ADR-0045 §5)")
+	}
+	key, err := appleauth.ParseKey(privateKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("APPLE_PRIVATE_KEY: %w", err)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	apple, err := oidc.NewApple(clients, client)
+	if err != nil {
+		return nil, nil, err
+	}
+	revoker, err := appleauth.New(appleauth.Config{
+		ClientID: clients[0], TeamID: team, KeyID: keyID, Key: key, HTTP: client, Tokens: apple,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return apple, revoker, nil
 }
 
 // integrityChecker builds the app integrity check (ADR-0022, issue #163).

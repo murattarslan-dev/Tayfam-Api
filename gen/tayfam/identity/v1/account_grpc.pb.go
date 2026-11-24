@@ -112,7 +112,10 @@ type AccountServiceClient interface {
 	// token and its session must be that recent, otherwise
 	// ERROR_REASON_REAUTHENTICATION_REQUIRED. Personal data is cleared at once,
 	// every session ends and core and chat are told (user.deleted). Signing in
-	// with the same provider account later opens a new account.
+	// with the same provider account later opens a new account. For an Apple
+	// account the request carries the authorization code of that sign-in; a
+	// missing or refused code is ERROR_REASON_REAUTHENTICATION_REQUIRED, and
+	// UNAVAILABLE when Apple cannot be reached (nothing is deleted; ADR-0045).
 	DeleteAccount(ctx context.Context, in *DeleteAccountRequest, opts ...grpc.CallOption) (*DeleteAccountResponse, error)
 }
 
@@ -341,7 +344,10 @@ type AccountServiceServer interface {
 	// token and its session must be that recent, otherwise
 	// ERROR_REASON_REAUTHENTICATION_REQUIRED. Personal data is cleared at once,
 	// every session ends and core and chat are told (user.deleted). Signing in
-	// with the same provider account later opens a new account.
+	// with the same provider account later opens a new account. For an Apple
+	// account the request carries the authorization code of that sign-in; a
+	// missing or refused code is ERROR_REASON_REAUTHENTICATION_REQUIRED, and
+	// UNAVAILABLE when Apple cannot be reached (nothing is deleted; ADR-0045).
 	DeleteAccount(context.Context, *DeleteAccountRequest) (*DeleteAccountResponse, error)
 	mustEmbedUnimplementedAccountServiceServer()
 }

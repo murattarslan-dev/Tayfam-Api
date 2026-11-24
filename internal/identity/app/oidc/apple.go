@@ -64,6 +64,23 @@ func (a *Apple) Verify(ctx context.Context, idToken, nonce string) (Identity, er
 	return Identity{Provider: "apple", Subject: c.Sub, Email: verifiedEmail(c), IssuedAt: time.Unix(c.Iat, 0).UTC()}, nil
 }
 
+// ExchangedSubject verifies the identity token Apple's token endpoint returns
+// for an authorization code and gives its subject (ADR-0045 §4; implements
+// appleauth.SubjectVerifier). Signature, issuer, audience, times and subject
+// are checked as in Verify. There is no nonce to compare: the token answers
+// a code that Apple accepted with our client secret, not a sign-in request
+// of ours. It must never be used to sign anyone in.
+func (a *Apple) ExchangedSubject(ctx context.Context, idToken string) (string, error) {
+	c, err := verifyRS256(ctx, idToken, a.keys.key)
+	if err != nil {
+		return "", err
+	}
+	if err := checkIssued(c, appleIssuers, a.audiences, a.now()); err != nil {
+		return "", err
+	}
+	return c.Sub, nil
+}
+
 // explicitlyFalse reports whether a claim is present and false. Apple sends
 // booleans as true/false or as "true"/"false".
 func explicitlyFalse(raw json.RawMessage) bool {

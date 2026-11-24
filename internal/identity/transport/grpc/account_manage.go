@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	identityv1 "github.com/murattarslan-dev/tayfam-api/gen/tayfam/identity/v1"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/appleauth"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/deletion"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/session"
@@ -130,12 +131,16 @@ func (s *AccountServer) AcceptConsents(ctx context.Context, req *identityv1.Acce
 
 // DeleteAccount implements identityv1.AccountServiceServer. The user,
 // session and issue time all come from the verified token.
-func (s *AccountServer) DeleteAccount(ctx context.Context, _ *identityv1.DeleteAccountRequest) (*identityv1.DeleteAccountResponse, error) {
+func (s *AccountServer) DeleteAccount(ctx context.Context, req *identityv1.DeleteAccountRequest) (*identityv1.DeleteAccountResponse, error) {
 	t, err := s.token(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deletion.Delete(ctx, deletion.Caller{User: t.user, Session: t.session, IssuedAt: t.issuedAt}); err != nil {
+	code := req.GetAppleAuthorizationCode()
+	if len(code) > appleauth.MaxCode {
+		return nil, status.Error(codes.InvalidArgument, "geçersiz istek")
+	}
+	if err := s.deletion.Delete(ctx, deletion.Caller{User: t.user, Session: t.session, IssuedAt: t.issuedAt, AppleCode: code}); err != nil {
 		return nil, s.mapManageError(ctx, err)
 	}
 	return &identityv1.DeleteAccountResponse{}, nil
@@ -151,6 +156,11 @@ func (s *AccountServer) mapManageError(ctx context.Context, err error) error {
 		return fail(codes.FailedPrecondition, identityv1.ErrorReason_ERROR_REASON_CONSENT_OUTDATED)
 	case errors.Is(err, session.ErrCallerSession), errors.Is(err, deletion.ErrUnknownUser), errors.Is(err, consent.ErrUnknownUser):
 		return status.Error(codes.Unauthenticated, "kimlik doğrulanamadı")
+	case errors.Is(err, deletion.ErrProviderUnavailable):
+		// The cause is a class, a status and an OAuth error name at most
+		// (appleauth); no code or token.
+		s.log.WarnContext(ctx, "hesap silme: apple token iptali yapılamadı", slog.Any("err", err))
+		return status.Error(codes.Unavailable, "giriş sağlayıcısına şu anda ulaşılamıyor")
 	default:
 		s.log.ErrorContext(ctx, "hesap işlemi başarısız", slog.Any("err", err))
 		return status.Error(codes.Internal, "iç hata")
