@@ -12,6 +12,16 @@ Bayraksız çalıştırıldığında her veritabanında işi yapar, sayıları y
 Korunacak hesaplar her seferinde `platform_admins`'ten okunur; tablo boşsa
 hiçbir şey silinmez. Yarıda kalırsa aynı komut tekrar çalıştırılır.
 
+**Demo verisi ve mağaza inceleme hesabı da gider.** Demo hesapları ve
+inceleme için açılan Google hesabı `platform_admins`'te değildir. Sıra:
+
+1. Bu sıfırlama (`--uygula`).
+2. `demo-seed` ([demo verisi](demo-verisi.md)).
+3. İnceleme hesabı: kaydı tamamla, Ege Klasikleri Demo'ya kat. Ayrıntı ve
+   mağaza alanları Notion "Mağaza Sayfası" → Uygulama erişimi.
+
+Sıfırlama sonradan tekrar çalıştırılırsa 2. ve 3. adımlar da tekrarlanır.
+
 ## Ne kalır, ne gider
 
 | Veritabanı | Kalır | Gider |
