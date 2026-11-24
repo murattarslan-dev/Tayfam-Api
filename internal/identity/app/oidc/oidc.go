@@ -67,6 +67,9 @@ type rawClaims struct {
 	Email         string          `json:"email"`
 	EmailVerified json.RawMessage `json:"email_verified"`
 	Name          string          `json:"name"`
+	// NonceSupported is Apple's: false when the device could not bind a
+	// nonce to the token (ADR-0045 §2).
+	NonceSupported json.RawMessage `json:"nonce_supported"`
 }
 
 type header struct {
