@@ -56,10 +56,10 @@ func TestCatalogDataMigration(t *testing.T) {
 	}
 
 	// 15 interests, 65 types (58 new; six Faz 1 types and, since 00068,
-	// the four Eğitim types at version 2), the study tag list and five
-	// badges.
+	// the four Eğitim types and, since 00070, the board game night at
+	// version 2), the study tag list and five badges.
 	seeded, before := snapshot(), version()
-	if got := counts(); got != "15/65/75/294/5/10/15" {
+	if got := counts(); got != "15/65/76/294/5/11/15" {
 		t.Fatalf("seed = %s", got)
 	}
 
@@ -71,11 +71,14 @@ func TestCatalogDataMigration(t *testing.T) {
 		t.Fatal("katalog sürümü artmadı")
 	}
 
-	// 00068's and 00067's Downs first, as on the real way back: 00068 gave
-	// the Eğitim types their second version (#333), 00067's trigger keeps a
-	// type's version and the catalog's version from going back (#262).
+	// 00070's, 00068's and 00067's Downs first, as on the real way back:
+	// 00070 gave the board game night its second version (#343), 00068 the
+	// Eğitim types theirs (#333), 00067's trigger keeps a type's version and
+	// the catalog's version from going back (#262).
+	pairsUp, pairsDown := migrationParts(t, coredb.Migrations(), "00070_scoreboard_pairs.sql")
 	studyUp, studyDown := migrationParts(t, coredb.Migrations(), "00068_study_tag_fields.sql")
 	_, panelDown := migrationParts(t, coredb.Migrations(), "00067_catalog_panel.sql")
+	exec(pairsDown)
 	exec(studyDown)
 	exec(panelDown)
 	exec(down)
@@ -95,6 +98,7 @@ func TestCatalogDataMigration(t *testing.T) {
 
 	exec(up)
 	exec(studyUp)
+	exec(pairsUp)
 	if snapshot() != seeded {
 		t.Fatal("geri alıp yeniden kurunca katalog farklı")
 	}

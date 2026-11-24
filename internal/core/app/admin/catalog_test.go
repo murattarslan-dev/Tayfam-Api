@@ -429,6 +429,7 @@ func TestSaveScorePreset(t *testing.T) {
 		"bilinmeyen değer": `{"side": "everyone"}`,
 		"best_of":          `{"best_of": 4}`,
 		"oyuncu sayısı":    `{"players_min": 5, "players_max": 2}`,
+		"eşli üç kişi":     `{"side": "pair", "players_max": 3}`,
 		"dizi":             `[]`,
 		"JSON değil":       `{`,
 	} {

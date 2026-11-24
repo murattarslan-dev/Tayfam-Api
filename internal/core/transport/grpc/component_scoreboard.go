@@ -68,6 +68,7 @@ func scoreTablePB(t scoreboard.Table) *corev1.ScoreTable {
 	for _, p := range t.Players {
 		out.Players = append(out.Players, &corev1.ScorePlayer{
 			Id: p.ID.String(), Position: p.Position, UserId: idString(p.User), TeamId: idString(p.Team), GuestId: idString(p.Guest),
+			Pair: p.Pair,
 		})
 	}
 	for _, r := range t.Rounds {

@@ -300,6 +300,8 @@ func TestParseComponents(t *testing.T) {
 		// scoreboard
 		{"scoreboard", "masalı", comps(`{"kind":"scoreboard","params":{"side":"player","tables":true,"presets":["batak","okey_101","free"],"guests":true}}`), true},
 		{"scoreboard", "takım tek maç", comps(`{"kind":"scoreboard","params":{"side":"team","rounds":"single","winner":"high","result":"points","target":21}}`), true},
+		{"scoreboard", "eşli (ADR-0044)", comps(`{"kind":"scoreboard","params":{"side":"pair","rounds":"round","winner":"low"}}`), true},
+		{"scoreboard", "bilinmeyen taraf", comps(`{"kind":"scoreboard","params":{"side":"pairs"}}`), false},
 		{"scoreboard", "wdl ve seçim", comps(`{"kind":"scoreboard","params":{"result":"wdl","best_of":{"organizer_choice":[1,3,5],"default":3}}}`), true},
 		{"scoreboard", "bahis", comps(`{"kind":"scoreboard","params":{"stake":50}}`), false},
 		{"scoreboard", "ön ayar tekrar", comps(`{"kind":"scoreboard","params":{"presets":["batak","batak"]}}`), false},

@@ -328,7 +328,7 @@ var (
 	ChecklistLabels = []string{"gear", "task", "section", "duty", "item"}
 	TeamModes       = []string{"random", "balanced", "manual"}
 	BracketFormats  = []string{"elimination", "league", "swiss"}
-	ScoreSides      = []string{"player", "team"}
+	ScoreSides      = []string{"player", "team", "pair"}
 	ScoreRounds     = []string{"round", "single", "first_to"}
 	ScoreWinners    = []string{"high", "low", "first"}
 	ScoreResults    = []string{"points", "wdl"}

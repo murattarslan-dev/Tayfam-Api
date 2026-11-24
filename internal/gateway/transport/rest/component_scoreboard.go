@@ -67,6 +67,8 @@ type scorePlayerJSON struct {
 	UserID   string `json:"user_id,omitempty"`
 	TeamID   string `json:"team_id,omitempty"`
 	GuestID  string `json:"guest_id,omitempty"`
+	// Pair is 1 or 2 at a pair table (ADR-0044); left out otherwise.
+	Pair int32 `json:"pair,omitempty"`
 }
 
 type scoreEntryJSON struct {
@@ -132,6 +134,7 @@ func scoreTableFrom(t *corev1.ScoreTable) scoreTableJSON {
 	for _, p := range t.GetPlayers() {
 		out.Players = append(out.Players, scorePlayerJSON{
 			ID: p.GetId(), Position: p.GetPosition(), UserID: p.GetUserId(), TeamID: p.GetTeamId(), GuestID: p.GetGuestId(),
+			Pair: p.GetPair(),
 		})
 	}
 	for _, rd := range t.GetRounds() {
