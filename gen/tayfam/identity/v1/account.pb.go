@@ -1451,9 +1451,14 @@ func (*AcceptConsentsResponse) Descriptor() ([]byte, []int) {
 }
 
 type DeleteAccountRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The authorization code of the Apple re-authentication that precedes the
+	// deletion (ADR-0045). Required for an account with an Apple identity:
+	// identity exchanges it and revokes the user's Apple tokens before anything
+	// is deleted. Ignored for other accounts. At most 1024 bytes.
+	AppleAuthorizationCode string `protobuf:"bytes,1,opt,name=apple_authorization_code,json=appleAuthorizationCode,proto3" json:"apple_authorization_code,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *DeleteAccountRequest) Reset() {
@@ -1484,6 +1489,13 @@ func (x *DeleteAccountRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DeleteAccountRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAccountRequest) Descriptor() ([]byte, []int) {
 	return file_tayfam_identity_v1_account_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *DeleteAccountRequest) GetAppleAuthorizationCode() string {
+	if x != nil {
+		return x.AppleAuthorizationCode
+	}
+	return ""
 }
 
 type DeleteAccountResponse struct {
@@ -1598,8 +1610,9 @@ const file_tayfam_identity_v1_account_proto_rawDesc = "" +
 	"\x15AcceptConsentsRequest\x124\n" +
 	"\x16privacy_notice_version\x18\x01 \x01(\tR\x14privacyNoticeVersion\x12#\n" +
 	"\rterms_version\x18\x02 \x01(\tR\ftermsVersion\"\x18\n" +
-	"\x16AcceptConsentsResponse\"\x16\n" +
-	"\x14DeleteAccountRequest\"\x17\n" +
+	"\x16AcceptConsentsResponse\"P\n" +
+	"\x14DeleteAccountRequest\x128\n" +
+	"\x18apple_authorization_code\x18\x01 \x01(\tR\x16appleAuthorizationCode\"\x17\n" +
 	"\x15DeleteAccountResponse*\x99\x01\n" +
 	"\x12ActivityVisibility\x12#\n" +
 	"\x1fACTIVITY_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1f\n" +
