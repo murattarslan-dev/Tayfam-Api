@@ -40,6 +40,7 @@
 /scripts/new-birthdate-key.sh @murattarslan-dev
 /scripts/new-chat-message-key.sh @murattarslan-dev
 /scripts/new-chat-fcm-secret.sh @murattarslan-dev
+/scripts/new-apple-secret.sh @murattarslan-dev
 /scripts/new-export-key.sh @murattarslan-dev
 /scripts/new-r2-secret.sh @murattarslan-dev
 /scripts/new-tunnel-token.sh @murattarslan-dev
