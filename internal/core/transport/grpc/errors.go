@@ -270,6 +270,14 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_NOT_PARTICIPANT, true
 	case errors.Is(err, apperr.ErrRankingFromMeasure):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_RANKING_FROM_MEASURE, true
+	case errors.Is(err, apperr.ErrVoteClosed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_CLOSED, true
+	case errors.Is(err, apperr.ErrVoteOwnOption):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_OWN_OPTION, true
+	case errors.Is(err, apperr.ErrVoteOptionsFixed):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_VOTE_OPTIONS_FIXED, true
+	case errors.Is(err, apperr.ErrVoteOptionExists):
+		return codes.AlreadyExists, corev1.ErrorReason_ERROR_REASON_VOTE_OPTION_EXISTS, true
 	case errors.Is(err, apperr.ErrCelebrationNotStarted):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_CELEBRATION_NOT_STARTED, true
 	case errors.Is(err, apperr.ErrCelebrationNoWinner):
@@ -296,6 +304,30 @@ func reasonFor(err error) (code codes.Code, reason corev1.ErrorReason, ok bool) 
 		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_DAILY_ITEM_NOT_FOUND, true
 	case errors.Is(err, apperr.ErrDailyItemLimit):
 		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_DAILY_ITEM_LIMIT, true
+	case errors.Is(err, apperr.ErrLibraryItemNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrLibraryLoanNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_LIBRARY_LOAN_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrLibraryOwnItem):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_OWN_ITEM, true
+	case errors.Is(err, apperr.ErrLibraryLoanState):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_LOAN_STATE, true
+	case errors.Is(err, apperr.ErrLibraryItemOnLoan):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_ON_LOAN, true
+	case errors.Is(err, apperr.ErrLibraryItemLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_ITEM_LIMIT, true
+	case errors.Is(err, apperr.ErrLibraryQueueFull):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_LIBRARY_QUEUE_FULL, true
+	case errors.Is(err, apperr.ErrMaterialNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_MATERIAL_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrBlockedLink):
+		return codes.InvalidArgument, corev1.ErrorReason_ERROR_REASON_BLOCKED_LINK, true
+	case errors.Is(err, apperr.ErrMaterialLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_MATERIAL_LIMIT, true
+	case errors.Is(err, apperr.ErrGarageVehicleNotFound):
+		return codes.NotFound, corev1.ErrorReason_ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND, true
+	case errors.Is(err, apperr.ErrGarageLimit):
+		return codes.FailedPrecondition, corev1.ErrorReason_ERROR_REASON_GARAGE_LIMIT, true
 	}
 	return codes.Unknown, corev1.ErrorReason_ERROR_REASON_UNSPECIFIED, false
 }

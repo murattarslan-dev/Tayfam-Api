@@ -83,6 +83,23 @@ const (
 	SectionUserStats = "user_stats"
 	// Issue #269: the daily content items one added (ADR-0027 §5).
 	SectionDailyItems = "daily_items"
+	// Issue #270: the library items one owns and one's loans and queue
+	// places (ADR-0040 §1).
+	SectionLibraryItems = "library_items"
+	SectionLibraryLoans = "library_loans"
+	// Issue #261: the materials one added (ADR-0040 §3).
+	SectionMaterials = "materials"
+	// Issue #272: one's garage vehicles and visibility choices (ADR-0040
+	// §4).
+	SectionGarageVehicles   = "garage_vehicles"
+	SectionGarageVisibility = "garage_visibility"
+	// Issue #275 (the KVKK audit of v3): referee assignments (#238), list
+	// items added or taken on (#241) and vocabulary values added (#244).
+	SectionEventReferees  = "event_referees"
+	SectionChecklistItems = "checklist_items"
+	SectionVocabulary     = "vocabulary"
+	// Issue #254: one's votes in the vote component.
+	SectionEventVotes = "event_votes"
 )
 
 const (
@@ -263,6 +280,42 @@ var sections = []struct {
 	{SectionDailyItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
 		r, err := q.ExportDailyItems(ctx, store.ExportDailyItemsParams{UserID: u, After: a, N: n})
 		return rows(r, err, func(x store.ExportDailyItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionLibraryItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportLibraryItems(ctx, store.ExportLibraryItemsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportLibraryItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionLibraryLoans, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportLibraryLoans(ctx, store.ExportLibraryLoansParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportLibraryLoansRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionMaterials, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportMaterials(ctx, store.ExportMaterialsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportMaterialsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionGarageVehicles, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportGarageVehicles(ctx, store.ExportGarageVehiclesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportGarageVehiclesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionGarageVisibility, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportGarageVisibility(ctx, store.ExportGarageVisibilityParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportGarageVisibilityRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionEventReferees, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportEventReferees(ctx, store.ExportEventRefereesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportEventRefereesRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionChecklistItems, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportChecklistItems(ctx, store.ExportChecklistItemsParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportChecklistItemsRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionVocabulary, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportVocabulary(ctx, store.ExportVocabularyParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportVocabularyRow) row { return row{x.K, x.Data} })
+	}},
+	{SectionEventVotes, func(ctx context.Context, q *store.Queries, u, a pgtype.UUID, n int32) ([]row, error) {
+		r, err := q.ExportEventVotes(ctx, store.ExportEventVotesParams{UserID: u, After: a, N: n})
+		return rows(r, err, func(x store.ExportEventVotesRow) row { return row{x.K, x.Data} })
 	}},
 }
 

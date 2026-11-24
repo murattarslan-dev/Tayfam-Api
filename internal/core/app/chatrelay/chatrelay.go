@@ -166,6 +166,14 @@ var types = map[string]chatv1.NotificationType{
 	notify.TypeCelebration:            chatv1.NotificationType_NOTIFICATION_TYPE_CELEBRATION,
 	notify.TypeBadgeEarned:            chatv1.NotificationType_NOTIFICATION_TYPE_BADGE_EARNED,
 	notify.TypeNowStarted:             chatv1.NotificationType_NOTIFICATION_TYPE_NOW_STARTED,
+	notify.TypeLibraryDue:             chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_DUE,
+	notify.TypeLibraryLoanOrphaned:    chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED,
+	notify.TypeLibraryLoanRequested:   chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED,
+	notify.TypeLibraryQueueJoined:     chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED,
+	notify.TypeLibraryLoanApproved:    chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED,
+	notify.TypeLibraryLoanDeclined:    chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED,
+	notify.TypeLibraryLoanHandedOver:  chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER,
+	notify.TypeLibraryQueueTurn:       chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN,
 	notify.TypeTayfaInvitation:        chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION,
 	notify.TypeReportResolved:         chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED,
 }
@@ -178,6 +186,7 @@ var targets = map[string]chatv1.NotificationTargetType{
 	notify.TargetAnswer:       chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_ANSWER,
 	notify.TargetUser:         chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_USER,
 	notify.TargetReport:       chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT,
+	notify.TargetLibraryItem:  chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM,
 }
 
 var reasons = map[string]chatv1.TayfaWarningReason{

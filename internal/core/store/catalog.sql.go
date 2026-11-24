@@ -133,6 +133,26 @@ func (q *Queries) GetCatalogVersion(ctx context.Context) (int64, error) {
 	return catalog_version, err
 }
 
+const getLastPublishedCatalogVersion = `-- name: GetLastPublishedCatalogVersion :one
+SELECT COALESCE((
+  SELECT (e.payload ->> 'catalog_version')::bigint
+  FROM domain_events e
+  WHERE e.type = 'catalog.changed'
+  ORDER BY e.id DESC
+  LIMIT 1
+), 0)::bigint AS catalog_version
+`
+
+// Son yayınlanan catalog.changed olayının katalog sürümü; hiç yoksa 0
+// (issue #280, ADR-0042; catalog-publish işi). domain_events_type_id_idx
+// ile tek satır okunur.
+func (q *Queries) GetLastPublishedCatalogVersion(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, getLastPublishedCatalogVersion)
+	var catalog_version int64
+	err := row.Scan(&catalog_version)
+	return catalog_version, err
+}
+
 const listActiveCatalogEventTypes = `-- name: ListActiveCatalogEventTypes :many
 SELECT key, interest_keys, labels, icon, modes, version, definition
 FROM catalog_event_types

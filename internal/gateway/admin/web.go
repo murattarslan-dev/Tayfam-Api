@@ -69,7 +69,7 @@ const (
 
 func parseTemplates() (map[string]*template.Template, error) {
 	// The page templates; each is parsed with layout.html.
-	pageNames := []string{"login", "continue", "error", "dashboard", "tayfas", "tayfa", "users", "user", "reports", "report", "audit", "discover"}
+	pageNames := []string{"login", "continue", "error", "dashboard", "tayfas", "tayfa", "users", "user", "reports", "report", "audit", "discover", "catalog", "catalog_form"}
 	out := make(map[string]*template.Template, len(pageNames))
 	for _, name := range pageNames {
 		t, err := template.New("layout.html").Funcs(templateFuncs()).ParseFS(templateFS, "templates/layout.html", "templates/"+name+".html")
@@ -975,6 +975,12 @@ func noticeText(code string) string {
 		return "Keşfet başvurusu onaylandı."
 	case "kesfet-reddedildi":
 		return "Tayfa Keşfet'ten çıkarıldı."
+	case "katalog-kaydedildi":
+		return "Katalog kaydı kaydedildi."
+	case "alan-adi-eklendi":
+		return "Alan adı engelli listesine eklendi."
+	case "alan-adi-kaldirildi":
+		return "Alan adı engelli listesinden çıkarıldı."
 	}
 	return ""
 }
@@ -1005,6 +1011,8 @@ func errorText(code string) string {
 		return "Giriş tamamlanamadı. Tekrar deneyin."
 	case "csrf":
 		return "Form doğrulanamadı. Sayfayı yenileyip tekrar deneyin."
+	case "alan-adi":
+		return "Alan adı geçersiz, eklerken zaten listede ya da çıkarırken listede değil."
 	}
 	return ""
 }

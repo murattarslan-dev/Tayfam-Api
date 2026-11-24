@@ -32,7 +32,9 @@ func migrationParts(t *testing.T, fsys fs.FS, name string) (up, down string) {
 }
 
 // The copy of core's catalog starts with the six interests of core's seed
-// at catalog version 1 (ADR-0025 §10), and identity_app can only read it.
+// at catalog version 1 (ADR-0025 §10). identity_app can move it forward
+// with catalog.changed (ADR-0042) but cannot delete from it (the rest of the
+// guards: package catalogcopy).
 func TestCatalogCopySeed(t *testing.T) {
 	pool, q := setup(t)
 	ctx := context.Background()
@@ -56,12 +58,9 @@ func TestCatalogCopySeed(t *testing.T) {
 		t.Fatalf("kopyadaki ilgi alanları = %v", keys)
 	}
 	for name, sql := range map[string]string{
-		"ilgi alanı ekleme":     `INSERT INTO catalog_interests (key) VALUES ('dance')`,
-		"ilgi alanı değiştirme": `UPDATE catalog_interests SET status = 'retired'`,
-		"ilgi alanı silme":      `DELETE FROM catalog_interests`,
-		"sürümü değiştirme":     `UPDATE catalog_copy SET catalog_version = 99`,
-		"sürümü silme":          `DELETE FROM catalog_copy`,
-		"ikinci sürüm satırı":   `INSERT INTO catalog_copy (id, catalog_version) VALUES (false, 2)`,
+		"ilgi alanı silme":    `DELETE FROM catalog_interests`,
+		"sürümü silme":        `DELETE FROM catalog_copy`,
+		"ikinci sürüm satırı": `INSERT INTO catalog_copy (id, catalog_version) VALUES (false, 2)`,
 	} {
 		t.Run(name, func(t *testing.T) { dbtest.WantDenied(t, pool, sql) })
 	}

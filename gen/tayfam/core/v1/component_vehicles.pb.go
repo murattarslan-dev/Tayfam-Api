@@ -46,8 +46,12 @@ type EventVehicle struct {
 	// Users whose request waits for approval. The owner sees all of them;
 	// anyone else sees only their own.
 	PendingUserIds []string `protobuf:"bytes,10,rep,name=pending_user_ids,json=pendingUserIds,proto3" json:"pending_user_ids,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The vehicle of the owner's garage it was copied from (issue #272;
+	// MemberGarageService); empty when written by hand or once the garage
+	// vehicle is gone.
+	GarageVehicleId string `protobuf:"bytes,11,opt,name=garage_vehicle_id,json=garageVehicleId,proto3" json:"garage_vehicle_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *EventVehicle) Reset() {
@@ -148,6 +152,13 @@ func (x *EventVehicle) GetPendingUserIds() []string {
 		return x.PendingUserIds
 	}
 	return nil
+}
+
+func (x *EventVehicle) GetGarageVehicleId() string {
+	if x != nil {
+		return x.GarageVehicleId
+	}
+	return ""
 }
 
 // EventVehicles is the vehicles of one component of an event, as the
@@ -333,9 +344,13 @@ type SetVehicleRequest struct {
 	// Optional; upper-cased, A–Z, digits and single spaces, 2–16 characters.
 	Plate string `protobuf:"bytes,6,opt,name=plate,proto3" json:"plate,omitempty"`
 	// 0–8.
-	Seats         int32 `protobuf:"varint,7,opt,name=seats,proto3" json:"seats,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Seats int32 `protobuf:"varint,7,opt,name=seats,proto3" json:"seats,omitempty"`
+	// Optional (issue #272): a vehicle of the caller's own garage. make,
+	// model, model_year and color are then copied from it and must be left
+	// empty; plate and seats are written as given.
+	GarageVehicleId string `protobuf:"bytes,8,opt,name=garage_vehicle_id,json=garageVehicleId,proto3" json:"garage_vehicle_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SetVehicleRequest) Reset() {
@@ -415,6 +430,13 @@ func (x *SetVehicleRequest) GetSeats() int32 {
 		return x.Seats
 	}
 	return 0
+}
+
+func (x *SetVehicleRequest) GetGarageVehicleId() string {
+	if x != nil {
+		return x.GarageVehicleId
+	}
+	return ""
 }
 
 type SetVehicleResponse struct {
@@ -867,7 +889,7 @@ var File_tayfam_core_v1_component_vehicles_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_component_vehicles_proto_rawDesc = "" +
 	"\n" +
-	"'tayfam/core/v1/component_vehicles.proto\x12\x0etayfam.core.v1\x1a\x1etayfam/core/v1/component.proto\"\x92\x02\n" +
+	"'tayfam/core/v1/component_vehicles.proto\x12\x0etayfam.core.v1\x1a\x1etayfam/core/v1/component.proto\"\xbe\x02\n" +
 	"\fEventVehicle\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
@@ -880,7 +902,8 @@ const file_tayfam_core_v1_component_vehicles_proto_rawDesc = "" +
 	"\x05seats\x18\b \x01(\x05R\x05seats\x12$\n" +
 	"\x0erider_user_ids\x18\t \x03(\tR\friderUserIds\x12(\n" +
 	"\x10pending_user_ids\x18\n" +
-	" \x03(\tR\x0ependingUserIds\"\xf5\x01\n" +
+	" \x03(\tR\x0ependingUserIds\x12*\n" +
+	"\x11garage_vehicle_id\x18\v \x01(\tR\x0fgarageVehicleId\"\xf5\x01\n" +
 	"\rEventVehicles\x128\n" +
 	"\bvehicles\x18\x01 \x03(\v2\x1c.tayfam.core.v1.EventVehicleR\bvehicles\x12#\n" +
 	"\rplate_enabled\x18\x02 \x01(\bR\fplateEnabled\x12#\n" +
@@ -890,7 +913,7 @@ const file_tayfam_core_v1_component_vehicles_proto_rawDesc = "" +
 	"\x13ListVehiclesRequest\x12.\n" +
 	"\x03ref\x18\x01 \x01(\v2\x1c.tayfam.core.v1.ComponentRefR\x03ref\"Q\n" +
 	"\x14ListVehiclesResponse\x129\n" +
-	"\bvehicles\x18\x01 \x01(\v2\x1d.tayfam.core.v1.EventVehiclesR\bvehicles\"\xce\x01\n" +
+	"\bvehicles\x18\x01 \x01(\v2\x1d.tayfam.core.v1.EventVehiclesR\bvehicles\"\xfa\x01\n" +
 	"\x11SetVehicleRequest\x12.\n" +
 	"\x03ref\x18\x01 \x01(\v2\x1c.tayfam.core.v1.ComponentRefR\x03ref\x12\x12\n" +
 	"\x04make\x18\x02 \x01(\tR\x04make\x12\x14\n" +
@@ -899,7 +922,8 @@ const file_tayfam_core_v1_component_vehicles_proto_rawDesc = "" +
 	"model_year\x18\x04 \x01(\x05R\tmodelYear\x12\x14\n" +
 	"\x05color\x18\x05 \x01(\tR\x05color\x12\x14\n" +
 	"\x05plate\x18\x06 \x01(\tR\x05plate\x12\x14\n" +
-	"\x05seats\x18\a \x01(\x05R\x05seats\"O\n" +
+	"\x05seats\x18\a \x01(\x05R\x05seats\x12*\n" +
+	"\x11garage_vehicle_id\x18\b \x01(\tR\x0fgarageVehicleId\"O\n" +
 	"\x12SetVehicleResponse\x129\n" +
 	"\bvehicles\x18\x01 \x01(\v2\x1d.tayfam.core.v1.EventVehiclesR\bvehicles\"e\n" +
 	"\x14RemoveVehicleRequest\x12.\n" +

@@ -36,6 +36,7 @@ import (
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/access"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/library/lending"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/report"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
@@ -1218,7 +1219,18 @@ func (s *Service) membershipChanged(ctx context.Context, q *store.Queries, tayfa
 		return err
 	}
 	payload := map[string]any{"tayfa_id": tayfa.String(), "user_id": user.String(), "change": change}
-	return txn.Event(ctx, q, EventMembershipChanged, tayfa, actor, target, payload)
+	if err := txn.Event(ctx, q, EventMembershipChanged, tayfa, actor, target, payload); err != nil {
+		return err
+	}
+	// Ortak kütüphane (ADR-0040 §1 "Üye ayrılınca"): the leaver's items are
+	// withdrawn, their requests end and a handed-over loan stays open with
+	// a warning to both sides. It writes notifications, so it comes last.
+	if change == changeLeft || change == changeRemoved || change == changeBanned {
+		if err := lending.Departed(ctx, q, tayfa, user, s.now(), true); err != nil {
+			return fmt.Errorf("kütüphane: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) inviteChanged(ctx context.Context, q *store.Queries, tayfa, actor, invite id.ID, action string, meta map[string]any) error {

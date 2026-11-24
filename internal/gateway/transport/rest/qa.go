@@ -42,7 +42,14 @@ const (
 	questionTagsMax   = 5
 	tagNameMax        = 30
 	questionSearchMax = 100
+	// qaPhotosMax is qa.MaxPhotos in core (question pool, issue #271).
+	qaPhotosMax = 2
 )
+
+// The two pools of QAService (issue #271; ADR-0040 §2).
+var questionPools = newEnum(map[string]corev1.QuestionPool{
+	"qa": corev1.QuestionPool_QUESTION_POOL_QA, "question_pool": corev1.QuestionPool_QUESTION_POOL_QUESTION_POOL,
+})
 
 func registerQA(mux *http.ServeMux, h coreHandlers) {
 	a := h.authed
@@ -85,6 +92,11 @@ type questionJSON struct {
 	AnswerCount  int32     `json:"answer_count"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	Pool         string    `json:"pool"`
+	// Question pool only.
+	SubjectKey     string   `json:"subject_key,omitempty"`
+	TopicKey       string   `json:"topic_key,omitempty"`
+	PhotoUploadIDs []string `json:"photo_upload_ids"`
 }
 
 type questionListJSON struct {
@@ -103,6 +115,8 @@ type answerJSON struct {
 	Voted        bool      `json:"voted"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// Question pool only; empty otherwise.
+	PhotoUploadIDs []string `json:"photo_upload_ids"`
 }
 
 type answerListJSON struct {
@@ -128,14 +142,33 @@ func questionFrom(q *corev1.Question) questionJSON {
 		ID: q.GetId(), TayfaID: q.GetTayfaId(), AuthorUserID: q.GetAuthorUserId(),
 		Title: q.GetTitle(), Body: q.GetBody(), Tags: tagsFrom(q.GetTags(), false), AnswerCount: q.GetAnswerCount(),
 		CreatedAt: q.GetCreateTime().AsTime(), UpdatedAt: q.GetUpdateTime().AsTime(),
+		Pool: questionPools.name(q.GetPool()), SubjectKey: q.GetSubjectKey(), TopicKey: q.GetTopicKey(),
+		PhotoUploadIDs: stringsOrEmpty(q.GetPhotoUploadIds()),
 	}
 }
+
+// photosOK mirrors core's photo rule: at most two upload IDs.
+func photosOK(ids []string) bool {
+	if len(ids) > qaPhotosMax {
+		return false
+	}
+	for _, x := range ids {
+		if !validUUID(x) {
+			return false
+		}
+	}
+	return true
+}
+
+// studyKeyOK mirrors the form of a study tag key; core checks the rest.
+func studyKeyOK(k string) bool { return k == "" || catalogKeyPattern.MatchString(k) }
 
 func answerFrom(a *corev1.Answer) answerJSON {
 	return answerJSON{
 		ID: a.GetId(), QuestionID: a.GetQuestionId(), TayfaID: a.GetTayfaId(), AuthorUserID: a.GetAuthorUserId(),
 		Body: a.GetBody(), VoteCount: a.GetVoteCount(), Voted: a.GetVoted(),
 		CreatedAt: a.GetCreateTime().AsTime(), UpdatedAt: a.GetUpdateTime().AsTime(),
+		PhotoUploadIDs: stringsOrEmpty(a.GetPhotoUploadIds()),
 	}
 }
 
@@ -184,11 +217,21 @@ func (h coreHandlers) listQuestions(ctx context.Context, w http.ResponseWriter, 
 	}
 	q := r.URL.Query()
 	query, tag := q.Get("q"), q.Get("tag_id")
-	if !runesBetween(query, 0, questionSearchMax) || (tag != "" && !validUUID(tag)) {
+	subject, topic := q.Get("subject_key"), q.Get("topic_key")
+	if !runesBetween(query, 0, questionSearchMax) || (tag != "" && !validUUID(tag)) || !studyKeyOK(subject) || !studyKeyOK(topic) {
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.d.QA.ListQuestions(ctx, &corev1.ListQuestionsRequest{TayfaId: id, Query: query, TagId: tag, PageSize: size, PageToken: token})
+	req := &corev1.ListQuestionsRequest{TayfaId: id, Query: query, TagId: tag, PageSize: size, PageToken: token, SubjectKey: subject, TopicKey: topic}
+	if p := q.Get("pool"); p != "" {
+		v, ok := questionPools.value(p)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.Pool = v
+	}
+	resp, err := h.d.QA.ListQuestions(ctx, req)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -205,6 +248,11 @@ type questionCreateBody struct {
 	Body            string   `json:"body"`
 	Tags            []string `json:"tags"`
 	ClientRequestID string   `json:"client_request_id"`
+	// Question pool (issue #271).
+	Pool           string   `json:"pool"`
+	SubjectKey     string   `json:"subject_key"`
+	TopicKey       string   `json:"topic_key"`
+	PhotoUploadIDs []string `json:"photo_upload_ids"`
 }
 
 func (h coreHandlers) createQuestion(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -216,13 +264,31 @@ func (h coreHandlers) createQuestion(ctx context.Context, w http.ResponseWriter,
 	if !decodeLimit(w, r, &b, maxQABody) {
 		return
 	}
-	if !questionTitleOK(b.Title) || !runesBetween(b.Body, 0, qaBodyMax) || !tagsOK(b.Tags) || !validUUID(b.ClientRequestID) {
+	req := &corev1.CreateQuestionRequest{
+		TayfaId: id, Title: b.Title, Body: b.Body, Tags: b.Tags, ClientRequestId: b.ClientRequestID,
+		SubjectKey: b.SubjectKey, TopicKey: b.TopicKey, PhotoUploadIds: b.PhotoUploadIDs,
+	}
+	inPool := false
+	if b.Pool != "" {
+		v, ok := questionPools.value(b.Pool)
+		if !ok {
+			badRequest(w, r)
+			return
+		}
+		req.Pool, inPool = v, v == corev1.QuestionPool_QUESTION_POOL_QUESTION_POOL
+	}
+	// A pool question has no title; core checks the rest of the pool's
+	// rules (subject, text or photo).
+	titleOK := questionTitleOK(b.Title)
+	if inPool {
+		titleOK = b.Title == "" && b.SubjectKey != ""
+	}
+	if !titleOK || !runesBetween(b.Body, 0, qaBodyMax) || !tagsOK(b.Tags) || !validUUID(b.ClientRequestID) ||
+		!photosOK(b.PhotoUploadIDs) || !studyKeyOK(b.SubjectKey) || !studyKeyOK(b.TopicKey) {
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.d.QA.CreateQuestion(ctx, &corev1.CreateQuestionRequest{
-		TayfaId: id, Title: b.Title, Body: b.Body, Tags: b.Tags, ClientRequestId: b.ClientRequestID,
-	})
+	resp, err := h.d.QA.CreateQuestion(ctx, req)
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -246,11 +312,16 @@ func (h coreHandlers) getQuestion(ctx context.Context, w http.ResponseWriter, r 
 }
 
 // questionUpdateBody: a field present in the body is changed; null counts
-// as absent. "tags": [] removes every tag.
+// as absent. "tags": [] removes every tag. In the question pool
+// subject_key (with topic_key; absent topic_key is no topic) and
+// photo_upload_ids ([] removes the photos).
 type questionUpdateBody struct {
-	Title *string   `json:"title"`
-	Body  *string   `json:"body"`
-	Tags  *[]string `json:"tags"`
+	Title          *string   `json:"title"`
+	Body           *string   `json:"body"`
+	Tags           *[]string `json:"tags"`
+	SubjectKey     *string   `json:"subject_key"`
+	TopicKey       *string   `json:"topic_key"`
+	PhotoUploadIDs *[]string `json:"photo_upload_ids"`
 }
 
 func (h coreHandlers) updateQuestion(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -286,6 +357,29 @@ func (h coreHandlers) updateQuestion(ctx context.Context, w http.ResponseWriter,
 		}
 		req.Tags = *b.Tags
 		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "tags")
+	}
+	if b.TopicKey != nil && b.SubjectKey == nil {
+		badRequest(w, r)
+		return
+	}
+	if b.SubjectKey != nil {
+		if *b.SubjectKey == "" || !studyKeyOK(*b.SubjectKey) || (b.TopicKey != nil && !studyKeyOK(*b.TopicKey)) {
+			badRequest(w, r)
+			return
+		}
+		req.SubjectKey = *b.SubjectKey
+		if b.TopicKey != nil {
+			req.TopicKey = *b.TopicKey
+		}
+		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "subject")
+	}
+	if b.PhotoUploadIDs != nil {
+		if !photosOK(*b.PhotoUploadIDs) {
+			badRequest(w, r)
+			return
+		}
+		req.PhotoUploadIds = *b.PhotoUploadIDs
+		req.UpdateMask.Paths = append(req.UpdateMask.Paths, "photos")
 	}
 	if len(req.UpdateMask.Paths) == 0 {
 		badRequest(w, r)
@@ -348,6 +442,18 @@ func (h coreHandlers) listAnswers(ctx context.Context, w http.ResponseWriter, r 
 type answerCreateBody struct {
 	Body            string `json:"body"`
 	ClientRequestID string `json:"client_request_id"`
+	// Question pool only (issue #271).
+	PhotoUploadIDs []string `json:"photo_upload_ids"`
+}
+
+// answerContentOK mirrors core: the text is required unless the answer has
+// a photo (question pool; core checks the pool).
+func answerContentOK(body string, photos []string) bool {
+	minLen := 1
+	if len(photos) > 0 {
+		minLen = 0
+	}
+	return runesBetween(body, minLen, qaBodyMax) && photosOK(photos)
 }
 
 func (h coreHandlers) createAnswer(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -359,11 +465,13 @@ func (h coreHandlers) createAnswer(ctx context.Context, w http.ResponseWriter, r
 	if !decodeLimit(w, r, &b, maxQABody) {
 		return
 	}
-	if !runesBetween(b.Body, 1, qaBodyMax) || !validUUID(b.ClientRequestID) {
+	if !answerContentOK(b.Body, b.PhotoUploadIDs) || !validUUID(b.ClientRequestID) {
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.d.QA.CreateAnswer(ctx, &corev1.CreateAnswerRequest{TayfaId: id, QuestionId: qid, Body: b.Body, ClientRequestId: b.ClientRequestID})
+	resp, err := h.d.QA.CreateAnswer(ctx, &corev1.CreateAnswerRequest{
+		TayfaId: id, QuestionId: qid, Body: b.Body, ClientRequestId: b.ClientRequestID, PhotoUploadIds: b.PhotoUploadIDs,
+	})
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -371,8 +479,11 @@ func (h coreHandlers) createAnswer(ctx context.Context, w http.ResponseWriter, r
 	writeJSON(w, http.StatusCreated, answerFrom(resp.GetAnswer()))
 }
 
+// answerUpdateBody replaces the answer's content: the body and, in the
+// question pool, the photos (absent or [] removes them).
 type answerUpdateBody struct {
-	Body *string `json:"body"`
+	Body           *string  `json:"body"`
+	PhotoUploadIDs []string `json:"photo_upload_ids"`
 }
 
 func (h coreHandlers) updateAnswer(ctx context.Context, w http.ResponseWriter, r *http.Request) {
@@ -384,11 +495,11 @@ func (h coreHandlers) updateAnswer(ctx context.Context, w http.ResponseWriter, r
 	if !decodeLimit(w, r, &b, maxQABody) {
 		return
 	}
-	if b.Body == nil || !runesBetween(*b.Body, 1, qaBodyMax) {
+	if b.Body == nil || !answerContentOK(*b.Body, b.PhotoUploadIDs) {
 		badRequest(w, r)
 		return
 	}
-	resp, err := h.d.QA.UpdateAnswer(ctx, &corev1.UpdateAnswerRequest{TayfaId: id, AnswerId: aid, Body: *b.Body})
+	resp, err := h.d.QA.UpdateAnswer(ctx, &corev1.UpdateAnswerRequest{TayfaId: id, AnswerId: aid, Body: *b.Body, PhotoUploadIds: b.PhotoUploadIDs})
 	if err != nil {
 		h.fail(w, r, err)
 		return

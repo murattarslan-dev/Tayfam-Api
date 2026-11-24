@@ -318,6 +318,35 @@ const (
 	// edits, deletes, restores, orders and pins the items of the tayfa's
 	// daily content pool. Reading the pool and today's item is TayfaView.
 	TayfaDailyManage
+	// Ortak kütüphane (issue #270, ADR-0040 §1). LibraryItemAdd adds an
+	// item of one's own; LibraryItemEditOwn edits it and
+	// LibraryItemWithdrawOwn withdraws it (the caller checks that it is
+	// theirs). LibraryItemRemoveAny removes anyone's item (moderation).
+	// LibraryBorrow asks for an item (or waits in its queue) and
+	// LibraryBorrowCancel takes the request back. LibraryLendOwn approves,
+	// declines, hands over and takes back the caller's own items (the
+	// caller checks that the item is theirs). Reading is TayfaView.
+	LibraryItemAdd
+	LibraryItemEditOwn
+	LibraryItemWithdrawOwn
+	LibraryItemRemoveAny
+	LibraryBorrow
+	LibraryBorrowCancel
+	LibraryLendOwn
+	// Materyal kütüphanesi (issue #261, ADR-0040 §3). MaterialAdd adds a
+	// material of one's own; MaterialEditOwn edits it and MaterialDeleteOwn
+	// deletes it (the caller checks that it is theirs). MaterialRemoveAny
+	// removes anyone's material (moderation). Reading is TayfaView.
+	MaterialAdd
+	MaterialEditOwn
+	MaterialDeleteOwn
+	MaterialRemoveAny
+	// Üye garajı (issue #272, ADR-0040 §4). GarageShow shows one's own
+	// garage in the tayfa (hiding is TayfaView); GarageRemoveAny removes a
+	// vehicle showing in the tayfa (moderation). The garage itself is the
+	// person's and needs no tayfa permission.
+	GarageShow
+	GarageRemoveAny
 
 	actionEnd // sentinel; keep last
 )
@@ -425,6 +454,19 @@ var actionNames = [...]string{
 	TayfaStatsShowcaseUpdate:  "tayfa.stats_showcase.update",
 	TayfaHomeUpdate:           "tayfa.home.update",
 	TayfaDailyManage:          "tayfa.daily.manage",
+	LibraryItemAdd:            "library.item_add",
+	LibraryItemEditOwn:        "library.item_edit_own",
+	LibraryItemWithdrawOwn:    "library.item_withdraw_own",
+	LibraryItemRemoveAny:      "library.item_remove_any",
+	LibraryBorrow:             "library.borrow",
+	LibraryBorrowCancel:       "library.borrow_cancel",
+	LibraryLendOwn:            "library.lend_own",
+	MaterialAdd:               "material.add",
+	MaterialEditOwn:           "material.edit_own",
+	MaterialDeleteOwn:         "material.delete_own",
+	MaterialRemoveAny:         "material.remove_any",
+	GarageShow:                "garage.show",
+	GarageRemoveAny:           "garage.remove_any",
 	actionEnd:                 "",
 }
 
@@ -448,6 +490,21 @@ var permissions = map[Action]Role{
 	MemberList:      Member,
 	// Members see their own links; callers allowed InviteRevokeAny see all.
 	InviteList: Member,
+	// Ortak kütüphane (ADR-0040 §1): "kalem ekleme üye"; the owner's and
+	// the borrower's own steps.
+	LibraryItemAdd:         Member,
+	LibraryItemEditOwn:     Member,
+	LibraryItemWithdrawOwn: Member,
+	LibraryBorrow:          Member,
+	LibraryBorrowCancel:    Member,
+	LibraryLendOwn:         Member,
+	// Materyal kütüphanesi (ADR-0040 §3): every member adds; the author's
+	// own steps.
+	MaterialAdd:       Member,
+	MaterialEditOwn:   Member,
+	MaterialDeleteOwn: Member,
+	// Üye garajı (ADR-0040 §4): showing one's garage publishes it.
+	GarageShow: Member,
 	// Events: reading, answering and the organizer's own event. An organizer
 	// keeps managing their event even if the tayfa later stops letting
 	// members create events (2026-11-09).
@@ -554,6 +611,15 @@ var permissions = map[Action]Role{
 	TayfaVocabularyMerge: Moderator,
 	// The daily content pool: "yönetici ve moderatör ekler" (ADR-0027 §5).
 	TayfaDailyManage: Moderator,
+	// Ortak kütüphane: removing anyone's item is content moderation
+	// (ADR-0040 §1).
+	LibraryItemRemoveAny: Moderator,
+	// Materyal kütüphanesi: removing anyone's material is content
+	// moderation (ADR-0040 §3).
+	MaterialRemoveAny: Moderator,
+	// Üye garajı: removing a vehicle showing in the tayfa is content
+	// moderation (ADR-0040 §4).
+	GarageRemoveAny: Moderator,
 	// Removing anyone's event question ("Tayfa yönetimi anonim soruyu
 	// yazarını görmeden silebilir", ADR-0025 §5).
 	EventQuestionDeleteAny: Moderator,
@@ -686,6 +752,17 @@ var allowedWhileMuted = map[Action]bool{
 	// Reading components is a read. Taking part, managing and refereeing
 	// publish into the event and are refused while muted.
 	EventComponentView: true,
+	// Ortak kütüphane (ADR-0040 §1): withdrawing one's own item and taking
+	// back one's own request only narrow; the lending steps of one's own
+	// items (approve, decline, hand over, take back) publish nothing and
+	// a mute must never keep an item from going home. Adding, editing and
+	// asking for an item are refused while muted.
+	LibraryItemWithdrawOwn: true,
+	LibraryBorrowCancel:    true,
+	LibraryLendOwn:         true,
+	// Materyal kütüphanesi (ADR-0040 §3): deleting one's own material only
+	// narrows. Adding and editing publish and are refused while muted.
+	MaterialDeleteOwn: true,
 }
 
 // Settings are the tayfa settings that change the permission table. The zero

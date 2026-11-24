@@ -983,7 +983,7 @@ func TestConstraints(t *testing.T) {
 		"geçmişe planlanan silme": {`UPDATE tayfas SET deletion_requested_at = now(), deletion_scheduled_for = now() - interval '1 hour' WHERE id = $1`, "tayfas_deletion_request"},
 		"silinmeden silen":        {`UPDATE tayfas SET deleted_by = created_by WHERE id = $1`, "tayfas_deleted_by"},
 		"bilinmeyen ilgi alanı":   {`INSERT INTO tayfa_interests (tayfa_id, interest_key) VALUES ($1, 'cycling')`, "tayfa_interests_interest_key_fkey"},
-		"bilinmeyen modül":        {`INSERT INTO tayfa_modules (tayfa_id, module, enabled) VALUES ($1, 'garage', true)`, "tayfa_modules_module"},
+		"bilinmeyen modül":        {`INSERT INTO tayfa_modules (tayfa_id, module, enabled) VALUES ($1, 'marketplace', true)`, "tayfa_modules_module"},
 		"sohbet modül değildir":   {`INSERT INTO tayfa_modules (tayfa_id, module, enabled) VALUES ($1, 'channels', true)`, "tayfa_modules_module"},
 		"kısa davet hash'i":       {`INSERT INTO invites (id, tayfa_id, token_hash, expires_at) VALUES (gen_random_uuid(), $1, '\x01'::bytea, now() + interval '1 day')`, "invites_token_hash_len"},
 		"geçmişte biten davet":    {`INSERT INTO invites (id, tayfa_id, token_hash, expires_at) VALUES (gen_random_uuid(), $1, sha256('x'::bytea), now() - interval '1 day')`, "invites_expiry"},

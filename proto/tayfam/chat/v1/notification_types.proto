@@ -108,6 +108,45 @@ enum NotificationType {
   // the push_now_started_title / _body keys only. Muted with the tayfa's
   // level NONE or with its NOTIFICATION_SCOPE_TYPE_TAYFA_NOW preference.
   NOTIFICATION_TYPE_NOW_STARTED = 26;
+  // A library loan's return date passed (issue #270, ADR-0040 §1): one
+  // reminder to the borrower (target: TAYFA, the loan's tayfa; no actor).
+  // Never names the item, the owner or the date: the client reads the
+  // caller's loans from TayfaLibraryService. In-app only: no push.
+  NOTIFICATION_TYPE_LIBRARY_DUE = 27;
+  // One side of a handed-over library loan left the tayfa (issue #270,
+  // ADR-0040 §1): a warning to both the owner and the borrower, the one who
+  // left included (target: TAYFA; no actor). The loan stays open for 30
+  // days, then closes. Never names the item or the people. In-app only.
+  NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED = 28;
+  // The library's loan steps (issue #321; ADR-0040 §1, revised 2026-11-23).
+  // Each is about one item (target: LIBRARY_ITEM, the item's ID), names the
+  // member who took the step as actor and goes to the other side only:
+  // never to anyone blocked with the actor either way. Never names the
+  // item or the people; the push holds the push_<type>_title / _body keys
+  // and IDs only. Pushed, muted with the tayfa's preference; personal, so
+  // level MENTIONS still pushes them.
+  //
+  // A member asked for the recipient's item and has the loan request
+  // (actor: the borrower).
+  NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED = 29;
+  // A member took a place in the queue of the recipient's item, which is
+  // on loan or asked for (actor: the member waiting).
+  NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED = 30;
+  // The owner (actor) approved the recipient's loan request.
+  NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED = 31;
+  // The owner (actor) declined the recipient's loan request.
+  NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED = 32;
+  // The owner (actor) recorded handing the item over to the recipient.
+  NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER = 33;
+  // The recipient's place in the queue of an item came: the loan before
+  // ended and their loan request is now open, waiting for the owner
+  // (issue #332; ADR-0040 §1, revised 2026-11-23). About the item (target:
+  // LIBRARY_ITEM), without an actor: nobody took this step for them. Not
+  // sent while the recipient and the item's owner have blocked each other
+  // either way. Never names the item or the people; pushed with the
+  // push_<type>_title / _body keys and IDs only, personal like the steps
+  // above.
+  NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN = 34;
 }
 
 enum NotificationTargetType {
@@ -128,6 +167,9 @@ enum NotificationTargetType {
   // target_id is a data export request of the recipient (identity's
   // DataExportService.GetDataExport).
   NOTIFICATION_TARGET_TYPE_DATA_EXPORT = 9;
+  // target_id is a library item of the notification's tayfa
+  // (TayfaLibraryService.GetLibraryItem; issue #321).
+  NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM = 10;
 }
 
 // Why an inactive tayfa was warned (core's cleanup job).

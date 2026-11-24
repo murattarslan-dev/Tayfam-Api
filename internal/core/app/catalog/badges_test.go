@@ -11,9 +11,10 @@ import (
 )
 
 // testBadges is the smallest set that exercises the catalog's rules. It is
-// test data only: the real list comes from the platform owner's approved
-// draft (issue #260).
-const testBadges = `INSERT INTO catalog_badges (key, scope, position, labels, icon, rule, status) VALUES
+// test data only: the real list is the seed's (issue #260;
+// TestSeedCatalogData), which it replaces.
+const testBadges = `DELETE FROM catalog_badges;
+INSERT INTO catalog_badges (key, scope, position, labels, icon, rule, status) VALUES
 	('first_event', 'user', 1, '{"tr": "İlk etkinlik", "en": "First event"}', 'flag', '{"kind": "first"}', 'active'),
 	('ten_events', 'user', 2, '{"tr": "On etkinlik"}', 'medal', '{"kind": "threshold", "metric": "attended", "value": 10, "period": "all_time"}', 'active'),
 	('yearly_km', 'tayfa', 3, '{"tr": "Yılın yürüyüşçüleri"}', 'trophy', '{"kind": "threshold", "metric": "hike.distance", "value": 100, "period": "year"}', 'active'),
@@ -98,9 +99,10 @@ func TestParseBadgeRule(t *testing.T) {
 	}
 }
 
-// The migrations leave the badges empty (their content is issue #260's).
-func TestSeedBadgesEmpty(t *testing.T) {
-	svc, _, _ := setup(t)
+// A catalog without badges serves an empty list.
+func TestEmptyBadges(t *testing.T) {
+	svc, _, admin := setup(t)
+	exec(t, admin, `DELETE FROM catalog_badges`)
 	c, _, err := svc.Get(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -208,7 +210,8 @@ func TestCheckBadge(t *testing.T) {
 	}
 }
 
-// The service's database user only reads the definitions and never
+// The service's database user never deletes a definition, never changes
+// its key or scope (the platform panel writes the rest, #262), and never
 // changes or takes back an earned badge (ADR-0039 §2).
 func TestAppRoleCannotChangeBadges(t *testing.T) {
 	_, pool, admin := setup(t)
@@ -216,8 +219,8 @@ func TestAppRoleCannotChangeBadges(t *testing.T) {
 	u, tf := id.New(), id.New()
 	exec(t, admin, `INSERT INTO user_badges (id, user_id, badge_key, period_key, earned_at) VALUES ($1, $2, 'first_event', 'all', now())`, id.New().PG(), u.PG())
 	for name, sql := range map[string]string{
-		"tanım ekleme":            `INSERT INTO catalog_badges (key, scope, position, labels, icon, rule) VALUES ('x_badge', 'user', 1, '{"tr": "x"}', 'medal', '{"kind": "first"}')`,
-		"tanım değiştirme":        `UPDATE catalog_badges SET labels = '{"tr": "x"}' WHERE key = 'first_event'`,
+		"anahtar değiştirme":      `UPDATE catalog_badges SET key = 'x_badge' WHERE key = 'first_event'`,
+		"kapsam değiştirme":       `UPDATE catalog_badges SET scope = 'tayfa' WHERE key = 'first_event'`,
 		"tanım silme":             `DELETE FROM catalog_badges WHERE key = 'ten_events'`,
 		"rozet değiştirme":        `UPDATE user_badges SET earned_at = now() WHERE badge_key = 'first_event'`,
 		"tayfa rozeti silme":      `DELETE FROM tayfa_badges WHERE tayfa_id = '` + tf.String() + `'`,

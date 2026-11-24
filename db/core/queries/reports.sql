@@ -17,14 +17,16 @@ SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible, (statu
 FROM events
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
+-- Sorunun havuzu modülünü verir: Soru-Cevap (qa) ya da soru havuzu
+-- (question_pool, issue #271).
 -- name: GetReportTargetQuestion :one
-SELECT author_id, (deleted_at IS NULL)::boolean AS visible
+SELECT author_id, (deleted_at IS NULL)::boolean AS visible, pool
 FROM questions
 WHERE tayfa_id = @tayfa_id AND id = @id;
 
 -- Silinmiş sorunun cevabı da görünmez.
 -- name: GetReportTargetAnswer :one
-SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible
+SELECT a.author_id, (a.deleted_at IS NULL AND q.deleted_at IS NULL)::boolean AS visible, a.pool
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
 WHERE a.tayfa_id = @tayfa_id AND a.id = @id;
@@ -56,6 +58,29 @@ WHERE e.tayfa_id = @tayfa_id AND q.id = @id;
 SELECT created_by AS author_id, (deleted_at IS NULL)::boolean AS visible
 FROM tayfa_daily_items
 WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Ortak kütüphane kalemi (issue #270): yazarı sahibidir.
+-- name: GetReportTargetLibraryItem :one
+SELECT owner_id AS author_id, (status <> 'withdrawn')::boolean AS visible
+FROM library_items
+WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Materyal (issue #261): yazarı konusudur; engelli alan adındaki bağlantı
+-- gizlidir.
+-- name: GetReportTargetMaterial :one
+SELECT author_id, (deleted_at IS NULL AND NOT material_domain_blocked(domain))::boolean AS visible
+FROM materials
+WHERE tayfa_id = @tayfa_id AND id = @id;
+
+-- Üye garajı aracı (issue #272): sahibi konusudur; sahibi tayfanın üyesi
+-- değilse hedef yoktur. Görünür: silinmemiş, sahibi etkin üye ve garajı bu
+-- tayfada görünür.
+-- name: GetReportTargetGarageVehicle :one
+SELECT g.owner_id AS author_id,
+       (g.deleted_at IS NULL AND m.status = 'active' AND garage_visible_in(g.owner_id, @tayfa_id::uuid))::boolean AS visible
+FROM garage_vehicles g
+JOIN memberships m ON m.tayfa_id = @tayfa_id::uuid AND m.user_id = g.owner_id
+WHERE g.id = @id;
 
 -- Albüm fotoğrafı (issue #206): etkinliği de görünür olmalı.
 -- name: GetReportTargetEventPhoto :one

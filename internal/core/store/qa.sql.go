@@ -98,8 +98,10 @@ func (q *Queries) CountTags(ctx context.Context, tayfaID pgtype.UUID) (int32, er
 
 const createAnswer = `-- name: CreateAnswer :exec
 
-INSERT INTO answers (id, question_id, tayfa_id, author_id, body, client_request_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO answers (id, question_id, tayfa_id, pool, author_id, body, client_request_id, photo1_upload_id, photo2_upload_id)
+VALUES ($1, $2, $3,
+        COALESCE((SELECT x.pool FROM questions x WHERE x.id = $2 AND x.tayfa_id = $3), 'qa'),
+        $4, $5, $6, $7, $8)
 `
 
 type CreateAnswerParams struct {
@@ -109,9 +111,13 @@ type CreateAnswerParams struct {
 	AuthorID        pgtype.UUID
 	Body            string
 	ClientRequestID pgtype.UUID
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
 }
 
 // Cevaplar.
+// Cevabın havuzu sorunun havuzudur; soru yoksa 'qa' ile foreign key'e
+// takılır.
 func (q *Queries) CreateAnswer(ctx context.Context, arg CreateAnswerParams) error {
 	_, err := q.db.Exec(ctx, createAnswer,
 		arg.ID,
@@ -120,14 +126,19 @@ func (q *Queries) CreateAnswer(ctx context.Context, arg CreateAnswerParams) erro
 		arg.AuthorID,
 		arg.Body,
 		arg.ClientRequestID,
+		arg.Photo1UploadID,
+		arg.Photo2UploadID,
 	)
 	return err
 }
 
 const createQuestion = `-- name: CreateQuestion :exec
 
-INSERT INTO questions (id, tayfa_id, author_id, title, body, client_request_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO questions (id, tayfa_id, author_id, title, body, client_request_id,
+                       pool, subject_key, topic_key, photo1_upload_id, photo2_upload_id)
+VALUES ($1, $2, $3, $4, $5, $6,
+        COALESCE($7::text, 'qa'), $8, $9,
+        $10, $11)
 `
 
 type CreateQuestionParams struct {
@@ -137,10 +148,17 @@ type CreateQuestionParams struct {
 	Title           string
 	Body            string
 	ClientRequestID pgtype.UUID
+	Pool            pgtype.Text
+	SubjectKey      pgtype.Text
+	TopicKey        pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
 }
 
 // Soru-cevap (issue #59). Her sorgu tayfa_id ile sınırlıdır (IDOR); üyelik
 // ve izin kontrolü app katmanındadır (access, authz).
+// Havuz verilmezse Soru-Cevap ('qa'). Havuz sorusunun fotoğrafları önce
+// dosyaya bağlanır (media.Attach), sonra kolona yazılır.
 func (q *Queries) CreateQuestion(ctx context.Context, arg CreateQuestionParams) error {
 	_, err := q.db.Exec(ctx, createQuestion,
 		arg.ID,
@@ -149,6 +167,11 @@ func (q *Queries) CreateQuestion(ctx context.Context, arg CreateQuestionParams) 
 		arg.Title,
 		arg.Body,
 		arg.ClientRequestID,
+		arg.Pool,
+		arg.SubjectKey,
+		arg.TopicKey,
+		arg.Photo1UploadID,
+		arg.Photo2UploadID,
 	)
 	return err
 }
@@ -204,7 +227,8 @@ func (q *Queries) DeleteTag(ctx context.Context, arg DeleteTagParams) (int64, er
 
 const eraseAnswer = `-- name: EraseAnswer :execrows
 UPDATE answers
-SET deleted_at = $1, deleted_by = $2, body = '', vote_count = 0
+SET deleted_at = $1, deleted_by = $2, body = '', vote_count = 0,
+    photo1_upload_id = NULL, photo2_upload_id = NULL
 WHERE tayfa_id = $3 AND id = $4 AND deleted_at IS NULL
 `
 
@@ -215,7 +239,8 @@ type EraseAnswerParams struct {
 	ID        pgtype.UUID
 }
 
-// Yazarın kendi silmesi: metin boşaltılır, oyları silinir (ayrı sorgu).
+// Yazarın kendi silmesi: metin ve fotoğraflar boşaltılır, oyları silinir
+// (ayrı sorgu).
 func (q *Queries) EraseAnswer(ctx context.Context, arg EraseAnswerParams) (int64, error) {
 	result, err := q.db.Exec(ctx, eraseAnswer,
 		arg.DeletedAt,
@@ -231,7 +256,8 @@ func (q *Queries) EraseAnswer(ctx context.Context, arg EraseAnswerParams) (int64
 
 const eraseQuestion = `-- name: EraseQuestion :execrows
 UPDATE questions
-SET deleted_at = $1, deleted_by = $2, title = '', body = ''
+SET deleted_at = $1, deleted_by = $2, title = '', body = '',
+    photo1_upload_id = NULL, photo2_upload_id = NULL
 WHERE tayfa_id = $3 AND id = $4 AND deleted_at IS NULL
 `
 
@@ -242,8 +268,9 @@ type EraseQuestionParams struct {
 	ID        pgtype.UUID
 }
 
-// Yazarın kendi silmesi: başlık ve gövde hemen boşaltılır, geri alınamaz
-// (v14 "Silinen içeriği geri alma"). Etiket bağları ayrıca silinir.
+// Yazarın kendi silmesi: başlık, gövde ve fotoğraflar hemen boşaltılır
+// (dosyalar silme kuyruğuna girer), geri alınamaz (v14 "Silinen içeriği
+// geri alma"). Etiket bağları ayrıca silinir.
 func (q *Queries) EraseQuestion(ctx context.Context, arg EraseQuestionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, eraseQuestion,
 		arg.DeletedAt,
@@ -259,6 +286,7 @@ func (q *Queries) EraseQuestion(ctx context.Context, arg EraseQuestionParams) (i
 
 const getAnswer = `-- name: GetAnswer :one
 SELECT a.id, a.question_id, a.tayfa_id, a.author_id, a.body, a.vote_count, a.created_at, a.updated_at,
+       a.pool, a.photo1_upload_id, a.photo2_upload_id,
        EXISTS (SELECT 1 FROM answer_votes v WHERE v.answer_id = a.id AND v.user_id = $1) AS voted
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
@@ -272,15 +300,18 @@ type GetAnswerParams struct {
 }
 
 type GetAnswerRow struct {
-	ID         pgtype.UUID
-	QuestionID pgtype.UUID
-	TayfaID    pgtype.UUID
-	AuthorID   pgtype.UUID
-	Body       string
-	VoteCount  int32
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
-	Voted      bool
+	ID             pgtype.UUID
+	QuestionID     pgtype.UUID
+	TayfaID        pgtype.UUID
+	AuthorID       pgtype.UUID
+	Body           string
+	VoteCount      int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Pool           string
+	Photo1UploadID pgtype.UUID
+	Photo2UploadID pgtype.UUID
+	Voted          bool
 }
 
 // Görünen sorunun görünen cevabı; voted, çağıranın oyu.
@@ -296,6 +327,9 @@ func (q *Queries) GetAnswer(ctx context.Context, arg GetAnswerParams) (GetAnswer
 		&i.VoteCount,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Pool,
+		&i.Photo1UploadID,
+		&i.Photo2UploadID,
 		&i.Voted,
 	)
 	return i, err
@@ -333,6 +367,7 @@ func (q *Queries) GetAnswerByClientRequest(ctx context.Context, arg GetAnswerByC
 
 const getAnswerForUpdate = `-- name: GetAnswerForUpdate :one
 SELECT a.id, a.question_id, a.author_id, a.body, a.deleted_at, a.deleted_by,
+       a.pool, a.photo1_upload_id, a.photo2_upload_id,
        q.deleted_at AS question_deleted_at, q.author_id AS question_author_id
 FROM answers a
 JOIN questions q ON q.id = a.question_id AND q.tayfa_id = a.tayfa_id
@@ -352,6 +387,9 @@ type GetAnswerForUpdateRow struct {
 	Body              string
 	DeletedAt         pgtype.Timestamptz
 	DeletedBy         pgtype.UUID
+	Pool              string
+	Photo1UploadID    pgtype.UUID
+	Photo2UploadID    pgtype.UUID
 	QuestionDeletedAt pgtype.Timestamptz
 	QuestionAuthorID  pgtype.UUID
 }
@@ -366,14 +404,35 @@ func (q *Queries) GetAnswerForUpdate(ctx context.Context, arg GetAnswerForUpdate
 		&i.Body,
 		&i.DeletedAt,
 		&i.DeletedBy,
+		&i.Pool,
+		&i.Photo1UploadID,
+		&i.Photo2UploadID,
 		&i.QuestionDeletedAt,
 		&i.QuestionAuthorID,
 	)
 	return i, err
 }
 
+const getAnswerPool = `-- name: GetAnswerPool :one
+SELECT pool FROM answers WHERE tayfa_id = $1 AND id = $2
+`
+
+type GetAnswerPoolParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+// Cevabın havuzu (modül kontrolü için); silinmiş satır da döner.
+func (q *Queries) GetAnswerPool(ctx context.Context, arg GetAnswerPoolParams) (string, error) {
+	row := q.db.QueryRow(ctx, getAnswerPool, arg.TayfaID, arg.ID)
+	var pool string
+	err := row.Scan(&pool)
+	return pool, err
+}
+
 const getQuestion = `-- name: GetQuestion :one
 SELECT q.id, q.tayfa_id, q.author_id, q.title, q.body, q.created_at, q.updated_at,
+       q.pool, q.subject_key, q.topic_key, q.photo1_upload_id, q.photo2_upload_id,
        (SELECT count(*) FROM answers a WHERE a.question_id = q.id AND a.deleted_at IS NULL)::integer AS answer_count
 FROM questions q
 WHERE q.tayfa_id = $1 AND q.id = $2 AND q.deleted_at IS NULL
@@ -385,14 +444,19 @@ type GetQuestionParams struct {
 }
 
 type GetQuestionRow struct {
-	ID          pgtype.UUID
-	TayfaID     pgtype.UUID
-	AuthorID    pgtype.UUID
-	Title       string
-	Body        string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	AnswerCount int32
+	ID             pgtype.UUID
+	TayfaID        pgtype.UUID
+	AuthorID       pgtype.UUID
+	Title          string
+	Body           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Pool           string
+	SubjectKey     pgtype.Text
+	TopicKey       pgtype.Text
+	Photo1UploadID pgtype.UUID
+	Photo2UploadID pgtype.UUID
+	AnswerCount    int32
 }
 
 func (q *Queries) GetQuestion(ctx context.Context, arg GetQuestionParams) (GetQuestionRow, error) {
@@ -406,6 +470,11 @@ func (q *Queries) GetQuestion(ctx context.Context, arg GetQuestionParams) (GetQu
 		&i.Body,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Pool,
+		&i.SubjectKey,
+		&i.TopicKey,
+		&i.Photo1UploadID,
+		&i.Photo2UploadID,
 		&i.AnswerCount,
 	)
 	return i, err
@@ -437,7 +506,8 @@ func (q *Queries) GetQuestionByClientRequest(ctx context.Context, arg GetQuestio
 }
 
 const getQuestionForUpdate = `-- name: GetQuestionForUpdate :one
-SELECT id, tayfa_id, author_id, title, body, deleted_at, deleted_by
+SELECT id, tayfa_id, author_id, title, body, deleted_at, deleted_by,
+       pool, subject_key, topic_key, photo1_upload_id, photo2_upload_id
 FROM questions
 WHERE tayfa_id = $1 AND id = $2
 FOR UPDATE
@@ -449,13 +519,18 @@ type GetQuestionForUpdateParams struct {
 }
 
 type GetQuestionForUpdateRow struct {
-	ID        pgtype.UUID
-	TayfaID   pgtype.UUID
-	AuthorID  pgtype.UUID
-	Title     string
-	Body      string
-	DeletedAt pgtype.Timestamptz
-	DeletedBy pgtype.UUID
+	ID             pgtype.UUID
+	TayfaID        pgtype.UUID
+	AuthorID       pgtype.UUID
+	Title          string
+	Body           string
+	DeletedAt      pgtype.Timestamptz
+	DeletedBy      pgtype.UUID
+	Pool           string
+	SubjectKey     pgtype.Text
+	TopicKey       pgtype.Text
+	Photo1UploadID pgtype.UUID
+	Photo2UploadID pgtype.UUID
 }
 
 // Yazma işlemleri satırı kilitleyerek okur; silinmiş satır da döner.
@@ -470,8 +545,30 @@ func (q *Queries) GetQuestionForUpdate(ctx context.Context, arg GetQuestionForUp
 		&i.Body,
 		&i.DeletedAt,
 		&i.DeletedBy,
+		&i.Pool,
+		&i.SubjectKey,
+		&i.TopicKey,
+		&i.Photo1UploadID,
+		&i.Photo2UploadID,
 	)
 	return i, err
+}
+
+const getQuestionPool = `-- name: GetQuestionPool :one
+SELECT pool FROM questions WHERE tayfa_id = $1 AND id = $2
+`
+
+type GetQuestionPoolParams struct {
+	TayfaID pgtype.UUID
+	ID      pgtype.UUID
+}
+
+// Sorunun havuzu (modül kontrolü için); silinmiş satır da döner.
+func (q *Queries) GetQuestionPool(ctx context.Context, arg GetQuestionPoolParams) (string, error) {
+	row := q.db.QueryRow(ctx, getQuestionPool, arg.TayfaID, arg.ID)
+	var pool string
+	err := row.Scan(&pool)
+	return pool, err
 }
 
 const getTag = `-- name: GetTag :one
@@ -590,6 +687,7 @@ func (q *Queries) HideQuestion(ctx context.Context, arg HideQuestionParams) (int
 
 const listAnswersPage = `-- name: ListAnswersPage :many
 SELECT a.id, a.question_id, a.tayfa_id, a.author_id, a.body, a.vote_count, a.created_at, a.updated_at,
+       a.pool, a.photo1_upload_id, a.photo2_upload_id,
        EXISTS (SELECT 1 FROM answer_votes v WHERE v.answer_id = a.id AND v.user_id = $1) AS voted
 FROM answers a
 WHERE a.tayfa_id = $2 AND a.question_id = $3 AND a.deleted_at IS NULL
@@ -611,15 +709,18 @@ type ListAnswersPageParams struct {
 }
 
 type ListAnswersPageRow struct {
-	ID         pgtype.UUID
-	QuestionID pgtype.UUID
-	TayfaID    pgtype.UUID
-	AuthorID   pgtype.UUID
-	Body       string
-	VoteCount  int32
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
-	Voted      bool
+	ID             pgtype.UUID
+	QuestionID     pgtype.UUID
+	TayfaID        pgtype.UUID
+	AuthorID       pgtype.UUID
+	Body           string
+	VoteCount      int32
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Pool           string
+	Photo1UploadID pgtype.UUID
+	Photo2UploadID pgtype.UUID
+	Voted          bool
 }
 
 // Faydalı oyu çoktan aza, eşitlikte eskiden yeniye (id artan, UUIDv7).
@@ -649,6 +750,9 @@ func (q *Queries) ListAnswersPage(ctx context.Context, arg ListAnswersPageParams
 			&i.VoteCount,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Pool,
+			&i.Photo1UploadID,
+			&i.Photo2UploadID,
 			&i.Voted,
 		); err != nil {
 			return nil, err
@@ -702,20 +806,27 @@ func (q *Queries) ListQuestionTags(ctx context.Context, arg ListQuestionTagsPara
 
 const listQuestionsPage = `-- name: ListQuestionsPage :many
 SELECT q.id, q.tayfa_id, q.author_id, q.title, q.body, q.created_at, q.updated_at,
+       q.pool, q.subject_key, q.topic_key, q.photo1_upload_id, q.photo2_upload_id,
        (SELECT count(*) FROM answers a WHERE a.question_id = q.id AND a.deleted_at IS NULL)::integer AS answer_count
 FROM questions q
 WHERE q.tayfa_id = $1
+  AND q.pool = $2
   AND q.deleted_at IS NULL
-  AND (NOT $2::boolean
-       OR EXISTS (SELECT 1 FROM question_tags qt WHERE qt.question_id = q.id AND qt.tayfa_id = $1 AND qt.tag_id = $3::uuid))
-  AND (NOT $4::boolean
-       OR (q.created_at, q.id) < ($5::timestamptz, $6::uuid))
+  AND ($3::text IS NULL OR q.subject_key = $3::text)
+  AND ($4::text IS NULL OR q.topic_key = $4::text)
+  AND (NOT $5::boolean
+       OR EXISTS (SELECT 1 FROM question_tags qt WHERE qt.question_id = q.id AND qt.tayfa_id = $1 AND qt.tag_id = $6::uuid))
+  AND (NOT $7::boolean
+       OR (q.created_at, q.id) < ($8::timestamptz, $9::uuid))
 ORDER BY q.created_at DESC, q.id DESC
-LIMIT $7
+LIMIT $10
 `
 
 type ListQuestionsPageParams struct {
 	TayfaID        pgtype.UUID
+	Pool           string
+	SubjectKey     pgtype.Text
+	TopicKey       pgtype.Text
 	HasTag         bool
 	TagID          pgtype.UUID
 	HasCursor      bool
@@ -725,21 +836,30 @@ type ListQuestionsPageParams struct {
 }
 
 type ListQuestionsPageRow struct {
-	ID          pgtype.UUID
-	TayfaID     pgtype.UUID
-	AuthorID    pgtype.UUID
-	Title       string
-	Body        string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	AnswerCount int32
+	ID             pgtype.UUID
+	TayfaID        pgtype.UUID
+	AuthorID       pgtype.UUID
+	Title          string
+	Body           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Pool           string
+	SubjectKey     pgtype.Text
+	TopicKey       pgtype.Text
+	Photo1UploadID pgtype.UUID
+	Photo2UploadID pgtype.UUID
+	AnswerCount    int32
 }
 
-// Yeniden eskiye. İsteğe bağlı etiket filtresi. Sayfa, önceki sayfanın son
-// satırından sonra başlar (created_at, id azalan).
+// Yeniden eskiye, bir havuzda. İsteğe bağlı etiket, ders ve konu filtresi.
+// Sayfa, önceki sayfanın son satırından sonra başlar (created_at, id
+// azalan).
 func (q *Queries) ListQuestionsPage(ctx context.Context, arg ListQuestionsPageParams) ([]ListQuestionsPageRow, error) {
 	rows, err := q.db.Query(ctx, listQuestionsPage,
 		arg.TayfaID,
+		arg.Pool,
+		arg.SubjectKey,
+		arg.TopicKey,
 		arg.HasTag,
 		arg.TagID,
 		arg.HasCursor,
@@ -762,6 +882,11 @@ func (q *Queries) ListQuestionsPage(ctx context.Context, arg ListQuestionsPagePa
 			&i.Body,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Pool,
+			&i.SubjectKey,
+			&i.TopicKey,
+			&i.Photo1UploadID,
+			&i.Photo2UploadID,
 			&i.AnswerCount,
 		); err != nil {
 			return nil, err
@@ -835,7 +960,8 @@ func (q *Queries) RemoveAnswerVote(ctx context.Context, arg RemoveAnswerVotePara
 const restoreAnswer = `-- name: RestoreAnswer :execrows
 UPDATE answers
 SET deleted_at = NULL, deleted_by = NULL
-WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NOT NULL AND char_length(body) > 0
+WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NOT NULL
+  AND (char_length(body) > 0 OR photo1_upload_id IS NOT NULL OR photo2_upload_id IS NOT NULL)
 `
 
 type RestoreAnswerParams struct {
@@ -854,7 +980,9 @@ func (q *Queries) RestoreAnswer(ctx context.Context, arg RestoreAnswerParams) (i
 const restoreQuestion = `-- name: RestoreQuestion :execrows
 UPDATE questions
 SET deleted_at = NULL, deleted_by = NULL
-WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NOT NULL AND char_length(title) > 0
+WHERE tayfa_id = $1 AND id = $2 AND deleted_at IS NOT NULL
+  AND (char_length(title) > 0
+       OR (pool = 'question_pool' AND (char_length(body) > 0 OR photo1_upload_id IS NOT NULL OR photo2_upload_id IS NOT NULL)))
 `
 
 type RestoreQuestionParams struct {
@@ -862,6 +990,8 @@ type RestoreQuestionParams struct {
 	ID      pgtype.UUID
 }
 
+// Yazarın boşalttığı soru geri alınmaz: Soru-Cevap'ta başlığı, havuzda
+// metni ve fotoğrafı yoktur.
 func (q *Queries) RestoreQuestion(ctx context.Context, arg RestoreQuestionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, restoreQuestion, arg.TayfaID, arg.ID)
 	if err != nil {
@@ -873,15 +1003,20 @@ func (q *Queries) RestoreQuestion(ctx context.Context, arg RestoreQuestionParams
 const searchQuestionsPage = `-- name: SearchQuestionsPage :many
 WITH s AS (
   SELECT q.id, q.tayfa_id, q.author_id, q.title, q.body, q.created_at, q.updated_at,
+         q.pool, q.subject_key, q.topic_key, q.photo1_upload_id, q.photo2_upload_id,
          ts_rank(q.search_vector, websearch_to_tsquery('turkish'::regconfig, tr_lower($5::text)))::real AS rank
   FROM questions q
   WHERE q.tayfa_id = $6
+    AND q.pool = $7
     AND q.deleted_at IS NULL
+    AND ($8::text IS NULL OR q.subject_key = $8::text)
+    AND ($9::text IS NULL OR q.topic_key = $9::text)
     AND q.search_vector @@ websearch_to_tsquery('turkish'::regconfig, tr_lower($5::text))
-    AND (NOT $7::boolean
-         OR EXISTS (SELECT 1 FROM question_tags qt WHERE qt.question_id = q.id AND qt.tayfa_id = $6 AND qt.tag_id = $8::uuid))
+    AND (NOT $10::boolean
+         OR EXISTS (SELECT 1 FROM question_tags qt WHERE qt.question_id = q.id AND qt.tayfa_id = $6 AND qt.tag_id = $11::uuid))
 )
-SELECT s.id, s.tayfa_id, s.author_id, s.title, s.body, s.created_at, s.updated_at, s.rank,
+SELECT s.id, s.tayfa_id, s.author_id, s.title, s.body, s.created_at, s.updated_at,
+       s.pool, s.subject_key, s.topic_key, s.photo1_upload_id, s.photo2_upload_id, s.rank,
        (SELECT count(*) FROM answers a WHERE a.question_id = s.id AND a.deleted_at IS NULL)::integer AS answer_count
 FROM s
 WHERE NOT $1::boolean
@@ -891,26 +1026,34 @@ LIMIT $4
 `
 
 type SearchQuestionsPageParams struct {
-	HasCursor bool
-	AfterRank float32
-	AfterID   pgtype.UUID
-	PageSize  int32
-	Query     string
-	TayfaID   pgtype.UUID
-	HasTag    bool
-	TagID     pgtype.UUID
+	HasCursor  bool
+	AfterRank  float32
+	AfterID    pgtype.UUID
+	PageSize   int32
+	Query      string
+	TayfaID    pgtype.UUID
+	Pool       string
+	SubjectKey pgtype.Text
+	TopicKey   pgtype.Text
+	HasTag     bool
+	TagID      pgtype.UUID
 }
 
 type SearchQuestionsPageRow struct {
-	ID          pgtype.UUID
-	TayfaID     pgtype.UUID
-	AuthorID    pgtype.UUID
-	Title       string
-	Body        string
-	CreatedAt   pgtype.Timestamptz
-	UpdatedAt   pgtype.Timestamptz
-	Rank        float32
-	AnswerCount int32
+	ID             pgtype.UUID
+	TayfaID        pgtype.UUID
+	AuthorID       pgtype.UUID
+	Title          string
+	Body           string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	Pool           string
+	SubjectKey     pgtype.Text
+	TopicKey       pgtype.Text
+	Photo1UploadID pgtype.UUID
+	Photo2UploadID pgtype.UUID
+	Rank           float32
+	AnswerCount    int32
 }
 
 // Türkçe tam metin arama. Sorgu metni tr_lower ile, belgelerle aynı
@@ -924,6 +1067,9 @@ func (q *Queries) SearchQuestionsPage(ctx context.Context, arg SearchQuestionsPa
 		arg.PageSize,
 		arg.Query,
 		arg.TayfaID,
+		arg.Pool,
+		arg.SubjectKey,
+		arg.TopicKey,
 		arg.HasTag,
 		arg.TagID,
 	)
@@ -942,6 +1088,11 @@ func (q *Queries) SearchQuestionsPage(ctx context.Context, arg SearchQuestionsPa
 			&i.Body,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Pool,
+			&i.SubjectKey,
+			&i.TopicKey,
+			&i.Photo1UploadID,
+			&i.Photo2UploadID,
 			&i.Rank,
 			&i.AnswerCount,
 		); err != nil {
@@ -957,18 +1108,27 @@ func (q *Queries) SearchQuestionsPage(ctx context.Context, arg SearchQuestionsPa
 
 const updateAnswerBody = `-- name: UpdateAnswerBody :execrows
 UPDATE answers
-SET body = $1
-WHERE tayfa_id = $2 AND id = $3 AND deleted_at IS NULL
+SET body = $1, photo1_upload_id = $2, photo2_upload_id = $3
+WHERE tayfa_id = $4 AND id = $5 AND deleted_at IS NULL
 `
 
 type UpdateAnswerBodyParams struct {
-	Body    string
-	TayfaID pgtype.UUID
-	ID      pgtype.UUID
+	Body           string
+	Photo1UploadID pgtype.UUID
+	Photo2UploadID pgtype.UUID
+	TayfaID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
+// Havuz cevabında fotoğraflar da (Soru-Cevap cevabında hep NULL).
 func (q *Queries) UpdateAnswerBody(ctx context.Context, arg UpdateAnswerBodyParams) (int64, error) {
-	result, err := q.db.Exec(ctx, updateAnswerBody, arg.Body, arg.TayfaID, arg.ID)
+	result, err := q.db.Exec(ctx, updateAnswerBody,
+		arg.Body,
+		arg.Photo1UploadID,
+		arg.Photo2UploadID,
+		arg.TayfaID,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -977,21 +1137,33 @@ func (q *Queries) UpdateAnswerBody(ctx context.Context, arg UpdateAnswerBodyPara
 
 const updateQuestionContent = `-- name: UpdateQuestionContent :execrows
 UPDATE questions
-SET title = $1, body = $2
-WHERE tayfa_id = $3 AND id = $4 AND deleted_at IS NULL
+SET title = $1, body = $2, subject_key = $3, topic_key = $4,
+    photo1_upload_id = $5, photo2_upload_id = $6
+WHERE tayfa_id = $7 AND id = $8 AND deleted_at IS NULL
 `
 
 type UpdateQuestionContentParams struct {
-	Title   string
-	Body    string
-	TayfaID pgtype.UUID
-	ID      pgtype.UUID
+	Title          string
+	Body           string
+	SubjectKey     pgtype.Text
+	TopicKey       pgtype.Text
+	Photo1UploadID pgtype.UUID
+	Photo2UploadID pgtype.UUID
+	TayfaID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
+// Havuz sorusunda ders, konu ve fotoğraflar da (Soru-Cevap sorusunda
+// hep NULL). Yeni fotoğraf önce dosyaya bağlanır; bırakılan fotoğrafın
+// dosyası tetikleyiciyle silme kuyruğuna girer.
 func (q *Queries) UpdateQuestionContent(ctx context.Context, arg UpdateQuestionContentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, updateQuestionContent,
 		arg.Title,
 		arg.Body,
+		arg.SubjectKey,
+		arg.TopicKey,
+		arg.Photo1UploadID,
+		arg.Photo2UploadID,
 		arg.TayfaID,
 		arg.ID,
 	)

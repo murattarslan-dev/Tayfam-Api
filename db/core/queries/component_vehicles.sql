@@ -6,7 +6,7 @@
 -- (internal/core/app/component/vehicles).
 
 -- name: ListEventVehicles :many
-SELECT id, user_id, make, model, model_year, color, plate, seats FROM event_vehicles
+SELECT id, user_id, vehicle_id, make, model, model_year, color, plate, seats FROM event_vehicles
 WHERE event_id = @event_id AND component_key = @component_key
 ORDER BY created_at, id;
 
@@ -19,12 +19,13 @@ SELECT id FROM event_vehicles
 WHERE event_id = @event_id AND component_key = @component_key AND user_id = @user_id;
 
 -- Kişi başına bir araç; yeniden yazmak öncekinin yerine geçer (kimliği
--- değişmez). Değerler app katmanında doğrulanmış haliyle yazılır.
+-- değişmez). Değerler app katmanında doğrulanmış haliyle yazılır;
+-- vehicle_id garajdan seçilen araçtır (issue #272; yoksa NULL).
 -- name: SetEventVehicle :one
-INSERT INTO event_vehicles (id, event_id, component_key, user_id, make, model, model_year, color, plate, seats, created_at, updated_at)
-VALUES (@id, @event_id, @component_key, @user_id, @make, @model, @model_year, @color, @plate, @seats, @updated_at, @updated_at)
+INSERT INTO event_vehicles (id, event_id, component_key, user_id, vehicle_id, make, model, model_year, color, plate, seats, created_at, updated_at)
+VALUES (@id, @event_id, @component_key, @user_id, sqlc.narg(vehicle_id), @make, @model, @model_year, @color, @plate, @seats, @updated_at, @updated_at)
 ON CONFLICT (event_id, component_key, user_id) DO UPDATE
-SET make = EXCLUDED.make, model = EXCLUDED.model, model_year = EXCLUDED.model_year,
+SET vehicle_id = EXCLUDED.vehicle_id, make = EXCLUDED.make, model = EXCLUDED.model, model_year = EXCLUDED.model_year,
     color = EXCLUDED.color, plate = EXCLUDED.plate, seats = EXCLUDED.seats, updated_at = EXCLUDED.updated_at
 RETURNING id;
 

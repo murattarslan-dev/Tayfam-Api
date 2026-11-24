@@ -665,7 +665,7 @@ func TestClearPlates(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Misafir takma adı temizliği (issue #252)
+// Misafir takma adı (issue #252; ADR-0037 §6)
 
 func (e *env) guestPlayer(t *testing.T, tf id.ID, ended time.Duration) id.ID {
 	t.Helper()
@@ -684,22 +684,26 @@ func (e *env) guestNickname(t *testing.T, g id.ID) bool {
 	return n.Valid
 }
 
-func TestClearGuestNicknames(t *testing.T) {
+// TestGuestNicknameKeptUntilEventDeleted: the nickname stays as long as the
+// event exists, however long ago it ended, and goes with the event
+// (ADR-0037 §6, decision of 2026-11-23). No job clears it.
+func TestGuestNicknameKeptUntilEventDeleted(t *testing.T) {
 	e := setup(t)
 	tf, _ := e.newTayfa(t)
-	old := e.guestPlayer(t, tf, -GuestNicknameRetention)
-	recent := e.guestPlayer(t, tf, -GuestNicknameRetention+time.Minute)
-	run(t, "takma ad", e.at(t, 0).ClearGuestNicknames, 1)
-	if e.guestNickname(t, old) || !e.guestNickname(t, recent) {
-		t.Errorf("takma ad: eski %v, yeni %v", e.guestNickname(t, old), e.guestNickname(t, recent))
+	g := e.guestPlayer(t, tf, -365*24*time.Hour)
+	for _, w := range e.at(t, 0).Workers() {
+		if w.Name == "guest-nicknames" {
+			t.Fatalf("takma ad temizleme işi hâlâ kayıtlı")
+		}
 	}
-	run(t, "tekrar", e.at(t, 0).ClearGuestNicknames, 0)
-	run(t, "dakika sonra", e.at(t, time.Minute).ClearGuestNicknames, 1)
-	// The guest stays: only its nickname goes.
+	if !e.guestNickname(t, g) {
+		t.Fatalf("bir yıl önce biten etkinliğin misafir takma adı silinmiş")
+	}
+	e.exec(t, `DELETE FROM events WHERE id = (SELECT event_id FROM event_guest_players WHERE id = $1)`, g.PG())
 	var n int
-	must(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM event_guest_players WHERE id IN ($1, $2)`, old.PG(), recent.PG()).Scan(&n))
-	if n != 2 {
-		t.Errorf("misafir satırı %d", n)
+	must(t, e.pool.QueryRow(ctx, `SELECT count(*) FROM event_guest_players WHERE id = $1`, g.PG()).Scan(&n))
+	if n != 0 {
+		t.Errorf("etkinlik silinince misafir satırı kaldı: %d", n)
 	}
 }
 
@@ -803,11 +807,12 @@ func TestWorkersStop(t *testing.T) {
 	now := e.base
 	s, err := New(Config{Pool: e.pool, Log: e.log, Now: func() time.Time { return now },
 		Intervals: Intervals{TayfaCleanup: time.Millisecond, InstantArchive: time.Millisecond, TayfaDeletion: time.Millisecond, Purge: time.Millisecond, HikeAlert: time.Millisecond, Plates: time.Millisecond,
-			ReportEscalation: time.Millisecond, Retention: time.Millisecond, FriendSuggestions: time.Millisecond, SafetyAlert: time.Millisecond, GuestNicknames: time.Millisecond, ChampionBadges: time.Millisecond, Stats: time.Millisecond}})
+			ReportEscalation: time.Millisecond, Retention: time.Millisecond, FriendSuggestions: time.Millisecond, SafetyAlert: time.Millisecond, ChampionBadges: time.Millisecond, Stats: time.Millisecond,
+			Library: time.Millisecond, CatalogPublish: time.Millisecond}})
 	must(t, err)
 	wctx, cancel := context.WithCancel(ctx)
 	workers := s.Workers()
-	if len(workers) != 13 {
+	if len(workers) != 14 {
 		t.Fatalf("worker sayısı %d", len(workers))
 	}
 	errs := make(chan error, len(workers))

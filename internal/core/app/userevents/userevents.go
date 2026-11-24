@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/library/lending"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/tayfa"
@@ -258,6 +259,12 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 				return err
 			}
 		}
+		// Ortak kütüphane (ADR-0040 §1): the items are withdrawn, requests
+		// end, a handed-over loan stays open with a warning to the other
+		// side (ClearLibrary* below then drops the person from the rows).
+		if err := lending.Departed(ctx, q, id.ID{}, e.User, now, false); err != nil {
+			return fmt.Errorf("kütüphane: %w", err)
+		}
 		// Direct invitations the user sent and nobody answered go with the
 		// account (issue #71): the inviter, whose role decided the outcome,
 		// is gone.
@@ -282,6 +289,9 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			return fmt.Errorf("etkinlikler: %w", err)
 		}
 		for _, clear := range []func(context.Context, pgtype.UUID) error{
+			// Oylama (issue #254): before the vehicles and photos go, so
+			// that the votes for them go too.
+			q.DeleteUserEventVotes, q.ClearVoteOptionCreator, q.ClearVoteCloser,
 			q.ClearTayfaUserFields, q.ClearInviteCreator, q.ClearMembershipUserFields,
 			q.ClearAnnouncementUserFields, q.ClearEventUserFields, q.ClearEventSeriesCreator,
 			q.ClearRsvpMarker, q.DeleteUserRsvps, q.DeleteUserVehicles, q.DeleteUserSeatRequests, q.ClearChecklistItemUserFields,
@@ -290,6 +300,11 @@ func (s *Service) applyDeleted(ctx context.Context, e Event) error {
 			q.DeleteUserRankingEntries, q.ClearRankingEntryEnteredBy, q.DeleteUserCelebrationWins, q.ClearCelebrationAnnouncer, q.DeleteUserBadges, q.DeleteUserStats,
 			q.DeleteUserEventQuestions, q.DeleteUserEventQuestionVotes, q.ClearEventQuestionUserFields,
 			q.ClearDailyItemUserFields,
+			q.ClearLibraryItemUserFields, q.ClearLibraryLoanBorrower, q.DeleteUserLibraryQueue,
+			q.ClearMaterialUserFields, q.ClearBlockedDomainCreator,
+			// Üye garajı (issue #272; ADR-0040 §4): the vehicles and the
+			// visibility choices go with the account.
+			q.DeleteUserGarageVehicles, q.ClearGarageVehicleDeleter, q.DeleteUserGarageVisibility,
 			q.DeleteUserEventPhotos, q.ClearEventPhotoDeleter, q.DeleteUserActivityRecords,
 			q.ClearQuestionUserFields, q.ClearAnswerUserFields, q.DeleteUserAnswerVotes,
 			q.ClearPollUserFields, q.DeleteUserPollVotes,

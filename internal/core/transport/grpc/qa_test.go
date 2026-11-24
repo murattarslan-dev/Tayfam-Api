@@ -79,7 +79,7 @@ func (f *fakeQA) ListAnswers(_ context.Context, u, t, q id.ID, _ int32, _ string
 	f.hit(u, t, q)
 	return []qa.Answer{f.answer, f.answer}, "", f.err
 }
-func (f *fakeQA) UpdateAnswer(_ context.Context, u, t, a id.ID, body string) (qa.Answer, error) {
+func (f *fakeQA) UpdateAnswer(_ context.Context, u, t, a id.ID, body string, _ []string) (qa.Answer, error) {
 	f.hit(u, t, a)
 	f.body = body
 	return f.answer, f.err
@@ -260,7 +260,7 @@ func TestQAServerConverts(t *testing.T) {
 	}
 	tagID := id.New().String()
 	list, err := srv.ListQuestions(ctx, &corev1.ListQuestionsRequest{TayfaId: tid.String(), Query: "İzmir", TagId: tagID, PageSize: 5, PageToken: "t"})
-	if err != nil || f.list != (qa.ListQuestionsInput{Query: "İzmir", TagID: tagID, PageSize: 5, PageToken: "t"}) || len(list.GetQuestions()) != 1 || list.GetNextPageToken() != "sonraki" {
+	if err != nil || f.list != (qa.ListQuestionsInput{Pool: qa.PoolQA, Query: "İzmir", TagID: tagID, PageSize: 5, PageToken: "t"}) || len(list.GetQuestions()) != 1 || list.GetNextPageToken() != "sonraki" {
 		t.Fatalf("liste: %+v %v", f.list, err)
 	}
 	a, err := srv.SetAnswerVote(ctx, &corev1.SetAnswerVoteRequest{TayfaId: tid.String(), AnswerId: aid.String(), Voted: true})
@@ -269,7 +269,7 @@ func TestQAServerConverts(t *testing.T) {
 		t.Fatalf("oy: %v %v", a, err)
 	}
 	if _, err := srv.CreateAnswer(ctx, &corev1.CreateAnswerRequest{TayfaId: tid.String(), QuestionId: qid.String(), Body: "B", ClientRequestId: crid}); err != nil ||
-		f.createA != (qa.CreateAnswerInput{Body: "B", ClientRequestID: crid}) || f.x != qid {
+		f.createA.Body != "B" || f.createA.ClientRequestID != crid || len(f.createA.Photos) != 0 || f.x != qid {
 		t.Fatalf("cevap: %+v %v", f.createA, err)
 	}
 	tags, err := srv.ListTags(ctx, &corev1.ListTagsRequest{TayfaId: tid.String()})

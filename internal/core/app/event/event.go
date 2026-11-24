@@ -572,7 +572,7 @@ func createIn(ctx context.Context, q *store.Queries, c caller, b *batch, p Plan)
 	if err != nil {
 		return id.ID{}, id.ID{}, err
 	}
-	values, err := cleanFields(et, p.in.Fields)
+	values, err := cleanFields(ctx, q, et, p.in.Fields, nil)
 	if err != nil {
 		return id.ID{}, id.ID{}, err
 	}
@@ -968,16 +968,23 @@ func typeFlags(ctx context.Context, q *store.Queries, ev store.GetEventRow) (def
 }
 
 // cleanFields checks a complete set of field values against a type
-// version's definition. The error names the field ("fields.platform"),
-// never its value.
-func cleanFields(et catalog.EventType, in map[string]json.RawMessage) (map[string]json.RawMessage, error) {
+// version's definition, the study tag fields against the study tag list
+// (ADR-0043 §2). previous are the event's values before an update, nil
+// for a new event: a retired study tag they hold may stay. The error names
+// the field ("fields.platform"), never its value.
+func cleanFields(ctx context.Context, q *store.Queries, et catalog.EventType, in, previous map[string]json.RawMessage) (map[string]json.RawMessage, error) {
 	values, err := et.Parsed.CleanValues(in, true)
+	if err == nil {
+		err = catalog.CheckStudyValues(ctx, q, et.Parsed, values, previous)
+	}
 	var ve *definition.ValueError
 	switch {
 	case errors.As(err, &ve) && ve.Field != "":
 		return nil, apperr.Validation("fields." + ve.Field)
-	case err != nil:
+	case errors.As(err, &ve):
 		return nil, apperr.Validation("fields")
+	case err != nil:
+		return nil, err
 	}
 	return values, nil
 }
@@ -993,7 +1000,14 @@ func cleanEventFields(ctx context.Context, q *store.Queries, ev store.GetEventRo
 		// The foreign key guarantees the version exists.
 		return nil, fmt.Errorf("etkinliğin tür sürümü: %w", err)
 	}
-	return cleanFields(et, in)
+	// The values the event holds, for the study tags it may keep.
+	var previous map[string]json.RawMessage
+	if slices.ContainsFunc(et.Parsed.Fields, func(f definition.Field) bool { return f.Kind == definition.KindStudyTags }) {
+		if previous, err = loadFields(ctx, q, id.ID(ev.ID.Bytes)); err != nil {
+			return nil, err
+		}
+	}
+	return cleanFields(ctx, q, et, in, previous)
 }
 
 // setFields writes an event's field values; replace first removes the

@@ -166,6 +166,18 @@ enum ReportTargetType {
   // TayfaDailyService). Its subject is the member who added it. Reporting
   // needs the daily module on.
   REPORT_TARGET_TYPE_DAILY_ITEM = 13;
+  // target_id is an item of the tayfa's library (issue #270;
+  // TayfaLibraryService). Its subject is the item's owner. Reporting needs
+  // the library module on and the item not withdrawn.
+  REPORT_TARGET_TYPE_LIBRARY_ITEM = 14;
+  // target_id is a material of the tayfa's material library (issue #261;
+  // TayfaMaterialService). Its subject is the author. Reporting needs the
+  // materials module on and the material visible.
+  REPORT_TARGET_TYPE_MATERIAL = 15;
+  // target_id is a vehicle of a member's garage that shows in the tayfa
+  // (issue #272; MemberGarageService). Its subject is the owner. Reporting
+  // needs the garage module on and the vehicle showing in the tayfa.
+  REPORT_TARGET_TYPE_GARAGE_VEHICLE = 16;
 }
 
 // ReportReason follows the community rules (Notion "Topluluk Kuralları").
@@ -194,6 +206,9 @@ enum ReportReason {
   // only.
   REPORT_REASON_STAFF_CONDUCT = 15;
   REPORT_REASON_OTHER = 16;
+  // A paid private lesson offer or advertisement (issue #271; ADR-0040 §2,
+  // Topluluk Kuralları).
+  REPORT_REASON_PAID_TUTORING = 17;
 }
 
 enum ReportStatus {

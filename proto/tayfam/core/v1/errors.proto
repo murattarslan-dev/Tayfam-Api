@@ -461,6 +461,23 @@ enum ErrorReason {
   // `source` parameter); the measure's values are entered instead.
   ERROR_REASON_RANKING_FROM_MEASURE = 2532;
 
+  // Vote component (VoteComponentService, component_vote.proto; issue
+  // #254: 2540–2549).
+
+  // FAILED_PRECONDITION. The organizer closed the vote: no votes and no
+  // option changes.
+  ERROR_REASON_VOTE_CLOSED = 2540;
+  // FAILED_PRECONDITION. The option is the caller: themselves, their own
+  // vehicle or their own photo.
+  ERROR_REASON_VOTE_OWN_OPTION = 2541;
+  // FAILED_PRECONDITION. The vote's options come from its source
+  // (participants, vehicles, album); only a free vote takes options
+  // written by the organizer.
+  ERROR_REASON_VOTE_OPTIONS_FIXED = 2542;
+  // ALREADY_EXISTS. A free option with the same label (Turkish lower case)
+  // is already in the vote.
+  ERROR_REASON_VOTE_OPTION_EXISTS = 2543;
+
   // Celebration component (CelebrationComponentService,
   // component_celebration.proto; issue #255: 2550–2559).
 
@@ -532,4 +549,49 @@ enum ErrorReason {
   // FAILED_PRECONDITION. The pool already has 1000 items; nothing is
   // added or restored.
   ERROR_REASON_DAILY_ITEM_LIMIT = 2691;
+
+  // Ortak kütüphane (ADR-0040 §1; issue #270: 2700–2709).
+
+  // NOT_FOUND. A library item that is not in the tayfa's library (never
+  // there or withdrawn), or, for an owner's step, not the caller's.
+  ERROR_REASON_LIBRARY_ITEM_NOT_FOUND = 2700;
+  // NOT_FOUND. A loan that is not the caller's to act on: the owner's steps
+  // need the caller to own the item.
+  ERROR_REASON_LIBRARY_LOAN_NOT_FOUND = 2701;
+  // FAILED_PRECONDITION. The caller asked for their own item.
+  ERROR_REASON_LIBRARY_OWN_ITEM = 2702;
+  // FAILED_PRECONDITION. The loan is not in a state the step follows
+  // (approve: requested; hand over: approved; take back: handed over;
+  // decline: requested or approved).
+  ERROR_REASON_LIBRARY_LOAN_STATE = 2703;
+  // FAILED_PRECONDITION. The item is handed over; the owner takes it back
+  // before withdrawing it.
+  ERROR_REASON_LIBRARY_ITEM_ON_LOAN = 2704;
+  // FAILED_PRECONDITION. The caller already has 100 items in the tayfa's
+  // library.
+  ERROR_REASON_LIBRARY_ITEM_LIMIT = 2705;
+  // FAILED_PRECONDITION. 20 members already wait for the item.
+  ERROR_REASON_LIBRARY_QUEUE_FULL = 2706;
+
+  // Materyal kütüphanesi (ADR-0040 §3; issue #261: 2720–2729).
+
+  // NOT_FOUND. A material that is not visible in the tayfa's material
+  // library (never there, deleted, or linking to a blocked domain), or,
+  // for an author's step, not the caller's.
+  ERROR_REASON_MATERIAL_NOT_FOUND = 2720;
+  // INVALID_ARGUMENT. The link's domain, or a domain above it, is on the
+  // platform's blocked domain list.
+  ERROR_REASON_BLOCKED_LINK = 2721;
+  // FAILED_PRECONDITION. The caller already has 200 materials in the
+  // tayfa's material library.
+  ERROR_REASON_MATERIAL_LIMIT = 2722;
+
+  // Üye garajı (ADR-0040 §4; issue #272: 2730–2739).
+
+  // NOT_FOUND. A vehicle that is not in the caller's garage (for the
+  // owner's steps and the vehicles component), or that does not show in
+  // the tayfa (a moderator's removal).
+  ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND = 2730;
+  // FAILED_PRECONDITION. The caller already has 10 vehicles in the garage.
+  ERROR_REASON_GARAGE_LIMIT = 2731;
 }

@@ -85,6 +85,30 @@ const (
 	// push_now_started keys only; muted with the tayfa's level none or its
 	// ScopeTayfaNow preference.
 	TypeNowStarted = "now_started"
+	// TypeLibraryDue: a library loan's return date passed (issue #270;
+	// ADR-0040 §1): one reminder to the borrower. TypeLibraryLoanOrphaned:
+	// one side of a handed-over loan left the tayfa, a warning to both
+	// sides (the one who left is no longer a member). Both name the loan's
+	// tayfa as target, have no actor and are in-app only (the enqueue_push
+	// trigger opens no push job for them).
+	TypeLibraryDue          = "library_due"
+	TypeLibraryLoanOrphaned = "library_loan_orphaned"
+	// The library's loan steps (issue #321; ADR-0040 §1, revised
+	// 2026-11-23): about one item (TargetLibraryItem) of the tayfa, with
+	// the member who took the step as actor, to the other side. Pushed
+	// with the push_<type> keys only; personal (level mentions pushes
+	// them). To the owner: TypeLibraryLoanRequested, TypeLibraryQueueJoined;
+	// to the borrower: TypeLibraryLoanApproved, TypeLibraryLoanDeclined,
+	// TypeLibraryLoanHandedOver.
+	TypeLibraryLoanRequested  = "library_loan_requested"
+	TypeLibraryQueueJoined    = "library_queue_joined"
+	TypeLibraryLoanApproved   = "library_loan_approved"
+	TypeLibraryLoanDeclined   = "library_loan_declined"
+	TypeLibraryLoanHandedOver = "library_loan_handed_over"
+	// TypeLibraryQueueTurn (issue #332): the recipient's turn in an item's
+	// queue came and their loan request opened. About the item
+	// (TargetLibraryItem), without an actor; pushed, personal.
+	TypeLibraryQueueTurn = "library_queue_turn"
 )
 
 // Target types: what the client opens (and reads from core).
@@ -101,6 +125,9 @@ const (
 	// TargetDataExport: a data export request of the recipient
 	// (identity's DataExportService).
 	TargetDataExport = "data_export"
+	// TargetLibraryItem: a library item of the notification's tayfa (core's
+	// TayfaLibraryService.GetLibraryItem).
+	TargetLibraryItem = "library_item"
 )
 
 // Reasons of TypeTayfaWarned.
@@ -126,7 +153,7 @@ func targetOf(typ string) (string, bool) {
 	case TypeReportResolved:
 		return TargetReport, true
 	case TypeJoinApproved, TypeTayfaDeletionRequested, TypeTayfaWarned, TypeTayfaArchived, TypeTayfaInvitation,
-		TypeTayfaSuspended, TypeTayfaUnsuspended:
+		TypeTayfaSuspended, TypeTayfaUnsuspended, TypeLibraryDue, TypeLibraryLoanOrphaned:
 		return TargetTayfa, true
 	case TypeFriendRequest, TypeFriendAccepted, TypeFriendSuggestion, TypeSafetyAlert, TypeBadgeEarned:
 		return TargetUser, true
@@ -134,6 +161,9 @@ func targetOf(typ string) (string, bool) {
 		return TargetDMConversation, true
 	case TypeDataExportReady:
 		return TargetDataExport, true
+	case TypeLibraryLoanRequested, TypeLibraryQueueJoined, TypeLibraryLoanApproved, TypeLibraryLoanDeclined,
+		TypeLibraryLoanHandedOver, TypeLibraryQueueTurn:
+		return TargetLibraryItem, true
 	}
 	return "", false
 }
@@ -209,7 +239,8 @@ func (r Request) Validate() error {
 	// The reporter is never told who handled their report; a direct
 	// message notice does not say who wrote.
 	if (r.Type == TypeReportResolved || r.Type == TypeDataExportReady || r.Type == TypeFriendSuggestion ||
-		r.Type == TypeSafetyAlert || r.Type == TypeBadgeEarned || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
+		r.Type == TypeSafetyAlert || r.Type == TypeBadgeEarned || r.Type == TypeLibraryDue ||
+		r.Type == TypeLibraryLoanOrphaned || r.Type == TypeLibraryQueueTurn || IsDirect(r.Type)) && r.Actor != (id.ID{}) {
 		return apperr.Validation("actor_id")
 	}
 	if IsDirect(r.Type) != (r.Unread > 0) || r.Unread > MaxDirectUnread {

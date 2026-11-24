@@ -46,6 +46,18 @@ func (q *Queries) ClearAuditActor(ctx context.Context, userID pgtype.UUID) error
 	return err
 }
 
+const clearBlockedDomainCreator = `-- name: ClearBlockedDomainCreator :exec
+UPDATE blocked_domains SET created_by = NULL WHERE created_by = $1
+`
+
+// Engelli alan adını panelden ekleyen platform yöneticisi boşalır; alan adı
+// listede kalır (issue #334; ADR-0040 §3). Başlangıç listesinden olup
+// olmadığı ayrı kolonda (initial, 00069).
+func (q *Queries) ClearBlockedDomainCreator(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearBlockedDomainCreator, userID)
+	return err
+}
+
 const clearCelebrationAnnouncer = `-- name: ClearCelebrationAnnouncer :exec
 UPDATE event_celebrations SET announced_by = NULL WHERE announced_by = $1
 `
@@ -136,6 +148,15 @@ func (q *Queries) ClearEventUserFields(ctx context.Context, userID pgtype.UUID) 
 	return err
 }
 
+const clearGarageVehicleDeleter = `-- name: ClearGarageVehicleDeleter :exec
+UPDATE garage_vehicles SET deleted_by = NULL WHERE deleted_by = $1
+`
+
+func (q *Queries) ClearGarageVehicleDeleter(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearGarageVehicleDeleter, userID)
+	return err
+}
+
 const clearGuestPlayerCreator = `-- name: ClearGuestPlayerCreator :exec
 UPDATE event_guest_players SET nickname = NULL, created_by = NULL WHERE created_by = $1
 `
@@ -157,12 +178,48 @@ func (q *Queries) ClearInviteCreator(ctx context.Context, userID pgtype.UUID) er
 	return err
 }
 
+const clearLibraryItemUserFields = `-- name: ClearLibraryItemUserFields :exec
+UPDATE library_items
+SET owner_id = NULLIF(owner_id, $1), withdrawn_by = NULLIF(withdrawn_by, $1)
+WHERE owner_id = $1 OR withdrawn_by = $1
+`
+
+// Ortak kütüphane (issue #270; ADR-0040 §1): kalemler önce geri çekilir
+// (lending.Departed), sonra sahibi ve geri çekeni boşalır; ödünç
+// kayıtlarında borç alan boşalır; sıradaki yerler silinir.
+func (q *Queries) ClearLibraryItemUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearLibraryItemUserFields, userID)
+	return err
+}
+
+const clearLibraryLoanBorrower = `-- name: ClearLibraryLoanBorrower :exec
+UPDATE library_loans SET borrower_id = NULL WHERE borrower_id = $1
+`
+
+func (q *Queries) ClearLibraryLoanBorrower(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearLibraryLoanBorrower, userID)
+	return err
+}
+
 const clearLogEntryDeleter = `-- name: ClearLogEntryDeleter :exec
 UPDATE event_log_entries SET deleted_by = NULL WHERE deleted_by = $1
 `
 
 func (q *Queries) ClearLogEntryDeleter(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, clearLogEntryDeleter, userID)
+	return err
+}
+
+const clearMaterialUserFields = `-- name: ClearMaterialUserFields :exec
+UPDATE materials
+SET author_id = NULLIF(author_id, $1), deleted_by = NULLIF(deleted_by, $1)
+WHERE $1 IN (author_id, deleted_by)
+`
+
+// Materyal kütüphanesi (issue #261; ADR-0040 §3): materyal kalır, yazar ve
+// silen boşalır; fotoğraf dosyaları media.UserDeleted ile silinir.
+func (q *Queries) ClearMaterialUserFields(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearMaterialUserFields, userID)
 	return err
 }
 
@@ -283,6 +340,24 @@ func (q *Queries) ClearVocabularyCreator(ctx context.Context, userID pgtype.UUID
 	return err
 }
 
+const clearVoteCloser = `-- name: ClearVoteCloser :exec
+UPDATE event_vote_closures SET closed_by = NULL WHERE closed_by = $1
+`
+
+func (q *Queries) ClearVoteCloser(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearVoteCloser, userID)
+	return err
+}
+
+const clearVoteOptionCreator = `-- name: ClearVoteOptionCreator :exec
+UPDATE event_vote_options SET created_by = NULL WHERE created_by = $1
+`
+
+func (q *Queries) ClearVoteOptionCreator(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearVoteOptionCreator, userID)
+	return err
+}
+
 const createSystemAuditLog = `-- name: CreateSystemAuditLog :exec
 INSERT INTO audit_logs (id, tayfa_id, actor_id, action, target_type, target_id, metadata)
 VALUES ($1, $2, NULL, $3, $4, $5, $6)
@@ -392,6 +467,53 @@ DELETE FROM event_questions WHERE author_id = $1
 // #256; ADR-0025 §11).
 func (q *Queries) DeleteUserEventQuestions(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteUserEventQuestions, userID)
+	return err
+}
+
+const deleteUserEventVotes = `-- name: DeleteUserEventVotes :exec
+DELETE FROM event_votes AS ev
+WHERE ev.user_id = $1::uuid OR ev.candidate_user_id = $1::uuid
+  OR ev.event_vehicle_id IN (SELECT v.id FROM event_vehicles AS v WHERE v.user_id = $1::uuid)
+  OR ev.photo_id IN (SELECT p.id FROM event_photos AS p WHERE p.uploader_id = $1::uuid)
+`
+
+// Oylama (issue #254): kişinin verdiği oylar ve kişiye, aracına ya da
+// fotoğrafına verilen oylar silinir (araçlar ve fotoğraflar silinmeden önce
+// çalışır). Yazdığı seçenekler ve kapattığı oylamalar etkinliğindir; kalır,
+// yazan ve kapatan boşalır.
+func (q *Queries) DeleteUserEventVotes(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserEventVotes, userID)
+	return err
+}
+
+const deleteUserGarageVehicles = `-- name: DeleteUserGarageVehicles :exec
+DELETE FROM garage_vehicles WHERE owner_id = $1
+`
+
+// Üye garajı (issue #272; ADR-0040 §4, KVKK): kişinin araçları ve
+// görünürlük ayarları silinir (fotoğraflar silme kuyruğuna girer;
+// etkinlik kayıtlarındaki garaj bağı boşalır); başkasının aracını kaldıran
+// olarak kişi boşalır.
+func (q *Queries) DeleteUserGarageVehicles(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserGarageVehicles, userID)
+	return err
+}
+
+const deleteUserGarageVisibility = `-- name: DeleteUserGarageVisibility :exec
+DELETE FROM garage_tayfa_visibility WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserGarageVisibility(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserGarageVisibility, userID)
+	return err
+}
+
+const deleteUserLibraryQueue = `-- name: DeleteUserLibraryQueue :exec
+DELETE FROM library_queue WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserLibraryQueue(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserLibraryQueue, userID)
 	return err
 }
 

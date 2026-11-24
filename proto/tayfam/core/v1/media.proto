@@ -216,6 +216,24 @@ enum UploadPurpose {
   UPLOAD_PURPOSE_DM_ATTACHMENT = 6;
   // A photo the reporter of a direct message shares from their device.
   UPLOAD_PURPOSE_REPORT_EVIDENCE = 7;
+  // A library item's photo (issue #270, ADR-0040 §1; at most one per
+  // item). Attached with TayfaLibraryService.CreateLibraryItem or
+  // UpdateLibraryItem.
+  UPLOAD_PURPOSE_LIBRARY_ITEM = 8;
+  // A photo of a question pool question or answer (issue #271, ADR-0040
+  // §2; at most two each): the author's own notes or the question they
+  // are stuck on. Attached with QAService.CreateQuestion, UpdateQuestion,
+  // CreateAnswer or UpdateAnswer.
+  UPLOAD_PURPOSE_QUESTION_POOL = 9;
+  // A photo of the member's own notes in the tayfa's material library
+  // (issue #261, ADR-0040 §3; at most three per material). Attached with
+  // TayfaMaterialService.CreateMaterial or UpdateMaterial.
+  UPLOAD_PURPOSE_MATERIAL_NOTE = 10;
+  // A photo of a vehicle in the member's garage (issue #272, ADR-0040 §4;
+  // at most three per vehicle). Not a tayfa's: tayfa_id is left empty.
+  // Attached with MemberGarageService.CreateGarageVehicle or
+  // UpdateGarageVehicle.
+  UPLOAD_PURPOSE_GARAGE_VEHICLE = 11;
 }
 
 // UploadStatus is where an upload stands (uploads.status).

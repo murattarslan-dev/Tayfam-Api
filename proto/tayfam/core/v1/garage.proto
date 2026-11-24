@@ -1,0 +1,189 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// MemberGarageService is the member garage — üye garajı (issue #272;
+// ADR-0040 §4). A garage belongs to the person, not to a tayfa: one garage
+// per person, at most 10 vehicles. A vehicle has a make, a model, a model
+// year, a colour, a short note and at most 3 photos. There is no plate
+// field: a plate is never kept in the garage (it ties the person to the
+// vehicle and to places). There is no sale or listing field.
+//
+// The garage shows in a tayfa (the `garage` module and its home widget)
+// when the owner chose so for that tayfa; without a choice it shows in
+// tayfas whose interests include `automotive`. Only the tayfa's active
+// members see it, and only the vehicles of owners who are active members.
+// A vehicle's photos are seen by the same people (MediaService).
+//
+// The vehicles component (VehiclesComponentService.SetVehicle,
+// garage_vehicle_id) copies a garage vehicle into an event; the plate is
+// written on the event's record only.
+//
+// Only gateway calls it with the user's access token; the acting user is
+// always the token's. The tayfa methods: anyone but an ACTIVE member of the
+// tayfa gets ERROR_REASON_TAYFA_NOT_FOUND; with the garage module off they
+// get ERROR_REASON_MODULE_DISABLED; writes on a read-only tayfa get
+// ERROR_REASON_TAYFA_READ_ONLY. Texts are content: they are never logged
+// or written to the audit record or an outbox event.
+service MemberGarageService {
+  // ListMyGarageVehicles returns the caller's own vehicles in the order
+  // they were added.
+  rpc ListMyGarageVehicles(ListMyGarageVehiclesRequest) returns (ListMyGarageVehiclesResponse);
+
+  // CreateGarageVehicle adds a vehicle to the caller's garage. A repeated
+  // client_request_id returns the vehicle it created.
+  //
+  // Errors: ERROR_REASON_VALIDATION (make, model, model_year, color, note,
+  // photo_upload_ids, client_request_id), ERROR_REASON_UPLOAD_NOT_FOUND,
+  // ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE,
+  // ERROR_REASON_GARAGE_LIMIT.
+  rpc CreateGarageVehicle(CreateGarageVehicleRequest) returns (CreateGarageVehicleResponse);
+
+  // UpdateGarageVehicle replaces a vehicle of the caller's garage as a
+  // whole. Photos left out are deleted. Events the vehicle was brought to
+  // keep the copy they took.
+  //
+  // Errors: ERROR_REASON_VALIDATION (vehicle_id and the fields of
+  // CreateGarageVehicle), ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND, the upload
+  // errors of CreateGarageVehicle.
+  rpc UpdateGarageVehicle(UpdateGarageVehicleRequest) returns (UpdateGarageVehicleResponse);
+
+  // DeleteGarageVehicle deletes a vehicle of the caller's garage; its
+  // photos are deleted at once. There is no undo.
+  //
+  // Errors: ERROR_REASON_VALIDATION (vehicle_id),
+  // ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND.
+  rpc DeleteGarageVehicle(DeleteGarageVehicleRequest) returns (DeleteGarageVehicleResponse);
+
+  // ListTayfaGarage returns the vehicles that show in the tayfa, the
+  // newest first; owner_id narrows to one member.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, owner_id, page_size,
+  // page_token).
+  rpc ListTayfaGarage(ListTayfaGarageRequest) returns (ListTayfaGarageResponse);
+
+  // SetGarageVisibility shows or hides the caller's garage in the tayfa.
+  // Showing needs a member who is not muted; hiding is open to every
+  // active member.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id), ERROR_REASON_MUTED,
+  // ERROR_REASON_PERMISSION_DENIED.
+  rpc SetGarageVisibility(SetGarageVisibilityRequest) returns (SetGarageVisibilityResponse);
+
+  // RemoveTayfaGarageVehicle removes a vehicle that shows in the tayfa
+  // (content moderation; moderators and admins): it is hidden everywhere
+  // and gone for good after 30 days. There is no undo.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, vehicle_id),
+  // ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED.
+  rpc RemoveTayfaGarageVehicle(RemoveTayfaGarageVehicleRequest) returns (RemoveTayfaGarageVehicleResponse);
+}
+
+// GarageVehicle is a vehicle of a member's garage.
+message GarageVehicle {
+  string id = 1;
+  // The owner.
+  string owner_id = 2;
+  // 1–40 characters, one line.
+  string make = 3;
+  // Up to 40 characters; may be empty.
+  string model = 4;
+  // 0 when not given.
+  int32 model_year = 5;
+  // Up to 30 characters; may be empty.
+  string color = 6;
+  // Up to 200 characters, one line; may be empty.
+  string note = 7;
+  // The owner's photo uploads (purpose garage_vehicle), in order.
+  repeated string photo_upload_ids = 8;
+  google.protobuf.Timestamp create_time = 9;
+  google.protobuf.Timestamp update_time = 10;
+  // Whether the caller may edit and delete it now (the owner).
+  bool caller_can_edit = 11;
+  // Whether the caller may remove it from the tayfa's garage now (a
+  // moderator; ListTayfaGarage only).
+  bool caller_can_remove = 12;
+}
+
+// GarageVehicleInput is a vehicle as its owner writes it.
+message GarageVehicleInput {
+  // 1–40 characters.
+  string make = 1;
+  string model = 2;
+  // 0, or 1900 to next year.
+  int32 model_year = 3;
+  string color = 4;
+  string note = 5;
+  // 0–3 of the caller's own READY garage_vehicle uploads, in order.
+  repeated string photo_upload_ids = 6;
+}
+
+message ListMyGarageVehiclesRequest {}
+
+message ListMyGarageVehiclesResponse {
+  repeated GarageVehicle vehicles = 1;
+  // Whether the caller may add another vehicle (fewer than 10).
+  bool caller_can_add = 2;
+}
+
+message CreateGarageVehicleRequest {
+  GarageVehicleInput vehicle = 1;
+  // UUID made by the client; a retry returns the same vehicle.
+  string client_request_id = 2;
+}
+
+message CreateGarageVehicleResponse {
+  GarageVehicle vehicle = 1;
+}
+
+message UpdateGarageVehicleRequest {
+  string vehicle_id = 1;
+  GarageVehicleInput vehicle = 2;
+}
+
+message UpdateGarageVehicleResponse {
+  GarageVehicle vehicle = 1;
+}
+
+message DeleteGarageVehicleRequest {
+  string vehicle_id = 1;
+}
+
+message DeleteGarageVehicleResponse {}
+
+message ListTayfaGarageRequest {
+  string tayfa_id = 1;
+  // Empty: every member.
+  string owner_id = 2;
+  // 1–50; 0: 20.
+  int32 page_size = 3;
+  // From next_page_token; opaque.
+  string page_token = 4;
+}
+
+message ListTayfaGarageResponse {
+  repeated GarageVehicle vehicles = 1;
+  // Empty: no more.
+  string next_page_token = 2;
+  // Whether the caller's own garage shows in this tayfa.
+  bool caller_visible = 3;
+}
+
+message SetGarageVisibilityRequest {
+  string tayfa_id = 1;
+  bool visible = 2;
+}
+
+message SetGarageVisibilityResponse {
+  bool visible = 1;
+}
+
+message RemoveTayfaGarageVehicleRequest {
+  string tayfa_id = 1;
+  string vehicle_id = 2;
+}
+
+message RemoveTayfaGarageVehicleResponse {}

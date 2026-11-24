@@ -1120,8 +1120,14 @@ paths:
 
   # --- Soru-cevap (core QAService) ---
   #
-  # Ortak kurallar: tayfanın soru-cevap modülü (`qa`) kapalıysa okumalar
-  # dahil her uç `module-disabled` alır. Bu tayfada olmayan ya da silinmiş
+  # Aynı uçlar iki havuza hizmet eder (#271, ADR-0040 §2): Soru-Cevap
+  # (`pool: qa`) ve Eğitim soru havuzu (`pool: question_pool`; başlık ve
+  # etiket yok, ders/konu anahtarı ve en fazla 2 fotoğraf; "çözüldü"
+  # işareti yok, cevaplar faydalı oyuyla sıralanır).
+  #
+  # Ortak kurallar: sorunun havuzunun modülü (`qa` ya da `question_pool`)
+  # kapalıysa okumalar dahil her uç `module-disabled` alır; etiket uçları
+  # `qa`'nındır. Bu tayfada olmayan ya da silinmiş
   # soru `question-not-found`, cevap `answer-not-found`, etiket
   # `tag-not-found` alır; silinen sorunun cevapları da bulunmaz. Soru ve
   # cevabı her etkin üye yazar; susturulmuş üye yazamaz (`muted`), yalnızca
@@ -1138,12 +1144,21 @@ paths:
       operationId: listQuestions
       summary: Soruları listeler ve arar
       description: |
-        `q` yoksa yeniden eskiye; `q` varsa başlıkta ve gövdede Türkçe tam
-        metin arama yapar (İ/ı doğru: "IŞIK" "ışık"ı, "izmir" "İzmir"i
-        bulur) ve en ilgiliden başlar. `tag_id` ikisiyle de süzer. Arama
-        metni gateway'de ve core'da log'a yazılmaz; `next_page_token`
-        metni taşımaz ve yalnızca aynı `q` ve `tag_id` ile geçerlidir.
+        Bir havuzun (`pool`) soruları: `qa` Soru-Cevap'tır (varsayılan),
+        `question_pool` Eğitim soru havuzudur (#271, ADR-0040 §2; modülü
+        `question_pool`, kapalıysa `module-disabled`). `q` yoksa yeniden
+        eskiye; `q` varsa başlıkta ve gövdede Türkçe tam metin arama yapar
+        (İ/ı doğru: "IŞIK" "ışık"ı, "izmir" "İzmir"i bulur) ve en ilgiliden
+        başlar. `tag_id` (yalnızca `qa`) ve `subject_key` / `topic_key`
+        (yalnızca `question_pool`; emekliye ayrılmış etiket de olur) ikisiyle
+        de süzer. Arama metni gateway'de ve core'da log'a yazılmaz;
+        `next_page_token` metni taşımaz ve yalnızca aynı havuz ve süzgeçlerle
+        geçerlidir.
       parameters:
+        - name: pool
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/QuestionPool" }
         - name: q
           in: query
           required: false
@@ -1153,6 +1168,16 @@ paths:
           in: query
           required: false
           schema: { type: string, format: uuid }
+        - name: subject_key
+          in: query
+          required: false
+          description: Ders anahtarı (`GET /v1/catalog` → `study_tags`).
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        - name: topic_key
+          in: query
+          required: false
+          description: Konu anahtarı; `subject_key` ile birlikte verilir.
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         - $ref: "#/components/parameters/PageSize"
         - $ref: "#/components/parameters/PageToken"
       responses:
@@ -1175,6 +1200,15 @@ paths:
         Tayfada en fazla 200 etiket olabilir (`tag-limit`). Aynı
         `client_request_id` ile tekrar gönderilen istek yeni soru açmaz,
         ilk soruyu döndürür.
+
+        Soru havuzunda (`pool: question_pool`, #271) başlık ve etiket
+        yoktur; ders (`subject_key`) zorunlu, konu (`topic_key`) isteğe
+        bağlıdır ve seçilebilir (etkin) olmalıdır (yoksa `invalid-request`,
+        alan adıyla). Metin ve/veya en fazla 2 fotoğraf (`question_pool`
+        yüklemesi; çağıranın, bu tayfanın, hazır ve başka içeriğe bağlı
+        olmayan) gerekir. Dosya/PDF ve bağlantı alanı yoktur; "çözüldü"
+        işareti yoktur. Yükleme hataları: `upload-not-found`,
+        `upload-not-ready`, `upload-in-use`.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
       requestBody:
@@ -2440,7 +2474,9 @@ paths:
         bileşenin `plate` parametresi açıksa, sıfırdan büyük `seats`
         yalnızca `seats` parametresi açıksa kabul edilir (`plate_enabled`,
         `seats_enabled`). Koltuk sayısı onaylanmış yolcu sayısının altına
-        inemez (`vehicle-seats-taken`). Araç yazan kişinin başka bir araca
+        inemez (`vehicle-seats-taken`). `garage_vehicle_id` ile çağıranın
+        garajındaki araç seçilir (#272): marka, model, yıl ve renk
+        kopyalanır; plaka yalnızca bu kayda yazılır. Araç yazan kişinin başka bir araca
         yazdığı koltuk isteği silinir. Bileşen uçlarının ortak kuralları
         geçerlidir.
       parameters:
@@ -3520,7 +3556,12 @@ paths:
   # kişinin yeri ve skorları "Silinmiş kullanıcı" olarak kalır. Masalar
   # katılımdır, seri örneğine kopyalanmaz. Yazan her uç bileşeni güncel
   # haliyle döner. `guests` parametresi açık bileşende kişi masasına
-  # misafir oyuncu da oturur (#252, `…/guests`).
+  # misafir oyuncu da oturur (#252, `…/guests`). Eşli masada (`side:
+  # pair`, ADR-0044; Batak, 101 Okey, Okey, Pişti'nin eşli ön ayarları)
+  # tam 4 yer vardır; koltuk 1 ve 3 eş 1, koltuk 2 ve 4 eş 2'dir
+  # (`EventScorePlayer.pair`). Puan eş başına girilir ve eşin iki yerine de
+  # yazılır; toplam, sıra ve kazanan eş başınadır (kazanan eşin iki yeri
+  # `winner_ids`'tedir).
 
   /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard:
     parameters:
@@ -3563,7 +3604,8 @@ paths:
         `first_to` ya da `first` kuralında hedef puan yoksa, etiket 1–30
         karakter değilse, yer tam olarak bir kişi ya da takım değilse, bir
         kişi ya da takım iki kez geçerse, ön ayarın oyuncu sayısı dışındaysa,
-        oyuncu masasına takım ya da takım masasına kişi verilirse, takım
+        oyuncu ya da eşli masaya takım ya da takım masasına kişi verilirse,
+        eşli masada yer sayısı 4 değilse, takım
         masasında `teams_key` etkinliğin türündeki bir `teams` bileşeni
         değilse `invalid-request`. Katılımcı olmayan kişi ya da takım
         bileşeninde olmayan takım `score-player-not-participant`; masalar
@@ -3689,7 +3731,10 @@ paths:
         en fazla bir kez; `points` modunda `points` (−1000000…1000000),
         `wdl` modunda `outcome` verilir ve el en az iki yerde ya birinin
         galibiyeti ile diğerlerinin mağlubiyeti ya da herkesin
-        beraberliğidir (aksi `invalid-request`). Biten masada
+        beraberliğidir (aksi `invalid-request`). Eşli masada skor eş
+        başınadır: eşin herhangi bir yeriyle verilir, iki yeri birlikte
+        verilirse değerleri aynı olmalıdır; kurallar eş düzeyinde geçerlidir
+        (`wdl` modunda iki eş) ve skor eşin iki yerine de yazılır. Biten masada
         `score-table-finished`; 200 elden sonra `event-limit`; etkinlik
         başlamadıysa `score-not-started`. Bileşen uçlarının ortak kuralları
         geçerlidir.
@@ -4204,12 +4249,195 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: oylama (`vote`; core VoteComponentService, #254, ADR-0025 §4, §5, ADR-0037 §3) ---
+  # Etkinliğe bağlı oylama; kişi başına bir oy. Seçenekler tanımdaki
+  # `source`'a göre: `free` organizatörün yazdığı seçenekler (en fazla 20),
+  # `participants` etkinliğin katılımcıları (`going` ya da katılımı
+  # doğrulanmış etkin üyeler; seçeneğin `id`'si kişinin kimliği), `vehicles`
+  # türün araçlar bileşenine yazılmış araçlar (plaka yok; araçlar bileşeni
+  # kapalıysa seçenek yok), `album` etkinlik albümünün fotoğrafları
+  # (`route_stops` 2026-11-23'te kaldırıldı). Oy gizlidir: kimin neye oy
+  # verdiği hiçbir yanıtta (organizatöre, moderatöre ve yöneticiye de) yer
+  # almaz; yalnızca kendi oyunuz (`caller_option_id`) döner. Seçenek başına
+  # oy sayısı ve kazananlar oylama kapatılınca ya da bileşen donunca
+  # (bitişten 7 gün sonra) görünür (`results_visible`); o zamana kadar
+  # yalnızca oy veren sayısı görünür. Kaynaktan çıkan seçeneğe (gelmekten
+  # vazgeçen katılımcı) verilen oy sayılmaz; silinen araç ya da fotoğraf
+  # oylarıyla gider. Kapatılmış oylama kutlama bileşeninin kaynağı olabilir.
+  # Değişiklikler canlı güncellenir (`event.component_changed`).
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vote:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventVote
+      summary: Etkinliğin oylaması
+      description: |
+        Her etkin üyeye açıktır (susturulmuş üye de okur); iptal edilmiş ve
+        donmuş etkinlikte de okunur. Bileşen uçlarının ortak kuralları
+        geçerlidir (`component-not-found`, `component-disabled`).
+      responses:
+        "200":
+          description: Oylama
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: castEventVote
+      summary: Oy verir ya da oyunuzu değiştirir
+      description: |
+        Etkinliğe `going` cevabı vermiş ya da katılımı doğrulanmış olmalısınız
+        (`event-not-going`); susturulmuş üye oy veremez. Kişi başına bir oy;
+        yeni oy öncekinin yerine geçer, aynı oyu yeniden vermek bir şey
+        değiştirmez. Kendinize, kendi aracınıza ya da kendi fotoğrafınıza oy
+        veremezsiniz (`vote-own-option`). Oylamanın şu anki seçeneği
+        olmayan `option_id` `event-item-not-found`. Kapatılmış oylamada
+        `vote-closed`; bitişten 7 gün sonra donar (`component-frozen`); iptal
+        edilmiş etkinlikte oy verilmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventVoteCastRequest" }
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: withdrawEventVote
+      summary: Oyunuzu geri alır
+      description: |
+        Oyu olmayan için hata değildir. Oylama açıkken ve yazma penceresi
+        içinde (`vote-closed`, `component-frozen`); susturulmuş üye geri
+        alamaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vote/options:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: addEventVoteOption
+      summary: Serbest seçenek ekler (organizatör, moderatör, yönetici)
+      description: |
+        Yalnızca `free` kaynaklı oylamada (`vote-options-fixed`) ve oylama
+        açıkken (`vote-closed`). Etiket kırpılır, iç boşlukları teke
+        indirilir; 1–100 karakter, denetim ve biçim karakteri olmadan
+        (`invalid-request`, alan `label`). Aynı etiket (Türkçe küçük harfle)
+        `vote-option-exists`; en fazla 20 seçenek (`event-limit`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventVoteOptionRequest" }
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vote/options/{option_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+      - $ref: "#/components/parameters/OptionID"
+    delete:
+      operationId: removeEventVoteOption
+      summary: Serbest seçeneği ve ona verilen oyları kaldırır (organizatör, moderatör, yönetici)
+      description: |
+        Yalnızca `free` kaynaklı oylamada (`vote-options-fixed`) ve oylama
+        açıkken (`vote-closed`). Bilinmeyen seçenek `event-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/vote/close:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    post:
+      operationId: closeEventVote
+      summary: Oylamayı kapatır (organizatör, moderatör, yönetici)
+      description: |
+        Kapanış geri alınmaz: oy ve seçenek değişikliği biter, seçenek başına
+        oy sayıları ve kazananlar herkese görünür. Yazma penceresi içinde
+        (`component-frozen`). Kapalı oylamayı yeniden kapatmak bir şey
+        değiştirmez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Oylama, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventVote" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Etkinlik bileşenleri: kutlama (`celebration`; core CelebrationComponentService, #255, ADR-0025 §4, §5) ---
   # Etkinliğin kazanan ekranı ve tayfaya kazananın ilan edildiği bildirimi.
-  # Tanımda `source` (aynı türdeki yazboz, eşleşme ağacı ya da derece
+  # Tanımda `source` (aynı türdeki yazboz, eşleşme ağacı, derece ya da oylama
   # bileşeninin anahtarı) varsa kazananlar her okumada kaynağın kaydedilmiş
   # sonucundan hesaplanır: biten her masanın kazananları, sonuçlanan eşleşme
-  # ağacının şampiyonları, derecenin birinci sırası; ayrı kayıt yoktur ve
+  # ağacının şampiyonları, derecenin birinci sırası, kapatılmış oylamanın en
+  # çok oy alan seçenekleri (#254); ayrı kayıt yoktur ve
   # kaynaktaki düzeltme hemen görünür. `source` yoksa organizatör ilan
   # ederken etkinliğin katılımcılarından 1–10 kazanan seçer. Kazanan kişi,
   # takım ya da misafir oyuncu olabilir. Hassas ölçümden hesaplanan derecenin
@@ -4447,6 +4675,66 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
 
+  # --- Etkinlik bileşenleri: soru havuzu bağlantısı (`pool_link`; core PoolLinkComponentService, #271, ADR-0037 §3, ADR-0040 §2) ---
+  # Etkinliği (soru çözüm oturumu) tayfanın soru havuzundaki sorulara
+  # bağlar; sorular, cevaplar ve oylar soru havuzunda kalır. Tayfanın
+  # `question_pool` modülü kapalıyken iki uç da `module-disabled` döner.
+
+  /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/pool-links:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/EventID"
+      - $ref: "#/components/parameters/ComponentKey"
+    get:
+      operationId: getEventPoolLinks
+      summary: Etkinliğe bağlı havuz soruları
+      description: |
+        Bağlı ve görünen sorular, organizatörün sırasıyla. Silinen soru
+        listede görünmez (geri alınırsa yeniden görünür). Sorunun tamamı ve
+        cevapları `GET /v1/tayfas/{tayfa_id}/questions/{question_id}`
+        uçlarından okunur. Her etkin üyeye açıktır (susturulmuş üye de
+        okur). Bileşen uçlarının ortak kuralları geçerlidir.
+      responses:
+        "200":
+          description: Bağlı sorular
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventPoolLinks" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: setEventPoolLinks
+      summary: Bağlı soruları yazar (organizatör, moderatör, yönetici)
+      description: |
+        Listenin tamamı değişir, verilen sırayla; boş `question_ids` bütün
+        bağları kaldırır. En fazla bileşenin `max_links` değeri (1–50)
+        kadar, tekrarsız (`invalid-request`, alan `question_ids`). Her soru
+        bu tayfanın soru havuzunda görünen bir soru olmalıdır
+        (`question-not-found`). Aynı liste hiçbir şeyi değiştirmez. Yazma
+        penceresi içinde (bitişten 7 gün sonra `component-frozen`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EventPoolLinksRequest" }
+      responses:
+        "200":
+          description: Bağlı sorular, güncel haliyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventPoolLinks" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
   # --- Tayfa sözlüğü (core TayfaVocabularyService, #244, ADR-0037 §4) ---
   # Tayfanın kendi değer listesi: bir ad alanındaki (`fish_species`, `book`
   # …) değerler. Tanımda `vocabulary` olan metin alanı (`CatalogVocabulary`)
@@ -4561,11 +4849,13 @@ paths:
       - $ref: "#/components/parameters/TayfaID"
     get:
       operationId: getTayfaStats
-      summary: Tayfanın istatistikleri ve kişisel katkılar
+      summary: Tayfanın istatistikleri ve sizin katkınız
       description: |
         Her etkin üyeye açıktır (susturulmuş üye de okur). `year` yoksa tüm
-        zamanlar. Kişisel katkılar yalnızca ölçüm ve günlük metrikleridir,
-        yalnızca tayfanın etkin üyelerininki.
+        zamanlar. Tayfa toplamları herkese açıktır; kişisel katkıdan
+        yalnızca çağıranın kendi katkısı döner (`own_contributions`, ölçüm
+        ve günlük metrikleri). Başka üyelerin katkısı yönetici ve moderatör
+        dahil kimseye listelenmez (#322).
       parameters:
         - name: year
           in: query
@@ -4858,6 +5148,648 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/DailyOrder" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Ortak kütüphane (core TayfaLibraryService, #270, ADR-0040 §1) ---
+  # Tayfanın ortak eşyası: kitap, kamp malzemesi, masa oyunu, alet. Üye
+  # kendi kalemini ekler; sahibi düzenler ve geri çeker, moderatör herkesinkini
+  # kaldırır. Akış: istek → sahibi onaylar → teslim etti → iade aldı; kalem
+  # başına tek etkin ödünç, ödünçteyken istekler sırada bekler. Para,
+  # depozito, ceza yoktur. Ödüncü yalnızca iki tarafı görür; üyeler kalemin
+  # durumunu ve sıradaki kişi sayısını görür. `library` modülüdür (kapalıysa
+  # her uç `module-disabled`); ana sayfa bileşeni `library` bu modülün
+  # vitrinidir. Etkin üye olmayan `tayfa-not-found`. Ad ve not içeriktir,
+  # loglanmaz.
+
+  /v1/tayfas/{tayfa_id}/library/items:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listLibraryItems
+      summary: Kütüphanedeki kalemler
+      description: |
+        Geri çekilmemiş kalemler, en yeni önce. `kind` yalnızca o türü,
+        `mine=true` yalnızca çağıranın kalemlerini döndürür. Etkin ödünç
+        (`active_loan`) yalnızca iki tarafına, sıra (`queue`) yalnızca
+        `GET …/items/{library_item_id}` ile sahibine döner.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/LibraryItemKind" }
+        - name: mine
+          in: query
+          required: false
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Kalemler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItemList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createLibraryItem
+      summary: Kütüphaneye kendi kalemini ekler
+      description: |
+        Kitabın adı tayfa sözlüğüne (ad alanı `book`) bağlanır: bilinen ad
+        yeniden kullanılır, yeni ad sözlüğe eklenir; kitapta ad en fazla 60
+        karakterdir. Fotoğraf isteğe bağlıdır: çağıranın bu tayfa için hazır
+        `library_item` yüklemesi. Aynı `client_request_id` ile tekrar
+        gönderim aynı kalemi döndürür. Üye başına en fazla 100 kalem
+        (`library-item-limit`). Susturulmuş üye ekleyemez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryItemCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen kalem
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/items/{library_item_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryItemID"
+    get:
+      operationId: getLibraryItem
+      summary: Kütüphane kalemi
+      description: |
+        Sahibi sırayı (`queue`) da görür. Geri çekilmiş ya da bilinmeyen
+        kalem `library-item-not-found`.
+      responses:
+        "200":
+          description: Kalem
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: updateLibraryItem
+      summary: Kendi kalemini düzenler (sahibi)
+      description: |
+        Ad, not ve fotoğraf birlikte yazılır (kısmi güncelleme yok;
+        `photo_upload_id` yoksa fotoğraf kalkar). Türü değişmez. Çağıranın
+        olmayan kalem `library-item-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryItemUpdateRequest" }
+      responses:
+        "200":
+          description: Düzenlenen kalem
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: withdrawLibraryItem
+      summary: Kalemi geri çeker (sahibi) ya da kaldırır (moderatör)
+      description: |
+        Bekleyen istekler ve sıra biter; notu ve fotoğrafı silinir. Geri
+        alınamaz. Sahibi teslim edilmiş kalemi geri çekemez, önce iade
+        almalıdır (`library-item-on-loan`); moderatörün kaldırması teslim
+        edilmiş ödüncü açık bırakır, sahibi iadeyi yine işaretler.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Geri çekildi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/items/{library_item_id}/request:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryItemID"
+    post:
+      operationId: requestLibraryLoan
+      summary: Kalemi ödünç ister
+      description: |
+        Kalemin etkin ödüncü yoksa ödünç isteği açılır; varsa çağıran
+        sıranın sonuna girer (`caller_queue_rank`). Tekrar istemek bir şey
+        değiştirmez. Kendi kalemi `library-own-item`; sırada 20 kişi varsa
+        `library-queue-full`. Susturulmuş üye isteyemez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Kalem, çağıranın ödüncü ya da sıradaki yeriyle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: cancelLibraryRequest
+      summary: İsteğini ya da sıradaki yerini geri alır
+      description: |
+        Teslim edilmemiş (istenen ya da onaylanan) ödünç iptal olur ya da
+        sıradaki yer silinir; ikisi de yoksa bir şey değişmez. Teslim
+        edilmiş ödünç `library-loan-state`. Sıradaki kişiye ödünç isteği
+        açılır.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Kalem
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryItem" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listLibraryLoans
+      summary: Ödünçlerim (aldıklarım ve verdiklerim)
+      description: |
+        Çağıranın bu tayfadaki ödünçleri, borç alan ve sahip olarak: önce
+        etkinler, sonra en yeniler; en fazla 200. Biten ödünç 1 yıl tutulur.
+      responses:
+        "200":
+          description: Ödünçler
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoanList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans/{library_loan_id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryLoanID"
+    post:
+      operationId: approveLibraryLoan
+      summary: İsteği onaylar (sahibi)
+      description: |
+        Yalnızca istenen (`requested`) ödünç onaylanır; başka durum `library-loan-state`. Çağıranın kalemine ait olmayan ödünç `library-loan-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Ödünç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans/{library_loan_id}/decline:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryLoanID"
+    post:
+      operationId: declineLibraryLoan
+      summary: İsteği reddeder (sahibi)
+      description: |
+        İstenen ya da onaylanan ödünç reddedilir; sıradaki kişiye ödünç isteği açılır. Çağıranın kalemine ait olmayan ödünç `library-loan-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Ödünç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans/{library_loan_id}/hand-over:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryLoanID"
+    post:
+      operationId: handOverLibraryLoan
+      summary: Teslim ettim (sahibi)
+      description: |
+        Onaylanan ödünç teslim edilir; kalem `on_loan` olur. `due_at` isteğe bağlı iade tarihidir: şimdiden sonra, en fazla 90 gün; geçince borç alana tek uygulama içi hatırlatma gider. Çağıranın kalemine ait olmayan ödünç `library-loan-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibraryHandOverRequest" }
+      responses:
+        "200":
+          description: Ödünç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/library/loans/{library_loan_id}/return:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/LibraryLoanID"
+    post:
+      operationId: returnLibraryLoan
+      summary: İade aldım (sahibi)
+      description: |
+        Teslim edilen ödünç kapanır (karşı taraf tayfadan ayrılmış olsa da); kalem yeniden `available` olur ve sıradaki kişiye ödünç isteği açılır. Çağıranın kalemine ait olmayan ödünç `library-loan-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "200":
+          description: Ödünç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LibraryLoan" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Materyal kütüphanesi (core TayfaMaterialService, #261, ADR-0040 §3) ---
+  # Eğitim tayfalarının ders materyali: yalnızca https bağlantı ya da
+  # kişinin kendi not fotoğrafları (en fazla 3). Dosya/PDF yüklenmez. Ders
+  # zorunlu, konu isteğe bağlı (`GET /v1/catalog` → `study_tags`; yalnızca
+  # anahtar). Üye kendi materyalini ekler; yazarı düzenler ve siler,
+  # moderatör herkesinkini kaldırır. Sunucu bağlantıyı hiçbir zaman açmaz:
+  # önizleme, başlık ya da favicon çekilmez; yanıt yalnızca adresi ve
+  # sunucunun ayrıştırdığı alan adını (`domain`) döner. İstemci alan adını
+  # gösterir ve "Tayfam dışına çıkıyorsun" uyarısıyla açar. Engelli alan
+  # adı listesindeki alan adları ve alt alan adları reddedilir
+  # (`blocked-link`); listeye sonradan eklenen alan adı var olan
+  # materyalleri gizler. `materials` modülüdür (kapalıysa her uç
+  # `module-disabled`); ana sayfa bileşeni `materials` bu modülün
+  # vitrinidir. Etkin üye olmayan `tayfa-not-found`. Başlık ve bağlantı
+  # içeriktir, loglanmaz.
+
+  /v1/tayfas/{tayfa_id}/materials:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listMaterials
+      summary: Materyal kütüphanesi
+      description: |
+        Görünen materyaller, en yeni önce. `kind`, `subject_key`,
+        `topic_key` ve `mine=true` (yalnızca çağıranınkiler) süzer;
+        emekliye ayrılmış etiketle de süzülür. `next_page_token` yalnızca
+        aynı süzgeçlerle geçerlidir.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema: { $ref: "#/components/schemas/MaterialKind" }
+        - name: subject_key
+          in: query
+          required: false
+          description: Ders anahtarı (`GET /v1/catalog` → `study_tags`).
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        - name: topic_key
+          in: query
+          required: false
+          description: Konu anahtarı.
+          schema: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        - name: mine
+          in: query
+          required: false
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Materyaller
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MaterialList" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createMaterial
+      summary: Materyal ekler
+      description: |
+        `link`: `url` zorunlu, fotoğraf yok. Bağlantı yalnızca `https`,
+        kullanıcı bilgisi yok, IP adresi değil alan adı (Türkçe karakterli
+        alan adı punycode olarak), 443 dışında port yok, boşluk ve görünmez
+        karakter yok; sunucu normalleştirir (en fazla 500 karakter).
+        Engelli alan adı `blocked-link`. `note_photo`: 1–3 fotoğraf
+        (çağıranın bu tayfa için hazır `material_note` yüklemeleri), `url`
+        yok. Ders zorunlu, konu isteğe bağlı ve o dersin altında; emekli
+        etiket seçilemez. Aynı `client_request_id` ile tekrar gönderim aynı
+        materyali döndürür. Üye başına en fazla 200 materyal
+        (`material-limit`). Susturulmuş üye ekleyemez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MaterialCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen materyal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Material" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/materials/{material_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/MaterialID"
+    get:
+      operationId: getMaterial
+      summary: Materyal
+      description: |
+        Silinmiş, engelli alan adına bağlanan ya da bilinmeyen materyal
+        `material-not-found`.
+      responses:
+        "200":
+          description: Materyal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Material" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: updateMaterial
+      summary: Kendi materyalini düzenler (yazarı)
+      description: |
+        Başlık, bağlantı ya da fotoğraflar ve etiketler birlikte yazılır
+        (kısmi güncelleme yok); türü değişmez. Listede olmayan fotoğraf
+        silinir. Değişmeyen etiket emekliye ayrılmış olsa da kalır.
+        Çağıranın olmayan materyal `material-not-found`. Susturulmuş üye
+        düzenleyemez.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MaterialUpdateRequest" }
+      responses:
+        "200":
+          description: Düzenlenen materyal
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Material" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteMaterial
+      summary: Materyali siler (yazarı) ya da kaldırır (moderatör)
+      description: |
+        Yazarın silmesinde fotoğraflar hemen silinir; moderatörün
+        kaldırması materyali gizler. İkisi de geri alınamaz; materyal 30
+        gün sonra kalıcı silinir.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  # --- Üye garajı (core MemberGarageService, #272, ADR-0040 §4) ---
+  # Garaj kişiye aittir ve tektir (profil): en fazla 10 araç; marka, model,
+  # yıl, renk, kısa not ve en fazla 3 fotoğraf. Plaka garajda hiç tutulmaz
+  # (etkinliğin araçlar bileşeninde, yalnızca o kayıtta yazılır). Satılık
+  # ilanı yoktur. Garaj, sahibinin seçtiği tayfalarda görünür
+  # (`PUT /v1/tayfas/{tayfa_id}/garage/visibility`); seçim yoksa ilgi
+  # alanlarında `automotive` olan tayfalarda görünür, diğerlerinde
+  # görünmez. Tayfa garajı `garage` modülüdür (kapalıysa tayfa uçları
+  # `module-disabled`; ana sayfa bileşeni `garage`); yalnızca etkin üyeler
+  # ve yalnızca etkin üyelerin araçları. Fotoğraflar aynı kişilere görünür.
+  # Metinler içeriktir, loglanmaz.
+
+  /v1/me/garage:
+    get:
+      operationId: listMyGarage
+      summary: Kendi garajınız
+      description: Silinmemiş araçlarınız, eklenme sırasıyla.
+      responses:
+        "200":
+          description: Garajınız
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberGarage" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: createGarageVehicle
+      summary: Garajınıza araç ekler
+      description: |
+        En fazla 10 araç (`garage-limit`). Fotoğraflar çağıranın hazır
+        `garage_vehicle` yüklemeleridir (tayfasız). Aynı
+        `client_request_id` ile tekrar gönderim aynı aracı döndürür.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GarageVehicleCreateRequest" }
+      responses:
+        "201":
+          description: Eklenen araç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageVehicle" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/me/garage/{garage_vehicle_id}:
+    parameters:
+      - $ref: "#/components/parameters/GarageVehicleID"
+    put:
+      operationId: updateGarageVehicle
+      summary: Garajınızdaki aracı düzenler
+      description: |
+        Araç bir bütün olarak yazılır; listede olmayan fotoğraf silinir.
+        Aracın getirildiği etkinliklerdeki kopya değişmez. Sizin olmayan
+        araç `garage-vehicle-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GarageVehicleRequest" }
+      responses:
+        "200":
+          description: Düzenlenen araç
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageVehicle" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: deleteGarageVehicle
+      summary: Garajınızdaki aracı siler
+      description: Fotoğrafları hemen silinir; geri alınamaz.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Silindi }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/garage:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    get:
+      operationId: listTayfaGarage
+      summary: Tayfanın garajı
+      description: |
+        Bu tayfada görünen araçlar, en yeni önce. `owner_user_id` tek bir
+        üyeninkileri süzer; `next_page_token` yalnızca aynı süzgeçle
+        geçerlidir.
+      parameters:
+        - name: owner_user_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/PageToken"
+      responses:
+        "200":
+          description: Garaj araçları
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TayfaGarage" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/garage/visibility:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+    put:
+      operationId: setGarageVisibility
+      summary: Garajınızı bu tayfada gösterir ya da gizler
+      description: |
+        Göstermek susturulmuş üyeye kapalıdır (`muted`); gizlemek her etkin
+        üyeye açıktır. Seçim yapılmamışsa varsayılan ilgi alanına göredir
+        (`automotive`).
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GarageVisibility" }
+      responses:
+        "200":
+          description: Seçiminiz
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageVisibility" }
+        "400": { $ref: "#/components/responses/Problem" }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/Problem" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "503": { $ref: "#/components/responses/Problem" }
+
+  /v1/tayfas/{tayfa_id}/garage/{garage_vehicle_id}:
+    parameters:
+      - $ref: "#/components/parameters/TayfaID"
+      - $ref: "#/components/parameters/GarageVehicleID"
+    delete:
+      operationId: removeTayfaGarageVehicle
+      summary: Aracı kaldırır (moderatör)
+      description: |
+        İçerik moderasyonu: bu tayfada görünen araç her yerde gizlenir ve
+        30 gün sonra kalıcı silinir; geri alınamaz. Bu tayfada görünmeyen
+        araç `garage-vehicle-not-found`.
+      parameters:
+        - $ref: "#/components/parameters/ClientHeader"
+      responses:
+        "204": { description: Kaldırıldı }
         "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
@@ -8443,6 +9375,30 @@ components:
       required: true
       description: Günün içeriği havuzundaki içeriğin kimliği (`DailyItem.id`).
       schema: { type: string, format: uuid }
+    LibraryItemID:
+      name: library_item_id
+      in: path
+      required: true
+      description: Ortak kütüphanedeki kalemin kimliği (`LibraryItem.id`).
+      schema: { type: string, format: uuid }
+    LibraryLoanID:
+      name: library_loan_id
+      in: path
+      required: true
+      description: Ödüncün kimliği (`LibraryLoan.id`).
+      schema: { type: string, format: uuid }
+    GarageVehicleID:
+      name: garage_vehicle_id
+      in: path
+      required: true
+      description: Üye garajındaki aracın kimliği (`GarageVehicle.id`).
+      schema: { type: string, format: uuid }
+    MaterialID:
+      name: material_id
+      in: path
+      required: true
+      description: Materyal kütüphanesindeki materyalin kimliği (`Material.id`).
+      schema: { type: string, format: uuid }
     CatalogTypeVersion:
       name: version
       in: path
@@ -8593,6 +9549,11 @@ components:
         - ranking-not-started
         - ranking-not-participant
         - ranking-from-measure
+        # core: oylama bileşeni (#254, ADR-0037 §3)
+        - vote-closed
+        - vote-own-option
+        - vote-options-fixed
+        - vote-option-exists
         # core: kutlama bileşeni (#255, ADR-0025 §4)
         - celebration-not-started
         - celebration-no-winner
@@ -8613,6 +9574,21 @@ components:
         # core: günün içeriği (#269, ADR-0027 §5)
         - daily-item-not-found
         - daily-item-limit
+        # core: ortak kütüphane (#270, ADR-0040 §1)
+        - library-item-not-found
+        - library-loan-not-found
+        - library-own-item
+        - library-loan-state
+        - library-item-on-loan
+        - library-item-limit
+        - library-queue-full
+        # core: materyal kütüphanesi (#261, ADR-0040 §3)
+        - material-not-found
+        - blocked-link
+        - material-limit
+        # core: üye garajı (#272, ADR-0040 §4)
+        - garage-vehicle-not-found
+        - garage-limit
         # core: tekrarlayan etkinlik (#51)
         - event-series-not-found
         - event-series-ended
@@ -8894,8 +9870,8 @@ components:
       enum: [approval, open]
     Module:
       type: string
-      description: "`daily` günün içeriğidir (#269)."
-      enum: [announcements, events, qa, polls, daily]
+      description: "`daily` günün içeriğidir (#269). `library` ortak kütüphanedir (#270). `question_pool` Eğitim soru havuzudur (#271): soruları `pool: question_pool` ile Soru-Cevap uçlarından, ana sayfa bileşeni ve `pool_link` etkinlik bileşeni. `materials` Eğitim materyal kütüphanesidir (#261). `garage` üye garajıdır (#272): üyelerin bu tayfada gösterdiği garajlar ve ana sayfa bileşeni."
+      enum: [announcements, events, qa, polls, daily, library, question_pool, materials, garage]
     Role:
       type: string
       enum: [member, moderator, admin]
@@ -9046,6 +10022,10 @@ components:
             qa: { type: boolean }
             polls: { type: boolean }
             daily: { type: boolean }
+            library: { type: boolean }
+            question_pool: { type: boolean }
+            materials: { type: boolean }
+            garage: { type: boolean }
         status:
           type: string
           description: "`warned`: hareketsiz, 7 gün sonra arşivlenir. `archived`: salt okunur."
@@ -9407,9 +10387,18 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Tag" }
 
+    QuestionPool:
+      type: string
+      description: |
+        Sorunun havuzu (#271, ADR-0040 §2): `qa` tayfanın Soru-Cevap'ı
+        (`qa` modülü), `question_pool` Eğitim soru havuzu (`question_pool`
+        modülü). Sorunun havuzu değişmez; soru ve cevap uçları havuzun
+        modülü kapalıyken `module-disabled` döner.
+      enum: [qa, question_pool]
+
     Question:
       type: object
-      required: [id, tayfa_id, title, body, tags, answer_count, created_at, updated_at]
+      required: [id, tayfa_id, title, body, tags, answer_count, created_at, updated_at, pool, photo_upload_ids]
       properties:
         id: { type: string, format: uuid }
         tayfa_id: { type: string, format: uuid }
@@ -9417,10 +10406,11 @@ components:
           type: string
           format: uuid
           description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
-        title: { type: string }
+        title: { type: string, description: Soru havuzunda boştur. }
         body: { type: string }
         tags:
           type: array
+          description: Soru havuzunda boştur.
           items: { $ref: "#/components/schemas/Tag" }
         answer_count: { type: integer, description: Görünen cevap sayısı. }
         created_at: { type: string, format: date-time }
@@ -9428,6 +10418,18 @@ components:
           type: string
           format: date-time
           description: Her düzenleme ve geri almada değişir.
+        pool: { $ref: "#/components/schemas/QuestionPool" }
+        subject_key:
+          type: string
+          description: Soru havuzunda ders anahtarı (her zaman var); etiket sonradan emekliye ayrılmış olabilir.
+        topic_key:
+          type: string
+          description: Soru havuzunda konu anahtarı; yoksa alan yoktur.
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          description: Soru havuzunda 0–2 fotoğraf (`question_pool` yüklemesi), sırasıyla; adreslerini `POST /v1/media/urls` verir. Soru-Cevap'ta boştur.
+          items: { type: string, format: uuid }
 
     QuestionList:
       type: object
@@ -9440,30 +10442,51 @@ components:
 
     QuestionCreateRequest:
       type: object
-      required: [title, client_request_id]
+      required: [client_request_id]
       additionalProperties: false
       properties:
+        pool:
+          allOf: [{ $ref: "#/components/schemas/QuestionPool" }]
+          description: Yoksa `qa`.
         title:
           type: string
-          minLength: 10
           maxLength: 150
-          description: Baştaki ve sondaki boşluklar atıldıktan sonra 10–150 karakter, tek satır.
+          description: "`qa`'da zorunlu: baştaki ve sondaki boşluklar atıldıktan sonra 10–150 karakter, tek satır. Soru havuzunda verilmez."
         body:
           type: string
           maxLength: 10000
-          description: En fazla 10000 karakter; satır sonu olabilir.
+          description: En fazla 10000 karakter; satır sonu olabilir. Soru havuzunda metin ya da fotoğraftan biri zorunludur.
         tags:
           type: array
           maxItems: 5
-          description: Etiket adları; her biri 1–30 karakter, tek satır, iç boşluklar teke iner.
+          description: Etiket adları; her biri 1–30 karakter, tek satır, iç boşluklar teke iner. Soru havuzunda verilmez.
           items: { type: string, minLength: 1, maxLength: 30 }
         client_request_id:
           type: string
           format: uuid
           description: İstemcinin her deneme için bir kez ürettiği, tekrar gönderimde aynen kullandığı UUID.
+        subject_key:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{1,39}$"
+          description: Soru havuzunda zorunlu; seçilebilir (etkin) bir ders.
+        topic_key:
+          type: string
+          pattern: "^[a-z][a-z0-9_]{1,39}$"
+          description: Soru havuzunda isteğe bağlı; dersin altındaki seçilebilir bir konu.
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          description: Soru havuzunda 0–2 fotoğraf (`question_pool` yüklemesi).
+          items: { type: string, format: uuid }
 
     QuestionUpdateRequest:
       type: object
+      description: |
+        Verilen alanlar değişir. `title` ve `tags` yalnızca Soru-Cevap'ta;
+        `subject_key` (`topic_key` ile birlikte; `topic_key` yoksa konu
+        kalkar) ve `photo_upload_ids` (fotoğrafların yeni hali; `[]` hepsini
+        kaldırır, kaldırılan dosya silinir) yalnızca soru havuzunda
+        geçerlidir; öbür havuzun alanı `invalid-request` döner.
       additionalProperties: false
       minProperties: 1
       properties:
@@ -9473,10 +10496,16 @@ components:
           type: array
           maxItems: 5
           items: { type: string, minLength: 1, maxLength: 30 }
+        subject_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        topic_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          items: { type: string, format: uuid }
 
     Answer:
       type: object
-      required: [id, question_id, tayfa_id, body, vote_count, voted, created_at, updated_at]
+      required: [id, question_id, tayfa_id, body, vote_count, voted, created_at, updated_at, photo_upload_ids]
       properties:
         id: { type: string, format: uuid }
         question_id: { type: string, format: uuid }
@@ -9493,6 +10522,11 @@ components:
           type: string
           format: date-time
           description: Her düzenleme ve geri almada değişir; oylar değiştirmez.
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          description: Soru havuzunda 0–2 fotoğraf (`question_pool` yüklemesi), sırasıyla. Soru-Cevap'ta boştur.
+          items: { type: string, format: uuid }
 
     AnswerList:
       type: object
@@ -9510,17 +10544,26 @@ components:
       properties:
         body:
           type: string
-          minLength: 1
           maxLength: 10000
-          description: Boşluklar atıldıktan sonra 1–10000 karakter; satır sonu olabilir.
+          description: Boşluklar atıldıktan sonra 1–10000 karakter; satır sonu olabilir. Soru havuzunda fotoğraf varsa boş olabilir.
         client_request_id: { type: string, format: uuid }
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          description: Yalnızca soru havuzunda; 0–2 fotoğraf (`question_pool` yüklemesi).
+          items: { type: string, format: uuid }
 
     AnswerUpdateRequest:
       type: object
+      description: Cevabın içeriğinin yeni hali; soru havuzunda `photo_upload_ids` yoksa ya da `[]` ise fotoğraflar kalkar (dosyaları silinir).
       required: [body]
       additionalProperties: false
       properties:
-        body: { type: string, minLength: 1, maxLength: 10000 }
+        body: { type: string, maxLength: 10000, description: "Boşluklar atıldıktan sonra 1–10000 karakter; soru havuzunda fotoğraf varsa boş olabilir." }
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          items: { type: string, format: uuid }
 
     # --- Anketler ---
 
@@ -9736,6 +10779,10 @@ components:
           type: array
           description: Onay bekleyen kişiler. Aracın sahibi hepsini, başkası yalnızca kendisini görür.
           items: { type: string, format: uuid }
+        garage_vehicle_id:
+          type: string
+          format: uuid
+          description: Aracın kopyalandığı üye garajı aracı (#272); elle yazıldıysa ya da garajdaki araç kalıcı silindiyse yoktur.
     EventVehicles:
       type: object
       required: [vehicles, plate_enabled, seats_enabled, caller_can_participate, caller_can_manage]
@@ -9755,10 +10802,18 @@ components:
           description: Şu an başkasının aracını ve koltuk isteğini kaldırabilirsiniz (organizatör yetkisi; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
     EventVehicleRequest:
       type: object
-      required: [make]
       additionalProperties: false
+      description: |
+        Araç ya elle yazılır (`make` zorunlu) ya da çağıranın garajından
+        seçilir (`garage_vehicle_id`; #272): o zaman `make`, `model`,
+        `model_year` ve `color` verilmez, garajdaki araçtan kopyalanır.
+        Plaka garajda yoktur; yalnızca bu etkinlik kaydına yazılır.
       properties:
-        make: { type: string, minLength: 1, maxLength: 40 }
+        garage_vehicle_id:
+          type: string
+          format: uuid
+          description: Çağıranın garajındaki bir araç (`GarageVehicle.id`). Başkasının ya da silinmiş araç `garage-vehicle-not-found`.
+        make: { type: string, maxLength: 40, description: "`garage_vehicle_id` yoksa zorunlu (1–40 karakter)." }
         model: { type: string, maxLength: 40 }
         model_year: { type: integer, minimum: 0, description: "0 ya da 1900 – gelecek yıl." }
         color: { type: string, maxLength: 30 }
@@ -10164,7 +11219,7 @@ components:
         Yazboz kuralları (#250). Ön ayarda verilmeyen kural boştur ve
         bileşenden gelir; masada ve bileşende hepsi doludur.
       properties:
-        side: { type: string, enum: [player, team], description: "Oyuncular kişiler (`player`) ya da takımlar (`team`)." }
+        side: { type: string, enum: [player, team, pair], description: "Oyuncular kişiler (`player`), takımlar (`team`) ya da eşler (`pair`; 4 yer, karşılıklı oturanlar eş, ADR-0044)." }
         rounds: { type: string, enum: [round, single, first_to], description: "El el, tek maç ya da hedefe ilk ulaşana kadar." }
         winner: { type: string, enum: [high, low, first], description: "Yüksek, düşük toplam ya da hedefe ilk ulaşan kazanır." }
         result: { type: string, enum: [points, wdl], description: "Puan ya da galibiyet (1) / beraberlik (½) / mağlubiyet (0)." }
@@ -10193,6 +11248,7 @@ components:
         user_id: { type: string, format: uuid }
         team_id: { type: string, format: uuid, description: Takım masasında takım bileşeninin takımı. }
         guest_id: { type: string, format: uuid, description: "Misafir oyuncunun kimliği (`EventGuestPlayer.id`)." }
+        pair: { type: integer, format: int32, minimum: 1, maximum: 2, description: "Yalnızca eşli masada eş numarası; koltuk 1 ve 3 eş 1, koltuk 2 ve 4 eş 2." }
     EventScoreEntry:
       type: object
       required: [player_id]
@@ -10212,6 +11268,7 @@ components:
     EventScoreStanding:
       type: object
       required: [player_id, total, rounds_won, rank]
+      description: Bir yerin masadaki sırası. Eşli masada her yer eşinin toplamını, el sayısını ve sırasını taşır.
       properties:
         player_id: { type: string, format: uuid }
         total: { type: number, format: double, description: "Puan toplamı; `wdl` modunda galibiyet 1, beraberlik 0.5." }
@@ -10246,7 +11303,7 @@ components:
           items: { $ref: "#/components/schemas/EventScoreStanding" }
         winner_ids:
           type: array
-          description: Biten masada birinci sıradaki yerler (beraberlikte birden çok); açık masada boş.
+          description: Biten masada birinci sıradaki yerler (beraberlikte birden çok; eşli masada kazanan eşin iki yeri); açık masada boş.
           items: { type: string, format: uuid }
         caller_can_score:
           type: boolean
@@ -10329,7 +11386,7 @@ components:
         nickname:
           type: string
           maxLength: 24
-          description: "Takma ad. Etkinliğin bitiminden 30 gün sonra (ya da ekleyen hesabını silince) silinir ve alan yer almaz; istemci adsız misafir gösterir."
+          description: "Takma ad. Ekleyen hesabını silince silinir ve alan yer almaz; istemci adsız misafir gösterir. Etkinlik silinince misafir de silinir."
         created_at: { type: string, format: date-time }
     EventGuestPlayers:
       type: object
@@ -10491,6 +11548,65 @@ components:
           exclusiveMinimum: 0
           maximum: 1000000
           description: "`duration` ölçütünde saniye (iki basamağa yuvarlanır, en çok 1000000), `rank` ölçütünde 1–10000 arası tam sayı."
+    EventVote:
+      type: object
+      required: [source, options, voter_count, closed, results_visible, caller_can_vote, caller_can_edit_options, caller_can_close, max_options]
+      description: Bir etkinliğin bir oylama bileşeni, isteği yapanın gördüğü haliyle (#254). Kimin neye oy verdiği hiçbir zaman yer almaz.
+      properties:
+        source:
+          type: string
+          enum: [free, participants, vehicles, album]
+          description: Seçeneklerin kaynağı (tanımdaki `source`).
+        options:
+          type: array
+          description: "`free` yazılış sırasıyla, `participants` kimlik sırasıyla, `vehicles` yazılış sırasıyla, `album` albüm sırasıyla. Kaynakta seçenek yoksa boş."
+          items: { $ref: "#/components/schemas/EventVoteOption" }
+        voter_count: { type: integer, minimum: 0, description: "Seçeneklerden birine oy veren kişi sayısı; her zaman görünür." }
+        caller_option_id: { type: string, format: uuid, description: "Kendi oyunuz; oy vermediyseniz (ya da seçeneği artık yoksa) yoktur." }
+        closed: { type: boolean, description: Organizatör oylamayı kapattı. }
+        closed_at: { type: string, format: date-time, description: Yalnızca kapatıldıysa. }
+        results_visible: { type: boolean, description: "Seçenek başına oy sayıları ve kazananlar görünür: oylama kapatıldı ya da bileşen dondu." }
+        caller_can_vote:
+          type: boolean
+          description: "Şu an oy verebilirsiniz (`going` ya da katılımı doğrulanmış, susturulmamış; oylama açık, etkinlik iptal değil, donmamış, tayfa salt okunur değil)."
+        caller_can_edit_options:
+          type: boolean
+          description: "Şu an seçenek ekleyip kaldırabilirsiniz (yalnızca `free`; organizatör, moderatör, yönetici; oylama açık)."
+        caller_can_close: { type: boolean, description: "Şu an oylamayı kapatabilirsiniz (organizatör, moderatör, yönetici; oylama açık)." }
+        max_options: { type: integer, minimum: 1, description: "Serbest oylamada en fazla seçenek (20)." }
+    EventVoteOption:
+      type: object
+      required: [id, vote_count, winner]
+      description: "Bir oylama seçeneği. Kaynağa göre: `free` `label`; `participants` `user_id` (kişi, `id` ile aynı); `vehicles` `vehicle` ve `user_id` (aracın sahibi); `album` `upload_id` ve `user_id` (fotoğrafı yükleyen)."
+      properties:
+        id: { type: string, format: uuid, description: "Oy verirken gönderilen değer: serbest seçeneğin, katılımcının, etkinlik aracının ya da albüm fotoğrafının kimliği." }
+        label: { type: string, minLength: 1, maxLength: 100, description: Yalnızca serbest seçenekte. }
+        user_id: { type: string, format: uuid, description: "Seçeneğin arkasındaki kişi; serbest seçenekte yoktur." }
+        vehicle: { $ref: "#/components/schemas/EventVoteVehicle" }
+        upload_id: { type: string, format: uuid, description: "Yalnızca albümde; fotoğrafın dosyası (linkleri `POST /v1/media/urls`)." }
+        vote_count: { type: integer, minimum: 0, description: "Seçeneğe verilen oy; `results_visible` değilse 0." }
+        winner: { type: boolean, description: "En çok oy alanlardan (en az bir oy); yalnızca `results_visible` iken." }
+    EventVoteVehicle:
+      type: object
+      required: [make]
+      description: Araç kaynaklı seçeneğin aracı; plaka yoktur.
+      properties:
+        make: { type: string }
+        model: { type: string, description: Verilmemişse yoktur. }
+        model_year: { type: integer, description: Verilmemişse yoktur. }
+        color: { type: string, description: Verilmemişse yoktur. }
+    EventVoteCastRequest:
+      type: object
+      required: [option_id]
+      additionalProperties: false
+      properties:
+        option_id: { type: string, format: uuid, description: "Oylamanın bir seçeneğinin `id`'si." }
+    EventVoteOptionRequest:
+      type: object
+      required: [label]
+      additionalProperties: false
+      properties:
+        label: { type: string, minLength: 1, maxLength: 656, description: "Seçenek; kırpıldıktan ve iç boşluklar teke indirildikten sonra 1–100 karakter." }
     EventCelebration:
       type: object
       required: [winners, hidden, announced, caller_can_announce]
@@ -10513,12 +11629,13 @@ components:
           description: Şu an ilan edebilirsiniz (organizatör, moderatör, yönetici; etkinlik başlamış, iptal değil, donmamış, tayfa salt okunur değil). Kazanan olup olmadığı `winners`'tadır.
     EventCelebrationWinner:
       type: object
-      description: "Bir kazanan: `user_id`, `team_id` ve `guest_id`'den tam olarak biri vardır."
+      description: "Bir kazanan: `user_id`, `team_id` ve `guest_id`'den tam olarak biri vardır. Oylama kaynağında `vote_option_id` vardır; `user_id` seçeneğin arkasındaki kişidir (katılımcı, aracın sahibi, fotoğrafı yükleyen), serbest seçenekte yoktur."
       properties:
         user_id: { type: string, format: uuid }
         team_id: { type: string, format: uuid, description: Kaynağın oturttuğu takım bileşenindeki takım. }
         guest_id: { type: string, format: uuid, description: Etkinliğin misafir oyuncusu; takma adı etkinliğin misafirlerinden okunur. }
         table_id: { type: string, format: uuid, description: "Yalnızca yazboz kaynağında; kazanılan masa." }
+        vote_option_id: { type: string, format: uuid, description: "Yalnızca oylama kaynağında; kazanan seçeneğin `id`'si (`EventVoteOption`)." }
     EventCelebrationRequest:
       type: object
       additionalProperties: false
@@ -10567,6 +11684,49 @@ components:
         body: { type: string, minLength: 1, maxLength: 2256, description: "Soru; kırpıldıktan ve iç boşluklar teke indirildikten sonra 1–500 karakter." }
         anonymous: { type: boolean, default: false, description: "Yalnızca `anonymous_allowed` bileşende." }
         client_request_id: { type: string, format: uuid }
+    PoolLinkedQuestion:
+      type: object
+      required: [question_id, body, subject_key, photo_upload_ids, answer_count, created_at]
+      description: Etkinliğe bağlı bir soru havuzu sorusu (#271).
+      properties:
+        question_id: { type: string, format: uuid }
+        author_user_id:
+          type: string
+          format: uuid
+          description: Yazarın hesabı silindiyse yoktur ("Silinmiş kullanıcı").
+        body: { type: string, description: Sorunun metni; fotoğrafı varsa boş olabilir. }
+        subject_key: { type: string }
+        topic_key: { type: string, description: Konu yoksa alan yoktur. }
+        photo_upload_ids:
+          type: array
+          maxItems: 2
+          items: { type: string, format: uuid }
+        answer_count: { type: integer, description: Görünen cevap sayısı. }
+        created_at: { type: string, format: date-time }
+    EventPoolLinks:
+      type: object
+      required: [questions, max_links, caller_can_edit]
+      description: Bir etkinliğin soru havuzu bağlantısı bileşeni (#271).
+      properties:
+        questions:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/PoolLinkedQuestion" }
+        max_links: { type: integer, minimum: 1, maximum: 50, description: Bileşenin bağlayabileceği en fazla soru. }
+        caller_can_edit:
+          type: boolean
+          description: Listeyi şu an değiştirebilirsiniz (organizatör yetkisi; etkinlik iptal değil, donmamış, tayfa salt okunur değil).
+    EventPoolLinksRequest:
+      type: object
+      required: [question_ids]
+      additionalProperties: false
+      properties:
+        question_ids:
+          type: array
+          maxItems: 50
+          uniqueItems: true
+          description: Bağlı soruların yeni hali, sırasıyla; boş dizi bütün bağları kaldırır.
+          items: { type: string, format: uuid }
     VocabularyIds:
       type: object
       description: Alan anahtarı → tayfa sözlüğündeki değerin kimliği (#244).
@@ -10618,8 +11778,12 @@ components:
         event_count: { type: integer, minimum: 0, description: Değere katkı veren etkinlik sayısı. }
     TayfaStatContribution:
       type: object
+      deprecated: true
       required: [user_id, metric_key, value, event_count]
-      description: Etkin bir üyenin ölçüm ya da günlük metriğindeki katkısı.
+      description: |
+        Kullanılmıyor (#322): üye katkıları artık listelenmez. Yalnızca
+        eski istemciler için `TayfaStats.contributions`'ın öğe türü olarak
+        durur.
       properties:
         user_id: { type: string, format: uuid }
         metric_key: { $ref: "#/components/schemas/TayfaStatMetricKey" }
@@ -10627,7 +11791,7 @@ components:
         event_count: { type: integer, minimum: 0 }
     TayfaStats:
       type: object
-      required: [years, totals, contributions]
+      required: [years, totals, own_contributions, contributions]
       properties:
         year: { type: integer, description: "İstenen yıl; tüm zamanlarda yoktur." }
         years:
@@ -10636,9 +11800,23 @@ components:
           items: { type: integer }
         totals:
           type: array
+          description: Tayfa toplamları; her üyeye açık.
+          items: { $ref: "#/components/schemas/TayfaStat" }
+        own_contributions:
+          type: array
+          description: |
+            Çağıranın bu tayfadaki kendi katkısı: ölçüm ve günlük metrikleri
+            (`source` `measure` ya da `log`; hassas ölçüm yok), `metric_key`
+            sırasıyla. Başka üyenin katkısı hiçbir zaman yoktur (#322).
           items: { $ref: "#/components/schemas/TayfaStat" }
         contributions:
           type: array
+          deprecated: true
+          maxItems: 0
+          description: |
+            Kullanılmıyor (#322): her zaman boş dizi. Yalnızca eski
+            istemciler bozulmasın diye durur; `own_contributions`'ı okuyun.
+            Sonraki bir sürümde kalkacak.
           items: { $ref: "#/components/schemas/TayfaStatContribution" }
         computed_at:
           type: string
@@ -10737,7 +11915,8 @@ components:
         Ana sayfa bileşeni. `kind` istemciye bilgi içindir; anahtar
         listesi sunucunundur ve büyüyebilir (bugün `upcoming`,
         `announcements`, `polls`, `questions`, `stats`, `goal`,
-        `countdown`, `champions`, `log_summary`, `daily`).
+        `countdown`, `champions`, `log_summary`, `daily`, `library`,
+        `question_pool`, `materials`, `garage`).
       properties:
         key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
         kind:
@@ -10963,6 +12142,303 @@ components:
           type: array
           items: { $ref: "#/components/schemas/DailyItem" }
 
+    LibraryItemKind:
+      type: string
+      description: "Kalemin türü: kitap, kamp malzemesi, masa oyunu, alet, diğer."
+      enum: [book, camping_gear, board_game, tool, other]
+    LibraryLoan:
+      type: object
+      required: [id, item_id, item_name, item_kind, state, requested_at, caller_is_owner]
+      description: |
+        Bir ödünç; yalnızca iki tarafı görür. `state`: `requested` (istendi),
+        `approved` (sahibi onayladı), `handed_over` (teslim edildi),
+        `returned` (iade alındı), `declined` (reddedildi), `cancelled`
+        (borç alan geri aldı, kalem geri çekildi ya da taraf ayrıldı),
+        `closed` (teslimdeyken taraflardan biri tayfadan ayrıldı, kayıt 30
+        gün sonra iade alınmadan kapandı). Tanınmayan değer `unknown`.
+      properties:
+        id: { type: string, format: uuid }
+        item_id: { type: string, format: uuid }
+        item_name: { type: string, description: "Kalemin adı (kitapta tayfa sözlüğündeki adı)." }
+        item_kind: { $ref: "#/components/schemas/LibraryItemKind" }
+        owner_user_id:
+          type: string
+          format: uuid
+          description: Kalemin sahibi; hesabı silindiyse yoktur.
+        borrower_user_id:
+          type: string
+          format: uuid
+          description: Borç alan; hesabı silindiyse yoktur.
+        state:
+          type: string
+          enum: [requested, approved, handed_over, returned, declined, cancelled, closed, unknown]
+        requested_at: { type: string, format: date-time }
+        approved_at: { type: string, format: date-time }
+        handed_over_at: { type: string, format: date-time }
+        due_at:
+          type: string
+          format: date-time
+          description: İade tarihi; yoksa alan yoktur.
+        orphaned_at:
+          type: string
+          format: date-time
+          description: Teslimdeyken taraflardan biri tayfadan ayrıldı; kayıt 30 gün sonra kapanır.
+        ended_at: { type: string, format: date-time }
+        caller_is_owner: { type: boolean, description: "Çağıran kalemin sahibi mi (değilse borç alandır)." }
+    LibraryQueueEntry:
+      type: object
+      required: [user_id, rank]
+      properties:
+        user_id: { type: string, format: uuid }
+        rank: { type: integer, format: int32, description: "1 sıradaki." }
+    LibraryItem:
+      type: object
+      required: [id, kind, name, status, created_at, updated_at, queue_length]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/LibraryItemKind" }
+        name:
+          type: string
+          description: 1–80 karakter, tek satır (kitapta 1–60, tayfa sözlüğündeki adı).
+        vocabulary_id:
+          type: string
+          format: uuid
+          description: Yalnızca kitapta, tayfa sözlüğündeki değer (ad alanı `book`).
+        note:
+          type: string
+          description: En fazla 300 karakter; satırlar `\n` ile ayrılır. Yoksa alan yoktur.
+        photo_upload_id:
+          type: string
+          format: uuid
+          description: Sahibinin fotoğrafı (`library_item` yüklemesi); adresini `POST /v1/media/urls` verir.
+        owner_user_id: { type: string, format: uuid }
+        status:
+          type: string
+          description: "`available` ya da `on_loan` (teslim edildi). Tanınmayan değer `unknown`."
+          enum: [available, on_loan, withdrawn, unknown]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        queue_length: { type: integer, format: int32, description: "Sırada bekleyen kişi sayısı." }
+        caller_queue_rank:
+          type: integer
+          format: int32
+          description: Çağıranın sıradaki yeri (1 sıradaki); beklemiyorsa alan yoktur.
+        active_loan:
+          $ref: "#/components/schemas/LibraryLoan"
+        queue:
+          type: array
+          description: Sıra; yalnızca sahibine ve yalnızca `GET …/items/{library_item_id}` ile.
+          items: { $ref: "#/components/schemas/LibraryQueueEntry" }
+    LibraryItemList:
+      type: object
+      required: [items, caller_can_add]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/LibraryItem" }
+        caller_can_add: { type: boolean, description: "Çağıran şimdi kalem ekleyebilir mi." }
+    LibraryItemCreateRequest:
+      type: object
+      required: [kind, name, client_request_id]
+      additionalProperties: false
+      properties:
+        kind: { $ref: "#/components/schemas/LibraryItemKind" }
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        note: { type: string, maxLength: 4096, description: "Boş: yok." }
+        photo_upload_id: { type: string, format: uuid }
+        client_request_id: { type: string, format: uuid }
+    LibraryItemUpdateRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 1024 }
+        note: { type: string, maxLength: 4096, description: "Boş: yok." }
+        photo_upload_id: { type: string, format: uuid, description: "Yoksa fotoğraf kalkar." }
+    MaterialKind:
+      type: string
+      description: "`link` https bağlantı, `note_photo` kişinin kendi not fotoğrafları. Tanınmayan değer `unknown`."
+      enum: [link, note_photo, unknown]
+    Material:
+      type: object
+      required: [id, kind, title, subject_key, created_at, updated_at, caller_can_edit, caller_can_delete]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { $ref: "#/components/schemas/MaterialKind" }
+        title: { type: string, description: "1–80 karakter, tek satır." }
+        url:
+          type: string
+          description: |
+            Yalnızca `link`; sunucunun normalleştirdiği https adresi (en
+            fazla 500 karakter). Sunucu bu adresi hiç açmadı; istemci
+            önizleme çekmez, açmadan önce uyarır.
+        domain:
+          type: string
+          description: |
+            Yalnızca `link`; sunucunun adresten ayrıştırdığı alan adı (küçük
+            harf; Türkçe karakterli alan adı punycode). Bağlantıyla birlikte
+            gösterilir.
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: |
+            Yalnızca `note_photo`; yazarın fotoğrafları (`material_note`
+            yüklemesi), sırasıyla; adreslerini `POST /v1/media/urls` verir.
+            Yazarın hesabı silinince boşalabilir.
+          items: { type: string, format: uuid }
+        subject_key:
+          type: string
+          description: Ders anahtarı (her zaman var); etiket sonradan emekliye ayrılmış olabilir.
+        topic_key:
+          type: string
+          description: Konu anahtarı; yoksa alan yoktur.
+        author_user_id:
+          type: string
+          format: uuid
+          description: Yazar; hesabı silindiyse alan yoktur.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        caller_can_edit: { type: boolean, description: "Çağıran şimdi düzenleyebilir mi (yazarı)." }
+        caller_can_delete: { type: boolean, description: "Çağıran şimdi silebilir mi (yazarı, moderatör)." }
+    MaterialList:
+      type: object
+      required: [materials, caller_can_add]
+      properties:
+        materials:
+          type: array
+          items: { $ref: "#/components/schemas/Material" }
+        next_page_token: { type: string, description: "Yoksa son sayfa." }
+        caller_can_add: { type: boolean, description: "Çağıran şimdi materyal ekleyebilir mi." }
+    MaterialCreateRequest:
+      type: object
+      required: [kind, title, subject_key, client_request_id]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [link, note_photo]
+        title: { type: string, minLength: 1, maxLength: 1024 }
+        url: { type: string, maxLength: 2048, description: "Yalnızca `link`; zorunlu." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: "Yalnızca `note_photo`; 1–3 fotoğraf."
+          items: { type: string, format: uuid }
+        subject_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        topic_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$", description: "İsteğe bağlı; dersin altında bir konu." }
+        client_request_id: { type: string, format: uuid }
+    MaterialUpdateRequest:
+      type: object
+      required: [title, subject_key]
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 1024 }
+        url: { type: string, maxLength: 2048, description: "`link` için zorunlu; `note_photo` için verilmez." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: "`note_photo` için 1–3 fotoğraf (kalanlar ve yeniler); listede olmayan silinir."
+          items: { type: string, format: uuid }
+        subject_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+        topic_key: { type: string, pattern: "^[a-z][a-z0-9_]{1,39}$" }
+    GarageVehicle:
+      type: object
+      required: [id, owner_user_id, make, photo_upload_ids, created_at, updated_at, caller_can_edit, caller_can_remove]
+      description: Üye garajındaki bir araç (#272). Plaka alanı yoktur.
+      properties:
+        id: { type: string, format: uuid }
+        owner_user_id: { type: string, format: uuid, description: Aracın sahibi. }
+        make: { type: string, description: "1–40 karakter, tek satır." }
+        model: { type: string, description: "En fazla 40 karakter; yoksa alan yoktur." }
+        model_year: { type: integer, description: Verilmemişse yoktur. }
+        color: { type: string, description: "En fazla 30 karakter; yoksa alan yoktur." }
+        note: { type: string, description: "En fazla 200 karakter, tek satır; yoksa alan yoktur." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: Sahibinin fotoğrafları (`garage_vehicle` yüklemesi), sırasıyla; adreslerini `POST /v1/media/urls` verir.
+          items: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        caller_can_edit: { type: boolean, description: "Çağıran aracın sahibi mi (düzenler ve siler; `/v1/me/garage`)." }
+        caller_can_remove:
+          type: boolean
+          description: Çağıran aracı tayfanın garajından şimdi kaldırabilir mi (moderatör; yalnızca tayfa garajı listesinde).
+    MemberGarage:
+      type: object
+      required: [vehicles, caller_can_add]
+      description: Çağıranın kendi garajı (#272).
+      properties:
+        vehicles:
+          type: array
+          description: Eklenme sırasıyla; en fazla 10.
+          items: { $ref: "#/components/schemas/GarageVehicle" }
+        caller_can_add: { type: boolean, description: "10'dan az araç var mı." }
+    TayfaGarage:
+      type: object
+      required: [vehicles, caller_visible]
+      description: Tayfada görünen garaj araçları (#272).
+      properties:
+        vehicles:
+          type: array
+          description: En yeni önce.
+          items: { $ref: "#/components/schemas/GarageVehicle" }
+        next_page_token: { type: string, description: "Yoksa son sayfa." }
+        caller_visible: { type: boolean, description: Çağıranın kendi garajı bu tayfada görünüyor mu. }
+    GarageVehicleRequest:
+      type: object
+      required: [make]
+      additionalProperties: false
+      description: Araç bir bütün olarak yazılır (kısmi güncelleme yok).
+      properties:
+        make: { type: string, minLength: 1, maxLength: 1024, description: "1–40 karakter; boşluklar tekleştirilir." }
+        model: { type: string, maxLength: 1024, description: "En fazla 40 karakter." }
+        model_year: { type: integer, minimum: 0, description: "0 ya da 1900 – gelecek yıl." }
+        color: { type: string, maxLength: 1024, description: "En fazla 30 karakter." }
+        note: { type: string, maxLength: 1024, description: "En fazla 200 karakter, tek satır." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: "0–3 fotoğraf (çağıranın hazır `garage_vehicle` yüklemeleri), sırasıyla; düzenlemede listede olmayan silinir."
+          items: { type: string, format: uuid }
+    GarageVehicleCreateRequest:
+      type: object
+      required: [make, client_request_id]
+      additionalProperties: false
+      properties:
+        make: { type: string, minLength: 1, maxLength: 1024, description: "1–40 karakter; boşluklar tekleştirilir." }
+        model: { type: string, maxLength: 1024, description: "En fazla 40 karakter." }
+        model_year: { type: integer, minimum: 0, description: "0 ya da 1900 – gelecek yıl." }
+        color: { type: string, maxLength: 1024, description: "En fazla 30 karakter." }
+        note: { type: string, maxLength: 1024, description: "En fazla 200 karakter, tek satır." }
+        photo_upload_ids:
+          type: array
+          maxItems: 3
+          description: "0–3 fotoğraf (çağıranın hazır `garage_vehicle` yüklemeleri), sırasıyla."
+          items: { type: string, format: uuid }
+        client_request_id: { type: string, format: uuid }
+    GarageVisibility:
+      type: object
+      required: [visible]
+      additionalProperties: false
+      properties:
+        visible: { type: boolean, description: Garajınız bu tayfada görünsün mü. }
+    LibraryLoanList:
+      type: object
+      required: [loans]
+      properties:
+        loans:
+          type: array
+          items: { $ref: "#/components/schemas/LibraryLoan" }
+    LibraryHandOverRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        due_at:
+          type: string
+          format: date-time
+          description: İsteğe bağlı iade tarihi; şimdiden sonra, en fazla 90 gün.
+
     EventTypeKey:
       type: string
       description: |
@@ -10975,7 +12451,8 @@ components:
         Türün alanlarının değerleri: alan anahtarı → değer. Alanlar
         etkinliğin tür sürümünün tanımındadır (`CatalogDefinition.fields`);
         değerin biçimi alanın `kind`'ine göredir (`CatalogField` tablosu):
-        metin, sayı, `true`/`false`, `YYYY-MM-DD` ya da metin dizisi. Değeri
+        metin, sayı, `true`/`false`, `YYYY-MM-DD` ya da metin dizisi
+        (`multi_choice` seçenekleri, `study_tags` etiket anahtarları). Değeri
         olmayan alan nesnede yer almaz; `null` gönderilmez.
       additionalProperties: true
 
@@ -11467,8 +12944,36 @@ components:
             `push_now_started_title` / `push_now_started_body` anahtarlarıdır.
             Tayfa seviyesi `none` ya da tayfanın şimdi tercihi (`tayfa_now`)
             `none` ise push gitmez.
+            `library_due` (#270, ADR-0040 §1): ödüncün iade tarihi geçti;
+            borç alana tek hatırlatma. `library_loan_orphaned`: teslim
+            edilmiş bir ödünçte taraflardan biri tayfadan ayrıldı; iki tarafa
+            (ayrılana da) uyarı, kayıt 30 gün sonra kapanır. İkisinde de hedef
+            ödüncün tayfasıdır (`tayfa`), `actor_id` yoktur; eşyayı ve kişileri
+            adlandırmaz, ödünçleri `GET /v1/tayfas/{tayfa_id}/library/loans`
+            verir. Yalnızca uygulama içi, push gitmez.
+            Ortak kütüphane ödünç adımları (#321, ADR-0040 §1): hedef
+            `library_item` (kalem; `GET /v1/tayfas/{tayfa_id}/library/items/{library_item_id}`),
+            `actor_id` adımı atan üyedir; alıcı yalnızca öbür taraftır ve
+            aktörle arasında iki yönden engel varsa bildirim hiç yazılmaz.
+            Kalemin sahibine: `library_loan_requested` (bir üye istedi,
+            ödünç isteği onda; onay bekliyor), `library_queue_joined` (bir
+            üye sıraya girdi). İsteyene: `library_loan_approved` (sahibi
+            onayladı), `library_loan_declined` (sahibi reddetti),
+            `library_loan_handed_over` (sahibi teslim etti; varsa iade
+            tarihi ödünçtedir). Eşyayı ve kişileri adlandırmaz. Push gider:
+            yalnızca `push_<tür>_title` / `push_<tür>_body` anahtarları ve
+            kimlikler; tayfanın bildirim tercihi geçerlidir, kişisel
+            sayıldığı için `mentions` seviyesinde de gider, `none` durdurur.
+            Kalem bu arada geri çekildiyse ya da üyeliğiniz bittiyse kalem
+            ucu `library-item-not-found` ya da tayfa hatası döner.
+            `library_queue_turn` (#332, ADR-0040 §1): sıranız geldi, kalemin
+            önceki ödüncü bitti ve ödünç isteğiniz açıldı (sahibinin onayını
+            bekliyor). Hedef `library_item`, `actor_id` yoktur; kalemin
+            sahibiyle aranızda iki yönden engel varsa yazılmaz. Eşyayı ve
+            kişileri adlandırmaz; push gider (`push_library_queue_turn_title`
+            / `push_library_queue_turn_body`), kişisel sayılır.
             Tanınmayan değer `unknown`.
-          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, now_started, unknown]
+          enum: [event_created, event_updated, event_cancelled, rsvp_promoted, announcement, answer_received, join_request, join_approved, tayfa_deletion_requested, tayfa_warned, tayfa_archived, tayfa_suspended, tayfa_unsuspended, hike_overdue, friend_request, friend_accepted, tayfa_invitation, report_resolved, dm_request, dm_message, data_export_ready, friend_suggestion, safety_alert, celebration, badge_earned, now_started, library_due, library_loan_orphaned, library_loan_requested, library_queue_joined, library_loan_approved, library_loan_declined, library_loan_handed_over, library_queue_turn, unknown]
         tayfa_id:
           type: string
           format: uuid
@@ -11486,8 +12991,10 @@ components:
             `user` için bir kullanıcının kimliği (profilini açın); `report`
             için kendi şikâyetinizin kimliği; `dm_conversation` için
             konuşmanızın kimliği; `data_export` için kendi veri dışa
-            aktarma talebinizin kimliği (`GET /v1/me/data-exports/{data_export_id}`).
-          enum: [tayfa, membership, announcement, event, answer, user, report, dm_conversation, data_export, unknown]
+            aktarma talebinizin kimliği (`GET /v1/me/data-exports/{data_export_id}`);
+            `library_item` için bildirimin tayfasındaki bir ortak kütüphane
+            kaleminin kimliği (`GET /v1/tayfas/{tayfa_id}/library/items/{library_item_id}`).
+          enum: [tayfa, membership, announcement, event, answer, user, report, dm_conversation, data_export, library_item, unknown]
         target_id: { type: string, format: uuid }
         question_id:
           type: string
@@ -11989,8 +13496,16 @@ components:
         low: { type: boolean, description: Bir türden 10'dan az kaldı; yükleyin. }
     UploadPurpose:
       type: string
-      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence]
+      enum: [avatar, log_photo, cover, event_photo, chat_photo, dm_attachment, report_evidence, library_item, question_pool, material_note, garage_vehicle]
       description: |
+        `garage_vehicle` üye garajındaki bir aracın fotoğrafıdır (#272;
+        araç başına en fazla üç). Garaj kişiye aittir: `tayfa_id` verilmez.
+        `material_note` materyal kütüphanesindeki kişinin kendi not
+        fotoğrafıdır (#261; materyal başına en fazla üç).
+        `library_item` ortak kütüphane kaleminin fotoğrafıdır (#270; kalem
+        başına bir). `question_pool` soru havuzundaki bir sorunun ya da
+        cevabın fotoğrafıdır (#271; her birine en fazla iki; kişinin kendi
+        notu ya da takıldığı soru).
         `cover` tayfa ya da etkinlik kapağıdır. `event_photo` etkinlik
         albümünün fotoğrafıdır (`POST .../events/{event_id}/photos`); kapak
         olarak kullanılamaz. `chat_photo` kanal mesajı fotoğrafı,
@@ -12042,7 +13557,7 @@ components:
         tayfa_id:
           type: string
           format: uuid
-          description: "`cover`, `log_photo`, `event_photo` ve `chat_photo` için zorunlu; `avatar`, `dm_attachment` ve `report_evidence`'ta verilmez."
+          description: "`cover`, `log_photo`, `event_photo`, `chat_photo`, `library_item`, `question_pool` ve `material_note` için zorunlu; `avatar`, `dm_attachment`, `report_evidence` ve `garage_vehicle`'da verilmez."
         client_request_id:
           type: string
           format: uuid
@@ -13209,12 +14724,22 @@ components:
         | `boolean` | `true` / `false` | — |
         | `date` | `YYYY-MM-DD` | — |
         | `duration` | dakika, tam sayı | `min`, `max` |
+        | `study_tags` | ders/konu etiketi anahtarlarının listesi | `min_depth`, `max_depth`, `max_selected` |
+
+        `study_tags` (ADR-0043) ders/konu listesinden (`Catalog.study_tags`)
+        seçimdir ve yalnızca türün alanı olabilir (`log` kayıt alanı olamaz).
+        Her öğe seçilen en derin etiketin anahtarıdır (konu, dersini ve
+        düzeyini belirler); tekrar yoktur, sıra korunur. Yeni seçimde etiket
+        ve üstleri `active` olmalı, derinliği `min_depth`–`max_depth`
+        aralığında olmalıdır; etkinliğin o alandaki mevcut değerinde olan
+        emekli etiket düzenlemede kalabilir. Aykırı değer `validation`
+        (`fields.<anahtar>`) alır.
       required: [key, kind, labels]
       properties:
         key: { type: string, description: "Tür içinde tekil: `^[a-z][a-z0-9_]{1,39}$`." }
         kind:
           type: string
-          description: "`text`, `long_text`, `integer`, `decimal`, `choice`, `multi_choice`, `boolean`, `date`, `duration`."
+          description: "`text`, `long_text`, `integer`, `decimal`, `choice`, `multi_choice`, `boolean`, `date`, `duration`, `study_tags`."
         required: { type: boolean, description: "Etkinlik oluştururken zorunlu mu; yoksa `false`." }
         labels: { $ref: "#/components/schemas/CatalogLabels" }
         max_length: { type: integer, format: int32, description: "`text`, `long_text`: en fazla karakter." }
@@ -13233,7 +14758,15 @@ components:
           type: object
           description: Seçenek anahtarı → adlar (dil → metin). Adı olmayan seçenek olduğu gibi gösterilir (`"1"` … `"5"`).
           additionalProperties: { $ref: "#/components/schemas/CatalogLabels" }
-        max_selected: { type: integer, format: int32, description: "`multi_choice`: en fazla seçim; yoksa seçenek sayısı." }
+        max_selected: { type: integer, format: int32, description: "`multi_choice`: en fazla seçim, yoksa seçenek sayısı; `study_tags`: 1–10, yoksa 1." }
+        min_depth:
+          type: string
+          enum: [level, subject]
+          description: "`study_tags`: seçilebilecek en sığ etiket (`level` düzey, `subject` ders); yoksa `subject`."
+        max_depth:
+          type: string
+          enum: [level, subject, topic]
+          description: "`study_tags`: seçilebilecek en derin etiket (`topic` konu); `min_depth`'ten sığ olamaz; yoksa `topic`."
         vocabulary: { $ref: "#/components/schemas/CatalogVocabulary" }
     CatalogVocabulary:
       type: object
@@ -13274,9 +14807,9 @@ components:
         | `teams` | `mode` (`random`, `balanced`, `manual`; seçimli), `team_size` (1–50), `team_count` (2–50) |
         | `draw` | — |
         | `bracket` | `format` (`elimination`, `league`, `swiss`; seçimli), `best_of` (1, 3, 5; seçimli) |
-        | `scoreboard` | `side` (`player`, `team`), `tables` (boolean), `presets` (ön ayar anahtarları), `rounds` (`round`, `single`, `first_to`; seçimli), `target` (1–100000), `winner` (`high`, `low`, `first`; seçimli), `result` (`points`, `wdl`), `best_of` (1, 3, 5; seçimli), `guests` (boolean) |
+        | `scoreboard` | `side` (`player`, `team`, `pair`), `tables` (boolean), `presets` (ön ayar anahtarları), `rounds` (`round`, `single`, `first_to`; seçimli), `target` (1–100000), `winner` (`high`, `low`, `first`; seçimli), `result` (`points`, `wdl`), `best_of` (1, 3, 5; seçimli), `guests` (boolean) |
         | `ranking` | `source` (kişisel bir ölçümün `key`'i) ya da `metric` (`duration`, `rank`); biri zorunlu, ikisi birlikte olmaz; `direction` (`asc`, `desc`) |
-        | `vote` | `source` (`free`, `participants`, `vehicles`, `album`, `route_stops`; zorunlu) |
+        | `vote` | `source` (`free`, `participants`, `vehicles`, `album`; zorunlu). `vehicles` türde `vehicles` bileşeni ister; `participants` hassas katılımlı (`sensitive_attendance`) türde olmaz |
         | `celebration` | `source` (bir `scoreboard`, `bracket`, `ranking` ya da `vote` bileşeninin `key`'i) |
         | `measure` | `unit`, `scope` (`personal`, `total`), `entered_by` (`self`, `organizer`) zorunlu; `min`, `max`, `decimals` (0–3), `showcase`, `sensitive` (boolean), `prefill_from` (bir alanın `key`'i) |
         | `goal` | `measure` (bir ölçümün `key`'i; zorunlu), `default_target` |
@@ -13465,8 +14998,14 @@ components:
         toplama bileşenindeki bir sorudur (#256); anonim sorunun yazarı
         tayfa kuyruğunda yer almaz (`subject_user_id` yoktur), yalnızca
         platform yönetimine görünür. `daily_item` günün içeriği havuzundaki
-        bir içeriktir (#269); `daily` modülü açık olmalıdır.
-      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item]
+        bir içeriktir (#269); `daily` modülü açık olmalıdır. `library_item`
+        ortak kütüphanedeki bir kalemdir (#270; konusu sahibidir); `library`
+        modülü açık, kalem geri çekilmemiş olmalıdır. `material` materyal
+        kütüphanesindeki bir materyaldir (#261; konusu yazarıdır);
+        `materials` modülü açık, materyal görünür olmalıdır.
+        `garage_vehicle` üye garajındaki bir araçtır (#272; konusu
+        sahibidir); `garage` modülü açık, araç bu tayfada görünür olmalıdır.
+      enum: [user, tayfa, announcement, event, question, answer, poll, log_entry, dm_message, event_photo, channel_message, event_question, daily_item, library_item, material, garage_vehicle]
 
     BanRequest:
       type: object
@@ -13483,7 +15022,9 @@ components:
         Topluluk Kuralları'na göre. `child_safety` (çocuk/genç güvenliği)
         kuyrukta öne geçer ve hemen platforma da gider; `staff_conduct`
         (yönetici/moderatörün yetkisini kullanımı) yalnızca platforma gider.
-      enum: [harassment, hate_speech, violence, privacy, impersonation, illegal_trade, drugs, gambling, dangerous_activity, fake_event, sexual_content, child_safety, spam, copyright, staff_conduct, other]
+        `paid_tutoring` ücretli özel ders teklifi ya da reklamıdır (#271,
+        ADR-0040 §2).
+      enum: [harassment, hate_speech, violence, privacy, impersonation, illegal_trade, drugs, gambling, dangerous_activity, fake_event, sexual_content, child_safety, spam, copyright, staff_conduct, other, paid_tutoring]
 
     ReportCreateRequest:
       type: object

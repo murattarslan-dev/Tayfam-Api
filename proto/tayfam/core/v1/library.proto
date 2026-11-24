@@ -1,0 +1,344 @@
+syntax = "proto3";
+
+package tayfam.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// TayfaLibraryService is the tayfa's shared library — ortak eşya (issue
+// #270; ADR-0040 §1): books, camping gear, board games, tools a member
+// lends to the others. Members add their own items; the owner edits and
+// withdraws them; a moderator removes anyone's (moderation). A member asks
+// for an item; the owner approves, hands it over (with an optional return
+// date, at most 90 days) and takes it back. One active loan per item at a
+// time: while there is one, a request waits in the item's queue and gets
+// its loan request when the active loan ends. No money, deposit or fine.
+//
+// Who sees a loan: only its two sides. Every member sees an item's status
+// (available, on_loan) and how many wait for it; the owner sees the active
+// loan and the queue, the borrower their own loan and place in the queue.
+// When one side of a handed-over loan leaves the tayfa (leaving, removal,
+// ban or account deletion), the leaver's items are withdrawn, both sides
+// get an in-app warning, and the loan stays open for 30 days, then closes.
+// The borrower gets one in-app reminder once the return date passes.
+// Ended loans are kept for a year.
+//
+// Only gateway calls it with the user's access token; the acting user is
+// always the token's. Anyone but an ACTIVE member of the tayfa gets
+// ERROR_REASON_TAYFA_NOT_FOUND; with the library module off every method
+// gets ERROR_REASON_MODULE_DISABLED. Writes on a read-only tayfa get
+// ERROR_REASON_TAYFA_READ_ONLY. Names and notes are content: they are never
+// logged or written to the audit record or an outbox event.
+service TayfaLibraryService {
+  // ListLibraryItems returns the tayfa's items that are not withdrawn, the
+  // newest first; with kind only that kind, with mine only the caller's.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, kind).
+  rpc ListLibraryItems(ListLibraryItemsRequest) returns (ListLibraryItemsResponse);
+
+  // GetLibraryItem returns an item; its owner also gets the queue.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_id),
+  // ERROR_REASON_LIBRARY_ITEM_NOT_FOUND.
+  rpc GetLibraryItem(GetLibraryItemRequest) returns (GetLibraryItemResponse);
+
+  // CreateLibraryItem adds an item of the caller's. A book's name is the
+  // tayfa vocabulary's (namespace book): a known name is reused, a new one
+  // is added. A repeated client_request_id returns the item it created.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, kind, name, note,
+  // photo_upload_id, client_request_id), ERROR_REASON_UPLOAD_NOT_FOUND,
+  // ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE,
+  // ERROR_REASON_LIBRARY_ITEM_LIMIT, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc CreateLibraryItem(CreateLibraryItemRequest) returns (CreateLibraryItemResponse);
+
+  // UpdateLibraryItem replaces the name, note and photo of the caller's
+  // item; its kind does not change. An empty photo_upload_id removes the
+  // photo.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_id, name, note,
+  // photo_upload_id), ERROR_REASON_LIBRARY_ITEM_NOT_FOUND (not the
+  // caller's), the upload errors of CreateLibraryItem,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY.
+  rpc UpdateLibraryItem(UpdateLibraryItemRequest) returns (UpdateLibraryItemResponse);
+
+  // WithdrawLibraryItem withdraws the caller's item, or removes anyone's
+  // for a moderator. Waiting requests and the queue end; its note and
+  // photo are deleted. The owner cannot withdraw a handed-over item; a
+  // moderator's removal leaves a handed-over loan open for the owner to
+  // take back. There is no undo.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_id),
+  // ERROR_REASON_LIBRARY_ITEM_NOT_FOUND, ERROR_REASON_LIBRARY_ITEM_ON_LOAN,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_MUTED,
+  // ERROR_REASON_TAYFA_READ_ONLY.
+  rpc WithdrawLibraryItem(WithdrawLibraryItemRequest) returns (WithdrawLibraryItemResponse);
+
+  // RequestLibraryLoan asks for an item: a loan request when it has no
+  // active loan, otherwise a place at the end of its queue. Asking again
+  // changes nothing.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_id),
+  // ERROR_REASON_LIBRARY_ITEM_NOT_FOUND, ERROR_REASON_LIBRARY_OWN_ITEM,
+  // ERROR_REASON_LIBRARY_QUEUE_FULL, ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_MUTED, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc RequestLibraryLoan(RequestLibraryLoanRequest) returns (RequestLibraryLoanResponse);
+
+  // CancelLibraryRequest takes back the caller's request (requested or
+  // approved, not yet handed over) or place in the queue. With neither it
+  // changes nothing. The next in the queue gets the item's loan request.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, item_id),
+  // ERROR_REASON_LIBRARY_ITEM_NOT_FOUND, ERROR_REASON_LIBRARY_LOAN_STATE
+  // (handed over), ERROR_REASON_PERMISSION_DENIED,
+  // ERROR_REASON_TAYFA_READ_ONLY.
+  rpc CancelLibraryRequest(CancelLibraryRequestRequest) returns (CancelLibraryRequestResponse);
+
+  // ListLibraryLoans returns the caller's loans in the tayfa, as borrower
+  // and as owner: the active ones first, then the latest; at most 200.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id).
+  rpc ListLibraryLoans(ListLibraryLoansRequest) returns (ListLibraryLoansResponse);
+
+  // ApproveLibraryLoan approves a request for the caller's item.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, loan_id),
+  // ERROR_REASON_LIBRARY_LOAN_NOT_FOUND, ERROR_REASON_LIBRARY_LOAN_STATE,
+  // ERROR_REASON_PERMISSION_DENIED, ERROR_REASON_TAYFA_READ_ONLY.
+  rpc ApproveLibraryLoan(ApproveLibraryLoanRequest) returns (ApproveLibraryLoanResponse);
+
+  // DeclineLibraryLoan declines a requested or approved loan of the
+  // caller's item; the next in the queue gets the item's loan request.
+  //
+  // Errors: as ApproveLibraryLoan.
+  rpc DeclineLibraryLoan(DeclineLibraryLoanRequest) returns (DeclineLibraryLoanResponse);
+
+  // HandOverLibraryLoan records that the caller handed their item over
+  // (the loan must be approved), with an optional return date after now
+  // and at most 90 days away.
+  //
+  // Errors: ERROR_REASON_VALIDATION (tayfa_id, loan_id, due_time), and
+  // those of ApproveLibraryLoan.
+  rpc HandOverLibraryLoan(HandOverLibraryLoanRequest) returns (HandOverLibraryLoanResponse);
+
+  // ReturnLibraryLoan records that the caller took their item back (the
+  // loan must be handed over, also after the other side left). The item is
+  // available again unless withdrawn; the next in the queue gets its loan
+  // request.
+  //
+  // Errors: as ApproveLibraryLoan.
+  rpc ReturnLibraryLoan(ReturnLibraryLoanRequest) returns (ReturnLibraryLoanResponse);
+}
+
+enum LibraryItemKind {
+  LIBRARY_ITEM_KIND_UNSPECIFIED = 0;
+  LIBRARY_ITEM_KIND_BOOK = 1;
+  LIBRARY_ITEM_KIND_CAMPING_GEAR = 2;
+  LIBRARY_ITEM_KIND_BOARD_GAME = 3;
+  LIBRARY_ITEM_KIND_TOOL = 4;
+  LIBRARY_ITEM_KIND_OTHER = 5;
+}
+
+enum LibraryItemStatus {
+  LIBRARY_ITEM_STATUS_UNSPECIFIED = 0;
+  LIBRARY_ITEM_STATUS_AVAILABLE = 1;
+  // Handed over to a borrower.
+  LIBRARY_ITEM_STATUS_ON_LOAN = 2;
+  // Withdrawn or removed; seen only in a loan.
+  LIBRARY_ITEM_STATUS_WITHDRAWN = 3;
+}
+
+enum LibraryLoanState {
+  LIBRARY_LOAN_STATE_UNSPECIFIED = 0;
+  LIBRARY_LOAN_STATE_REQUESTED = 1;
+  LIBRARY_LOAN_STATE_APPROVED = 2;
+  LIBRARY_LOAN_STATE_HANDED_OVER = 3;
+  LIBRARY_LOAN_STATE_RETURNED = 4;
+  LIBRARY_LOAN_STATE_DECLINED = 5;
+  LIBRARY_LOAN_STATE_CANCELLED = 6;
+  // One side left while it was handed over; closed 30 days later without
+  // a return.
+  LIBRARY_LOAN_STATE_CLOSED = 7;
+}
+
+// LibraryLoan is a loan as one of its two sides sees it.
+message LibraryLoan {
+  string id = 1;
+  string item_id = 2;
+  // The item's name (a book's as the tayfa vocabulary shows it now).
+  string item_name = 3;
+  LibraryItemKind item_kind = 4;
+  // Empty once the account is deleted.
+  string owner_id = 5;
+  // Empty once the account is deleted.
+  string borrower_id = 6;
+  LibraryLoanState state = 7;
+  google.protobuf.Timestamp request_time = 8;
+  google.protobuf.Timestamp approve_time = 9;
+  google.protobuf.Timestamp hand_over_time = 10;
+  // The return date; unset: none.
+  google.protobuf.Timestamp due_time = 11;
+  // Set when one side left the tayfa while the item was handed over.
+  google.protobuf.Timestamp orphan_time = 12;
+  google.protobuf.Timestamp end_time = 13;
+  // Whether the caller owns the item (otherwise the caller is the
+  // borrower).
+  bool caller_is_owner = 14;
+}
+
+// LibraryQueueEntry is a member waiting for an item (owner only).
+message LibraryQueueEntry {
+  string user_id = 1;
+  // 1 is next.
+  int32 rank = 2;
+}
+
+// LibraryItem is an item of the tayfa's library.
+message LibraryItem {
+  string id = 1;
+  LibraryItemKind kind = 2;
+  // 1–80 characters, one line (a book: 1–60, the tayfa vocabulary's name).
+  string name = 3;
+  // A book's name in the tayfa vocabulary (namespace book); empty for the
+  // other kinds.
+  string vocabulary_id = 4;
+  // 0–300 characters, lines separated by "\n"; empty: none.
+  string note = 5;
+  // The owner's photo upload (purpose library_item); empty: none.
+  string photo_upload_id = 6;
+  string owner_id = 7;
+  LibraryItemStatus status = 8;
+  google.protobuf.Timestamp create_time = 9;
+  google.protobuf.Timestamp update_time = 10;
+  // How many wait in the queue.
+  int32 queue_length = 11;
+  // The caller's place in the queue, 1 is next; 0: not waiting.
+  int32 caller_queue_rank = 12;
+  // The active loan (requested, approved or handed over), for its two
+  // sides only.
+  LibraryLoan active_loan = 13;
+  // The queue, for the owner and in GetLibraryItem only.
+  repeated LibraryQueueEntry queue = 14;
+}
+
+message ListLibraryItemsRequest {
+  string tayfa_id = 1;
+  // Unspecified: every kind.
+  LibraryItemKind kind = 2;
+  // Only the caller's items.
+  bool mine = 3;
+}
+
+message ListLibraryItemsResponse {
+  repeated LibraryItem items = 1;
+  // Whether the caller may add an item now.
+  bool caller_can_add = 2;
+}
+
+message GetLibraryItemRequest {
+  string tayfa_id = 1;
+  string item_id = 2;
+}
+
+message GetLibraryItemResponse {
+  LibraryItem item = 1;
+}
+
+message CreateLibraryItemRequest {
+  string tayfa_id = 1;
+  LibraryItemKind kind = 2;
+  string name = 3;
+  string note = 4;
+  // Optional: the caller's own READY library_item upload for this tayfa.
+  string photo_upload_id = 5;
+  // UUID made by the client; a retry returns the same item.
+  string client_request_id = 6;
+}
+
+message CreateLibraryItemResponse {
+  LibraryItem item = 1;
+}
+
+message UpdateLibraryItemRequest {
+  string tayfa_id = 1;
+  string item_id = 2;
+  string name = 3;
+  string note = 4;
+  string photo_upload_id = 5;
+}
+
+message UpdateLibraryItemResponse {
+  LibraryItem item = 1;
+}
+
+message WithdrawLibraryItemRequest {
+  string tayfa_id = 1;
+  string item_id = 2;
+}
+
+message WithdrawLibraryItemResponse {}
+
+message RequestLibraryLoanRequest {
+  string tayfa_id = 1;
+  string item_id = 2;
+}
+
+message RequestLibraryLoanResponse {
+  LibraryItem item = 1;
+}
+
+message CancelLibraryRequestRequest {
+  string tayfa_id = 1;
+  string item_id = 2;
+}
+
+message CancelLibraryRequestResponse {
+  LibraryItem item = 1;
+}
+
+message ListLibraryLoansRequest {
+  string tayfa_id = 1;
+}
+
+message ListLibraryLoansResponse {
+  repeated LibraryLoan loans = 1;
+}
+
+message ApproveLibraryLoanRequest {
+  string tayfa_id = 1;
+  string loan_id = 2;
+}
+
+message ApproveLibraryLoanResponse {
+  LibraryLoan loan = 1;
+}
+
+message DeclineLibraryLoanRequest {
+  string tayfa_id = 1;
+  string loan_id = 2;
+}
+
+message DeclineLibraryLoanResponse {
+  LibraryLoan loan = 1;
+}
+
+message HandOverLibraryLoanRequest {
+  string tayfa_id = 1;
+  string loan_id = 2;
+  // Optional return date.
+  google.protobuf.Timestamp due_time = 3;
+}
+
+message HandOverLibraryLoanResponse {
+  LibraryLoan loan = 1;
+}
+
+message ReturnLibraryLoanRequest {
+  string tayfa_id = 1;
+  string loan_id = 2;
+}
+
+message ReturnLibraryLoanResponse {
+  LibraryLoan loan = 1;
+}

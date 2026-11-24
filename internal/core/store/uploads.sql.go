@@ -620,6 +620,10 @@ SELECT u.id, u.user_id, u.purpose, u.r2_key, COALESCE(u.preview_type, '')::text 
        c.tayfa_id AS content_tayfa_id,
        m.role AS member_role, m.status AS member_status, m.muted_until AS member_muted_until,
        COALESCE(tm.enabled, false)::boolean AS events_module_on,
+       COALESCE(lm.enabled, false)::boolean AS library_module_on,
+       COALESCE(qm.enabled, false)::boolean AS question_pool_module_on,
+       COALESCE(mm.enabled, false)::boolean AS materials_module_on,
+       (u.attached_type = 'garage_vehicle' AND garage_vehicle_seen_by(u.attached_id, $1::uuid))::boolean AS garage_visible,
        (u.attached_type = 'user' AND EXISTS (
          SELECT 1 FROM user_blocks b
          WHERE (b.blocker_id = $1 AND b.blocked_id = u.attached_id)
@@ -645,9 +649,29 @@ LEFT JOIN LATERAL (
   JOIN events e ON e.id = ph.event_id AND e.deleted_at IS NULL
   JOIN tayfas t ON t.id = e.tayfa_id AND t.deleted_at IS NULL
   WHERE u.attached_type = 'event_photo' AND ph.id = u.attached_id AND ph.deleted_at IS NULL
+  UNION ALL
+  SELECT li.tayfa_id FROM library_items li
+  JOIN tayfas t ON t.id = li.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'library_item' AND li.id = u.attached_id AND li.status <> 'withdrawn'
+  UNION ALL
+  SELECT qq.tayfa_id FROM questions qq
+  JOIN tayfas t ON t.id = qq.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'question' AND qq.id = u.attached_id AND qq.deleted_at IS NULL
+  UNION ALL
+  SELECT aa.tayfa_id FROM answers aa
+  JOIN questions qq ON qq.id = aa.question_id AND qq.deleted_at IS NULL
+  JOIN tayfas t ON t.id = aa.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'answer' AND aa.id = u.attached_id AND aa.deleted_at IS NULL
+  UNION ALL
+  SELECT mt.tayfa_id FROM materials mt
+  JOIN tayfas t ON t.id = mt.tayfa_id AND t.deleted_at IS NULL
+  WHERE u.attached_type = 'material' AND mt.id = u.attached_id AND mt.deleted_at IS NULL
 ) c ON true
 LEFT JOIN memberships m ON m.tayfa_id = c.tayfa_id AND m.user_id = $1
 LEFT JOIN tayfa_modules tm ON tm.tayfa_id = c.tayfa_id AND tm.module = 'events'
+LEFT JOIN tayfa_modules lm ON lm.tayfa_id = c.tayfa_id AND lm.module = 'library'
+LEFT JOIN tayfa_modules qm ON qm.tayfa_id = c.tayfa_id AND qm.module = 'question_pool'
+LEFT JOIN tayfa_modules mm ON mm.tayfa_id = c.tayfa_id AND mm.module = 'materials'
 WHERE u.id = ANY($2::uuid[]) AND u.status = 'ready' AND u.purpose <> 'data_export'
 `
 
@@ -657,31 +681,36 @@ type ListMediaForViewerParams struct {
 }
 
 type ListMediaForViewerRow struct {
-	ID               pgtype.UUID
-	UserID           pgtype.UUID
-	Purpose          string
-	R2Key            string
-	PreviewType      string
-	FullType         string
-	Width            pgtype.Int4
-	Height           pgtype.Int4
-	AttachedType     pgtype.Text
-	AttachedID       pgtype.UUID
-	ContentTayfaID   pgtype.UUID
-	MemberRole       pgtype.Text
-	MemberStatus     pgtype.Text
-	MemberMutedUntil pgtype.Timestamptz
-	EventsModuleOn   bool
-	Blocked          bool
-	OwnerDeleted     bool
+	ID                   pgtype.UUID
+	UserID               pgtype.UUID
+	Purpose              string
+	R2Key                string
+	PreviewType          string
+	FullType             string
+	Width                pgtype.Int4
+	Height               pgtype.Int4
+	AttachedType         pgtype.Text
+	AttachedID           pgtype.UUID
+	ContentTayfaID       pgtype.UUID
+	MemberRole           pgtype.Text
+	MemberStatus         pgtype.Text
+	MemberMutedUntil     pgtype.Timestamptz
+	EventsModuleOn       bool
+	LibraryModuleOn      bool
+	QuestionPoolModuleOn bool
+	MaterialsModuleOn    bool
+	GarageVisible        bool
+	Blocked              bool
+	OwnerDeleted         bool
 }
 
 // Görüntüleme: istenen hazır dosyalar ve izleyicinin her birini görüp
 // göremeyeceğine karar vermek için bağlam. Karar uygulama katmanında, core'un
 // izin tablosuyla verilir (authz); burada yalnızca veri toplanır. İçeriğin
 // tayfası: tayfa kapağında tayfanın kendisi, etkinlik kapağında ve av
-// fotoğrafında ve albüm fotoğrafında etkinliğin tayfası (silinmiş içerik ve
-// tayfa bağlam vermez).
+// fotoğrafında ve albüm fotoğrafında etkinliğin tayfası, soru havuzunun
+// sorusunda ve cevabında sorunun tayfası (silinmiş içerik ve tayfa bağlam
+// vermez).
 func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewerParams) ([]ListMediaForViewerRow, error) {
 	rows, err := q.db.Query(ctx, listMediaForViewer, arg.ViewerID, arg.Ids)
 	if err != nil {
@@ -707,6 +736,10 @@ func (q *Queries) ListMediaForViewer(ctx context.Context, arg ListMediaForViewer
 			&i.MemberStatus,
 			&i.MemberMutedUntil,
 			&i.EventsModuleOn,
+			&i.LibraryModuleOn,
+			&i.QuestionPoolModuleOn,
+			&i.MaterialsModuleOn,
+			&i.GarageVisible,
 			&i.Blocked,
 			&i.OwnerDeleted,
 		); err != nil {

@@ -115,13 +115,15 @@ SELECT
 
 -- Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id
 -- kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
--- kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
+-- kimliğidir. Metadata'dan yalnızca bu üç kimlik ve katalog işlemlerinin
+-- anahtarı (catalog_key, issue #262) okunur.
 -- name: ListPlatformAuditLogs :many
 SELECT l.id, l.created_at, l.actor_id, u.display_name AS actor_name, l.action,
        l.target_type, l.target_id, l.reason,
        COALESCE(l.metadata->>'tayfa_id', '')::text AS tayfa_id,
        COALESCE(l.metadata->>'user_id', '')::text AS user_id,
-       COALESCE(l.metadata->>'report_id', '')::text AS report_id
+       COALESCE(l.metadata->>'report_id', '')::text AS report_id,
+       COALESCE(l.metadata->>'catalog_key', '')::text AS catalog_key
 FROM platform_audit_logs l
 LEFT JOIN users u ON u.id = l.actor_id AND u.deleted_at IS NULL
 WHERE (sqlc.narg('action')::text IS NULL OR l.action = sqlc.narg('action')::text)

@@ -76,3 +76,15 @@ DELETE FROM now_notification_counters WHERE day < @before::date;
 
 -- name: DeleteUserNowCounters :exec
 DELETE FROM now_notification_counters WHERE scope = 'user' AND subject_id = @user_id;
+
+-- Ortak kütüphane ödünç adımları (issue #321; ADR-0040 §1): verilen
+-- kullanıcılardan etkin üye olanlar; işlemi yapan (actor_id) ve onunla
+-- arasında iki yönden herhangi birinde engel olan hariç.
+-- name: FilterNotifyUnblocked :many
+SELECT m.user_id FROM memberships m
+WHERE m.tayfa_id = @tayfa_id AND m.status = 'active' AND m.user_id = ANY(@user_ids::uuid[])
+  AND m.user_id <> @actor_id
+  AND NOT EXISTS (SELECT 1 FROM user_blocks ub
+                  WHERE (ub.blocker_id = @actor_id AND ub.blocked_id = m.user_id)
+                     OR (ub.blocker_id = m.user_id AND ub.blocked_id = @actor_id))
+ORDER BY m.user_id;

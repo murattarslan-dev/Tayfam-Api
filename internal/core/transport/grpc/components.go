@@ -66,6 +66,7 @@ func componentRegistrars() []componentRegistrar {
 		registerRankingComponent,
 
 		// vote (#254)
+		registerVoteComponent,
 
 		// celebration (#255)
 		registerCelebrationComponent,
@@ -74,6 +75,7 @@ func componentRegistrars() []componentRegistrar {
 		registerQuestionsComponent,
 
 		// pool_link (#271)
+		registerPoolLinkComponent,
 
 		// tayfa statistics (#266)
 		registerTayfaStats,
@@ -82,6 +84,12 @@ func componentRegistrars() []componentRegistrar {
 		registerTayfaHome,
 		// daily content (#269)
 		registerTayfaDaily,
+		// shared library (#270)
+		registerTayfaLibrary,
+		// material library (#261)
+		registerTayfaMaterials,
+		// member garage (#272)
+		registerMemberGarage,
 	}
 }
 

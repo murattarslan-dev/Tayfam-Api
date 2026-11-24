@@ -132,6 +132,20 @@ enum Module {
   // Günün içeriği (issue #269; ADR-0027 §5): the tayfa's daily content
   // pool (TayfaDailyService) and its home widget.
   MODULE_DAILY = 5;
+  // Ortak kütüphane (issue #270; ADR-0040 §1): the tayfa's shared items
+  // and their loans (TayfaLibraryService) and its home widget.
+  MODULE_LIBRARY = 6;
+  // Soru havuzu (issue #271; ADR-0040 §2): the Eğitim question pool
+  // (QAService with QUESTION_POOL_QUESTION_POOL), its home widget and the
+  // pool_link event component.
+  MODULE_QUESTION_POOL = 7;
+  // Materyal kütüphanesi (issue #261; ADR-0040 §3): the Eğitim study
+  // material — links and note photos (TayfaMaterialService) — and its home
+  // widget.
+  MODULE_MATERIALS = 8;
+  // Üye garajı (issue #272; ADR-0040 §4): the members' garages that show
+  // in the tayfa (MemberGarageService) and its home widget.
+  MODULE_GARAGE = 9;
 }
 
 // Lifecycle of an inactive tayfa (tayfas.status).

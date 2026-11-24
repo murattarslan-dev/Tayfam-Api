@@ -67,6 +67,8 @@ func setup(t *testing.T) *env {
 	tayfas, err := tayfa.New(tayfa.Config{Pool: d.App, Log: log})
 	must(t, err)
 	e := &env{svc: stats.New(fw), tayfas: tayfas, pool: d.App, admin: d.Admin}
+	// The tests bring their own badges: the seed's (issue #260) are removed.
+	e.exec(t, `DELETE FROM catalog_badges`)
 	for key, def := range map[string]string{fishType: fishDef, bloodType: bloodDef} {
 		e.exec(t, `INSERT INTO catalog_event_types (key, interest_keys, position, labels, icon, modes, version, definition)
 			VALUES ($1, ARRAY['general'], 9000, '{"tr": "Test türü"}', 'event', ARRAY['in_person', 'online'], 1, $2::jsonb)`, key, def)
@@ -330,62 +332,65 @@ func TestRecompute(t *testing.T) {
 	}
 }
 
-// TestTayfaView: members read the totals and the active members'
-// contributions; anyone else is refused; a bad year is a validation error.
+// TestTayfaView: members read the totals and only their own contributions
+// (issue #322): nobody else's, not for an admin or a moderator either;
+// anyone else is refused; a bad year is a validation error.
 func TestTayfaView(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
-	a, b := e.member(t, tf), e.member(t, tf)
+	a, b, mod := e.member(t, tf), e.member(t, tf), e.member(t, tf)
+	e.exec(t, `UPDATE memberships SET role = 'moderator' WHERE tayfa_id = $1 AND user_id = $2`, tf.PG(), mod.PG())
 	outsider := id.New()
 	now := time.Now().UTC()
-	ev := e.event(t, tf, fishType, time.Date(2025, 6, 1, 7, 0, 0, 0, time.UTC), a, b)
+	ev := e.event(t, tf, fishType, time.Date(2025, 6, 1, 7, 0, 0, 0, time.UTC), a, b, mod, admin)
 	e.measure(t, ev, "goals", a, 3)
 	e.measure(t, ev, "goals", b, 1)
+	e.measure(t, ev, "goals", mod, 4)
+	e.measure(t, ev, "goals", admin, 5)
 	e.measure(t, ev, "net", a, 70)
 
 	v, err := e.svc.Tayfa(ctx, b, tf, stats.AllTime)
 	must(t, err)
-	if len(v.Totals) != 0 || len(v.Years) != 0 || !v.ComputedAt.IsZero() {
+	if len(v.Totals) != 0 || len(v.Years) != 0 || !v.ComputedAt.IsZero() || len(v.Own) != 0 {
 		t.Fatalf("hesaplanmadan: %+v", v)
 	}
 	e.recompute(t, tf, now)
 
-	v, err = e.svc.Tayfa(ctx, b, tf, stats.AllTime)
-	must(t, err)
-	if len(v.Years) != 1 || v.Years[0] != 2025 || v.ComputedAt.IsZero() || len(v.Totals) == 0 {
-		t.Fatalf("görünüm: %+v", v)
+	// Every reader, whatever their role, gets their own goals and nothing
+	// else: no other person's value, no sensitive measure, no common
+	// metric.
+	for name, c := range map[string]struct {
+		who  id.ID
+		goal float64
+	}{"üye a": {a, 3}, "üye b": {b, 1}, "moderatör": {mod, 4}, "yönetici": {admin, 5}} {
+		v, err = e.svc.Tayfa(ctx, c.who, tf, stats.AllTime)
+		must(t, err)
+		if len(v.Years) != 1 || v.Years[0] != 2025 || v.ComputedAt.IsZero() || len(v.Totals) == 0 {
+			t.Fatalf("%s görünüm: %+v", name, v)
+		}
+		want := stats.Stat{Metric: fishType + ".goals", Source: stats.SourceMeasure, Value: c.goal, Events: 1}
+		if len(v.Own) != 1 || v.Own[0] != want {
+			t.Errorf("%s kendi katkısı: %+v", name, v.Own)
+		}
 	}
-	contrib := map[id.ID]float64{}
-	for _, c := range v.Contributions {
-		if c.Metric == fishType+".net" {
-			t.Fatal("hassas ölçüm katkılarda")
-		}
-		if c.Metric == fishType+".goals" {
-			contrib[c.User] = c.Value
-		}
-		if c.Metric == "attended" || c.Metric == "duration" {
-			t.Fatalf("ortak metrik katkılarda: %+v", c)
-		}
-	}
-	if contrib[a] != 3 || contrib[b] != 1 || len(contrib) != 2 {
-		t.Fatalf("katkılar: %v", contrib)
+	// The tayfa's total still holds everyone's.
+	if got := e.tayfaStat(t, tf, 0, fishType+".goals"); got != 13 {
+		t.Errorf("tayfa toplamı: %v", got)
 	}
 	v, err = e.svc.Tayfa(ctx, admin, tf, 2025)
 	must(t, err)
-	if v.Year != 2025 || len(v.Totals) == 0 {
+	if v.Year != 2025 || len(v.Totals) == 0 || len(v.Own) != 1 || v.Own[0].Value != 5 {
 		t.Fatalf("yıl: %+v", v)
 	}
-
-	// One who left is not in the contributions.
-	e.exec(t, `DELETE FROM memberships WHERE tayfa_id = $1 AND user_id = $2`, tf.PG(), a.PG())
-	v, err = e.svc.Tayfa(ctx, b, tf, stats.AllTime)
+	// A year without data: totals and own contributions are empty.
+	v, err = e.svc.Tayfa(ctx, a, tf, 2024)
 	must(t, err)
-	for _, c := range v.Contributions {
-		if c.User == a {
-			t.Fatal("ayrılanın katkısı listede")
-		}
+	if len(v.Totals) != 0 || len(v.Own) != 0 {
+		t.Fatalf("boş yıl: %+v", v)
 	}
 
+	// One who left reads nothing.
+	e.exec(t, `DELETE FROM memberships WHERE tayfa_id = $1 AND user_id = $2`, tf.PG(), a.PG())
 	if _, err := e.svc.Tayfa(ctx, outsider, tf, stats.AllTime); !errors.Is(err, apperr.ErrTayfaNotFound) {
 		t.Errorf("üye olmayan: %v", err)
 	}

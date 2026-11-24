@@ -211,6 +211,22 @@ DELETE FROM user_badges WHERE user_id = @user_id;
 -- name: DeleteUserStats :exec
 DELETE FROM user_stats WHERE user_id = @user_id;
 
+-- Oylama (issue #254): kişinin verdiği oylar ve kişiye, aracına ya da
+-- fotoğrafına verilen oylar silinir (araçlar ve fotoğraflar silinmeden önce
+-- çalışır). Yazdığı seçenekler ve kapattığı oylamalar etkinliğindir; kalır,
+-- yazan ve kapatan boşalır.
+-- name: DeleteUserEventVotes :exec
+DELETE FROM event_votes AS ev
+WHERE ev.user_id = @user_id::uuid OR ev.candidate_user_id = @user_id::uuid
+  OR ev.event_vehicle_id IN (SELECT v.id FROM event_vehicles AS v WHERE v.user_id = @user_id::uuid)
+  OR ev.photo_id IN (SELECT p.id FROM event_photos AS p WHERE p.uploader_id = @user_id::uuid);
+
+-- name: ClearVoteOptionCreator :exec
+UPDATE event_vote_options SET created_by = NULL WHERE created_by = @user_id;
+
+-- name: ClearVoteCloser :exec
+UPDATE event_vote_closures SET closed_by = NULL WHERE closed_by = @user_id;
+
 -- Tayfa sözlüğüne eklediği değerler tayfanın ortak verisidir; kalır, ekleyen
 -- boşalır (issue #244; ADR-0037 §4).
 -- name: ClearVocabularyCreator :exec
@@ -222,6 +238,46 @@ UPDATE tayfa_vocabulary SET created_by = NULL WHERE created_by = @user_id;
 UPDATE tayfa_daily_items
 SET created_by = NULLIF(created_by, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
 WHERE created_by = @user_id OR deleted_by = @user_id;
+
+-- Ortak kütüphane (issue #270; ADR-0040 §1): kalemler önce geri çekilir
+-- (lending.Departed), sonra sahibi ve geri çekeni boşalır; ödünç
+-- kayıtlarında borç alan boşalır; sıradaki yerler silinir.
+-- name: ClearLibraryItemUserFields :exec
+UPDATE library_items
+SET owner_id = NULLIF(owner_id, @user_id), withdrawn_by = NULLIF(withdrawn_by, @user_id)
+WHERE owner_id = @user_id OR withdrawn_by = @user_id;
+
+-- name: ClearLibraryLoanBorrower :exec
+UPDATE library_loans SET borrower_id = NULL WHERE borrower_id = @user_id;
+
+-- name: DeleteUserLibraryQueue :exec
+DELETE FROM library_queue WHERE user_id = @user_id;
+
+-- Materyal kütüphanesi (issue #261; ADR-0040 §3): materyal kalır, yazar ve
+-- silen boşalır; fotoğraf dosyaları media.UserDeleted ile silinir.
+-- name: ClearMaterialUserFields :exec
+UPDATE materials
+SET author_id = NULLIF(author_id, @user_id), deleted_by = NULLIF(deleted_by, @user_id)
+WHERE @user_id IN (author_id, deleted_by);
+
+-- Engelli alan adını panelden ekleyen platform yöneticisi boşalır; alan adı
+-- listede kalır (issue #334; ADR-0040 §3). Başlangıç listesinden olup
+-- olmadığı ayrı kolonda (initial, 00069).
+-- name: ClearBlockedDomainCreator :exec
+UPDATE blocked_domains SET created_by = NULL WHERE created_by = @user_id;
+
+-- Üye garajı (issue #272; ADR-0040 §4, KVKK): kişinin araçları ve
+-- görünürlük ayarları silinir (fotoğraflar silme kuyruğuna girer;
+-- etkinlik kayıtlarındaki garaj bağı boşalır); başkasının aracını kaldıran
+-- olarak kişi boşalır.
+-- name: DeleteUserGarageVehicles :exec
+DELETE FROM garage_vehicles WHERE owner_id = @user_id;
+
+-- name: ClearGarageVehicleDeleter :exec
+UPDATE garage_vehicles SET deleted_by = NULL WHERE deleted_by = @user_id;
+
+-- name: DeleteUserGarageVisibility :exec
+DELETE FROM garage_tayfa_visibility WHERE user_id = @user_id;
 
 -- Albüm fotoğrafları kişiseldir; kişiyle birlikte silinir, dosyaları
 -- silme kuyruğuna girer (issue #206).

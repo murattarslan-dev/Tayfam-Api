@@ -224,6 +224,21 @@ var (
 	ErrRankingFromMeasure = errors.New("derece ölçümden hesaplanır")
 )
 
+// Vote component errors (issue #254; ADR-0025 §4, ADR-0037 §3).
+var (
+	// ErrVoteClosed: a vote or an option change after the organizer closed
+	// the vote.
+	ErrVoteClosed = errors.New("oylama kapandı")
+	// ErrVoteOwnOption: a vote for oneself, one's own vehicle or one's own
+	// photo.
+	ErrVoteOwnOption = errors.New("kendine oy verilmez")
+	// ErrVoteOptionsFixed: an option change in a vote whose options come
+	// from its source.
+	ErrVoteOptionsFixed = errors.New("oylamanın seçenekleri kaynağından gelir")
+	// ErrVoteOptionExists: a free option with the same label.
+	ErrVoteOptionExists = errors.New("aynı seçenek var")
+)
+
 // Celebration component errors (issue #255; ADR-0025 §4).
 var (
 	// ErrCelebrationNotStarted: an announcement before the event's start.
@@ -286,6 +301,55 @@ var (
 	ErrDailyItemNotFound = errors.New("günün içeriği yok")
 	// ErrDailyItemLimit: the pool is full (daily.MaxItems).
 	ErrDailyItemLimit = errors.New("günün içeriği sınırı")
+)
+
+// Library errors (issue #270; ADR-0040 §1).
+var (
+	// ErrLibraryItemNotFound: an item that is not in the tayfa's library
+	// (never there or withdrawn), or one the caller may not act on as its
+	// owner.
+	ErrLibraryItemNotFound = errors.New("kütüphane kalemi yok")
+	// ErrLibraryLoanNotFound: a loan of the tayfa's library that is not
+	// the caller's to act on (or not there).
+	ErrLibraryLoanNotFound = errors.New("ödünç kaydı yok")
+	// ErrLibraryOwnItem: the caller asked for their own item.
+	ErrLibraryOwnItem = errors.New("kendi kalemi")
+	// ErrLibraryLoanState: the loan is not in a state the step can follow
+	// (approving a handed-over loan, taking back one never handed over…).
+	ErrLibraryLoanState = errors.New("ödünç durumu uygun değil")
+	// ErrLibraryItemOnLoan: the owner cannot withdraw an item that is
+	// handed over; it must be taken back first.
+	ErrLibraryItemOnLoan = errors.New("kalem ödünçte")
+	// ErrLibraryItemLimit: the owner already has library.MaxItemsPerOwner
+	// items in the tayfa.
+	ErrLibraryItemLimit = errors.New("kütüphane kalem sınırı")
+	// ErrLibraryQueueFull: library.MaxQueue members already wait for the
+	// item.
+	ErrLibraryQueueFull = errors.New("bekleme sırası dolu")
+)
+
+// Material library errors (issue #261; ADR-0040 §3).
+var (
+	// ErrMaterialNotFound: a material that is not visible in the tayfa's
+	// material library (never there, deleted, or linking to a blocked
+	// domain), or one the caller may not act on as its author.
+	ErrMaterialNotFound = errors.New("materyal yok")
+	// ErrBlockedLink: the link's domain, or a domain above it, is on the
+	// platform's blocked domain list.
+	ErrBlockedLink = errors.New("engelli bağlantı")
+	// ErrMaterialLimit: the author already has material.MaxPerAuthor
+	// materials in the tayfa.
+	ErrMaterialLimit = errors.New("materyal sınırı")
+)
+
+// Member garage errors (issue #272; ADR-0040 §4).
+var (
+	// ErrGarageVehicleNotFound: a vehicle that is not in the caller's garage
+	// (an owner's step, the vehicles component), or that does not show in
+	// the tayfa (a moderator's removal).
+	ErrGarageVehicleNotFound = errors.New("garaj aracı yok")
+	// ErrGarageLimit: the owner already has garage.MaxVehicles vehicles.
+	ErrGarageLimit = errors.New("garaj sınırı")
 )
 
 // Attendance errors (issue #50). None of them carries the location that was

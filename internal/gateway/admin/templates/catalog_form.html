@@ -1,0 +1,130 @@
+{{define "content"}}
+{{$f := .Data}}
+<p><a href="/katalog">← Katalog</a></p>
+<h1>{{if $f.Create}}Yeni: {{end}}{{$f.KindLabel}}{{if not $f.Create}} <span class="ids">{{$f.Key}}</span>{{end}}</h1>
+{{if $f.Problem}}<div class="notice err" role="alert">{{$f.Problem}}{{with $f.Check}}{{if .Field}} <span class="ids">({{.Field}})</span>{{end}}{{end}}</div>{{end}}
+
+{{with $f.Check}}{{if not .Problem}}
+<div class="card">
+<h2>Önizleme</h2>
+<p>Denetimden geçti; henüz kaydedilmedi.</p>
+{{if eq $f.Kind "tur"}}
+<dl class="meta">
+  <dt>Sürüm</dt><dd>{{if .NewVersion}}Kaydedince yeni sürüm: {{.Version}}{{else}}Sürüm değişmez ({{.Version}}){{end}}</dd>
+  <dt>En düşük istemci</dt><dd>{{.MinClientVersion}}</dd>
+</dl>
+{{if $f.Warnings}}
+<div class="notice err" role="alert">Şu platformların desteklenen en düşük sürümü bu türün bütün bileşenlerini tanımıyor; eski uygulamalar o bölümlerde "güncelle" gösterir (yayına yine de alınabilir):
+<ul>{{range $f.Warnings}}<li>{{.}}</li>{{end}}</ul></div>
+{{end}}
+<h3>Alanlar</h3>
+{{if .Fields}}
+<div class="table-wrap"><table>
+<thead><tr><th>Anahtar</th><th>Ad</th><th>Tür</th><th>Zorunlu</th></tr></thead>
+<tbody>{{range .Fields}}<tr><td class="ids">{{.Key}}</td><td>{{index .Labels "tr"}}</td><td>{{.Kind}}</td><td>{{if .Required}}Evet{{else}}Hayır{{end}}</td></tr>{{end}}</tbody>
+</table></div>
+{{else}}<p>Alan yok.</p>{{end}}
+<h3>Bileşenler</h3>
+{{if .Components}}
+<div class="table-wrap"><table>
+<thead><tr><th>Bileşen</th><th>Anahtar</th><th>Ad</th><th>İsteğe bağlı</th><th>En düşük istemci</th></tr></thead>
+<tbody>{{range .Components}}<tr><td>{{.Kind}}</td><td class="ids">{{.Key}}</td><td>{{index .Labels "tr"}}</td><td>{{if .Optional}}Evet ({{if .DefaultOn}}varsayılan açık{{else}}varsayılan kapalı{{end}}){{else}}Hayır{{end}}</td><td>{{.MinClientVersion}}</td></tr>{{end}}</tbody>
+</table></div>
+{{else}}<p>Bileşen yok (yalnızca temel: katılım, kontenjan, check-in, albüm).</p>{{end}}
+{{end}}
+</div>
+{{end}}{{end}}
+
+<div class="card">
+<form class="stack" method="post" action="/katalog/{{$f.Kind}}">
+  <input type="hidden" name="csrf" value="{{$.CSRF}}">
+  {{if $f.Create}}<input type="hidden" name="yeni" value="1">{{end}}
+  {{if eq $f.Kind "tur"}}<input type="hidden" name="surum" value="{{$f.Version}}">{{end}}
+
+  <label for="anahtar">Anahtar (değişmez)</label>
+  {{if $f.Create}}
+  <input type="text" id="anahtar" name="anahtar" value="{{$f.Key}}" required maxlength="40" pattern="[a-z][a-z0-9_]{1,39}">
+  {{else}}
+  <input type="text" id="anahtar" name="anahtar" value="{{$f.Key}}" readonly>
+  {{end}}
+
+  {{if eq $f.Kind "ders-konu"}}
+  <label for="ust">Üst etiket (boş: düzey; değişmez)</label>
+  <input type="text" id="ust" name="ust" value="{{$f.Parent}}" maxlength="40" {{if not $f.Create}}readonly{{end}}>
+  {{end}}
+
+  <label for="adlar">Adlar (JSON: dil → ad; Türkçe zorunlu)</label>
+  <textarea id="adlar" name="adlar" required maxlength="1000">{{$f.Labels}}</textarea>
+
+  <label for="sira">Sıra (0–9999)</label>
+  <input type="number" id="sira" name="sira" value="{{$f.Position}}" required min="0" max="9999">
+
+  {{if or (eq $f.Kind "ilgi-alani") (eq $f.Kind "tur") (eq $f.Kind "rozet")}}
+  <label for="ikon">İkon (istemcinin ikon setinden anahtar)</label>
+  <input type="text" id="ikon" name="ikon" value="{{$f.Icon}}" required maxlength="40">
+  {{end}}
+
+  {{if eq $f.Kind "ilgi-alani"}}
+  <label for="bilesenler">Varsayılan ana sayfa bileşenleri (virgülle)</label>
+  <input type="text" id="bilesenler" name="bilesenler" value="{{$f.Widgets}}" maxlength="900">
+  {{end}}
+
+  {{if eq $f.Kind "tur"}}
+  <label for="ilgi_alanlari">İlgi alanları (virgülle, 1–3; ilki ana ilgi alanı)</label>
+  <input type="text" id="ilgi_alanlari" name="ilgi_alanlari" value="{{$f.Interests}}" required maxlength="130">
+  <fieldset>
+    <legend>Modlar</legend>
+    <label><input type="checkbox" name="yuz_yuze" value="1"{{if $f.InPerson}} checked{{end}}> Yüz yüze</label>
+    <label><input type="checkbox" name="online" value="1"{{if $f.Online}} checked{{end}}> Online</label>
+  </fieldset>
+  <label for="tanim">Tanım (JSON, en fazla 16 KiB: fields, components, flags)</label>
+  <textarea id="tanim" name="tanim" rows="20" maxlength="16384">{{$f.Definition}}</textarea>
+  {{end}}
+
+  {{if eq $f.Kind "rozet"}}
+  <label for="kapsam">Kapsam (değişmez)</label>
+  <select id="kapsam" name="kapsam">
+    <option value="user"{{if eq $f.Scope "user"}} selected{{end}}>Kişi</option>
+    <option value="tayfa"{{if eq $f.Scope "tayfa"}} selected{{end}}>Tayfa</option>
+  </select>
+  <label for="kural">Kural türü (değişmez)</label>
+  <select id="kural" name="kural">
+    <option value="threshold"{{if eq $f.RuleKind "threshold"}} selected{{end}}>Eşik</option>
+    <option value="first"{{if eq $f.RuleKind "first"}} selected{{end}}>İlk katılım</option>
+    <option value="champion"{{if eq $f.RuleKind "champion"}} selected{{end}}>Şampiyonluk</option>
+  </select>
+  <label for="metrik">Metrik (eşik: events, attended, participants, duration ya da tür.anahtar)</label>
+  <input type="text" id="metrik" name="metrik" value="{{$f.Metric}}" maxlength="81">
+  <label for="deger">Eşik değeri</label>
+  <input type="text" id="deger" name="deger" value="{{$f.Value}}" maxlength="20" inputmode="decimal">
+  <label for="donem">Dönem (eşik; değişmez)</label>
+  <select id="donem" name="donem">
+    <option value="all_time"{{if eq $f.Period "all_time"}} selected{{end}}>Tüm zamanlar</option>
+    <option value="year"{{if eq $f.Period "year"}} selected{{end}}>Yıllık</option>
+  </select>
+  <label for="etkinlik_turu">Etkinlik türü (ilk katılım ve şampiyonluk; boş: hepsi)</label>
+  <input type="text" id="etkinlik_turu" name="etkinlik_turu" value="{{$f.EventType}}" maxlength="40">
+  {{end}}
+
+  {{if eq $f.Kind "on-ayar"}}
+  <label for="kurallar">Kurallar (JSON: players_min, players_max, side, rounds, target, winner, result, best_of)</label>
+  <textarea id="kurallar" name="kurallar" rows="8" maxlength="1024">{{$f.Params}}</textarea>
+  {{end}}
+
+  <label for="durum">Durum</label>
+  <select id="durum" name="durum">
+    <option value="active"{{if eq $f.Status "active"}} selected{{end}}>Aktif</option>
+    <option value="retired"{{if eq $f.Status "retired"}} selected{{end}}>Emekli (yeni kayıtta seçilemez, eskiler gösterir)</option>
+  </select>
+
+  {{template "reauth" $}}
+  <label for="gerekce-katalog">Gerekçe (kaydetmek için zorunlu, denetim kaydına yazılır)</label>
+  <textarea id="gerekce-katalog" name="gerekce" maxlength="1000"></textarea>
+
+  <div>
+    <button type="submit" name="islem" value="onizle">Önizle</button>
+    <button type="submit" name="islem" value="kaydet">Kaydet</button>
+  </div>
+</form>
+</div>
+{{end}}

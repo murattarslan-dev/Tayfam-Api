@@ -278,6 +278,9 @@ func champions(ctx context.Context, q *store.Queries, tayfa id.ID, c ChampionsCo
 		if err != nil {
 			return nil, err
 		}
+		if len(winners) == 0 {
+			continue
+		}
 		out.Champions = append(out.Champions, Champion{
 			Event: ev, Title: r.Title, Type: r.Type, StartsAt: r.StartsAt.Time.UTC(),
 			Component: r.ComponentKey, AnnouncedAt: r.AnnouncedAt.Time.UTC(), Winners: winners,
@@ -311,6 +314,11 @@ func championWinners(ctx context.Context, q *store.Queries, event id.ID, def *de
 	)
 	out := make([]ChampionWinner, 0, len(ws))
 	for _, w := range ws {
+		if w.User == (id.ID{}) && w.Team == (id.ID{}) && w.Guest == (id.ID{}) {
+			// A vote's free option (issue #254) is no champion: the card
+			// shows people, teams and guests.
+			continue
+		}
 		cw := ChampionWinner{User: w.User, Team: w.Team, Guest: w.Guest}
 		if w.Team != (id.ID{}) {
 			if byTeam == nil {

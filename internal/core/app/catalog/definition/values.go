@@ -39,7 +39,11 @@ const maxValueBytes = 8 << 10
 // Stored forms: text and long_text a trimmed string; integer and duration
 // (minutes) an integer; decimal a number rounded to the field's decimals;
 // choice a string; multi_choice a list of strings in the definition's
-// order; boolean true or false; date "YYYY-MM-DD".
+// order; boolean true or false; date "YYYY-MM-DD"; study_tags a list of
+// tag keys in the given order.
+//
+// A study_tags value is checked here for its form only; whether its tags
+// may be chosen is catalog.CheckStudyValues' (ADR-0043 §2).
 func (d *Definition) CleanValues(in map[string]json.RawMessage, complete bool) (map[string]json.RawMessage, error) {
 	if len(in) > len(d.Fields) {
 		return nil, &ValueError{}
@@ -142,6 +146,20 @@ func (f Field) Clean(raw json.RawMessage) (json.RawMessage, error) {
 			}
 		}
 		clean = list
+	case KindStudyTags:
+		a, ok := v.([]any)
+		if !ok || len(a) == 0 || len(a) > f.MaxSelected {
+			return nil, bad
+		}
+		list := make([]string, 0, len(a))
+		for _, item := range a {
+			s, ok := item.(string)
+			if !ok || !ValidKey(s) || slices.Contains(list, s) {
+				return nil, bad
+			}
+			list = append(list, s)
+		}
+		clean = list
 	case KindBoolean:
 		b, ok := v.(bool)
 		if !ok {
@@ -166,6 +184,20 @@ func (f Field) Clean(raw json.RawMessage) (json.RawMessage, error) {
 		return nil, bad
 	}
 	return b, nil
+}
+
+// StudyKeys returns the tag keys of a study_tags field's stored value; ok
+// is false for a value that is not a list of keys (or no value).
+func StudyKeys(stored json.RawMessage) (keys []string, ok bool) {
+	if len(stored) == 0 || json.Unmarshal(stored, &keys) != nil || len(keys) == 0 {
+		return nil, false
+	}
+	for _, k := range keys {
+		if !ValidKey(k) {
+			return nil, false
+		}
+	}
+	return keys, true
 }
 
 // validValueText refuses invalid UTF-8 and control characters; a long text

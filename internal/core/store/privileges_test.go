@@ -60,18 +60,20 @@ var wantAppPrivileges = map[string]string{
 	"uploads": "DELETE,INSERT,SELECT,UPDATE(attach_confirmed_at,attached_at,attached_id,attached_type,expires_at,export_bytes,height,ready_at,reject_reason,status,updated_at,user_id,width)",
 	// Issue #207: user_id and day never change.
 	"user_availability": "DELETE,INSERT,SELECT,UPDATE(note,slots,updated_at)",
-	// Issue #237, ADR-0025: the service only reads the catalog; it changes
-	// through migrations (and later the platform panel, #262).
-	"catalog_meta":                "SELECT",
-	"catalog_interests":           "SELECT",
-	"catalog_event_types":         "SELECT",
-	"catalog_event_type_versions": "SELECT",
-	// Issue #259: the study tag list is catalog data too.
-	"catalog_study_tags": "SELECT",
+	// Issue #237, ADR-0025: the catalog changes through migrations and the
+	// platform panel (#262, 00067): keys never change, nothing is deleted,
+	// a type version row is only ever added.
+	"catalog_meta":                "SELECT,UPDATE(catalog_version,updated_at)",
+	"catalog_interests":           "INSERT,SELECT,UPDATE(default_widgets,icon,labels,position,status,updated_at)",
+	"catalog_event_types":         "INSERT,SELECT,UPDATE(definition,icon,interest_keys,labels,modes,position,status,updated_at,version)",
+	"catalog_event_type_versions": "INSERT,SELECT",
+	// Issue #259: the study tag list is catalog data too; a tag's parent
+	// never changes.
+	"catalog_study_tags": "INSERT,SELECT,UPDATE(labels,position,status,updated_at)",
 	// Issue #258: badge definitions are catalog data; an earned badge is
 	// never changed or taken back (ADR-0039 §2), only one's own go with
 	// one's account. Each frozen event is looked at once.
-	"catalog_badges":   "SELECT",
+	"catalog_badges":   "INSERT,SELECT,UPDATE(icon,labels,position,rule,status,updated_at)",
 	"user_badges":      "DELETE,INSERT,SELECT",
 	"tayfa_badges":     "INSERT,SELECT",
 	"event_badge_runs": "INSERT,SELECT",
@@ -96,7 +98,7 @@ var wantAppPrivileges = map[string]string{
 	"event_routes": "DELETE,INSERT,SELECT,UPDATE(points,updated_at)",
 	// Issue #240: a vehicle never moves to another event, component or
 	// person; a seat request is only approved or removed.
-	"event_vehicles":              "DELETE,INSERT,SELECT,UPDATE(color,make,model,model_year,plate,seats,updated_at)",
+	"event_vehicles":              "DELETE,INSERT,SELECT,UPDATE(color,make,model,model_year,plate,seats,updated_at,vehicle_id)",
 	"event_vehicle_seat_requests": "DELETE,INSERT,SELECT,UPDATE(decided_at,status)",
 	// Issue #245: a measurement never moves to another event, component or
 	// person; only its value changes and account deletion clears its writer.
@@ -116,10 +118,11 @@ var wantAppPrivileges = map[string]string{
 	// empties a person's place.
 	"event_draws":        "INSERT,SELECT",
 	"event_draw_entries": "INSERT,SELECT,UPDATE(user_id)",
-	// Issue #250: score presets are catalog data the service only reads.
+	// Issue #250: score presets are catalog data (the platform panel
+	// manages them, #262).
 	// A table, a seat or a score never moves to another event, component or
 	// table; account deletion empties a person's seat.
-	"catalog_score_presets": "SELECT",
+	"catalog_score_presets": "INSERT,SELECT,UPDATE(labels,params,position,status,updated_at)",
 	"event_score_tables":    "DELETE,INSERT,SELECT,UPDATE(finished_at,label,status,updated_at)",
 	"event_score_players":   "DELETE,INSERT,SELECT,UPDATE(user_id)",
 	"event_scores":          "DELETE,INSERT,SELECT",
@@ -142,6 +145,11 @@ var wantAppPrivileges = map[string]string{
 	// replaced, never changed.
 	"event_celebrations":        "INSERT,SELECT,UPDATE(announced_by,updated_at)",
 	"event_celebration_winners": "DELETE,INSERT,SELECT",
+	// Issue #254: an option never moves or changes its label; a vote
+	// changes only its target and time; a closure is never deleted.
+	"event_vote_options":  "DELETE,INSERT,SELECT,UPDATE(created_by)",
+	"event_votes":         "DELETE,INSERT,SELECT,UPDATE(candidate_user_id,event_vehicle_id,option_id,photo_id,updated_at)",
+	"event_vote_closures": "INSERT,SELECT,UPDATE(closed_by)",
 	// Issue #256: a question never moves to another event, component or
 	// author, and its text and anonymity do not change; only the answered
 	// mark and the soft delete are written. A vote is added or deleted.
@@ -153,6 +161,26 @@ var wantAppPrivileges = map[string]string{
 	// and deleted it. The rotation state only moves.
 	"tayfa_daily_items": "DELETE,INSERT,SELECT,UPDATE(attribution,body,created_by,deleted_at,deleted_by,pin_day,pin_month,pin_year,position,updated_at)",
 	"tayfa_daily_state": "INSERT,SELECT,UPDATE(next_position,shown_item_id,shown_on,updated_at)",
+	// Issue #270: a library item never moves to another tayfa and its
+	// kind and request ID never change; a loan never moves to another
+	// item or tayfa (only its state, times and, on account deletion, the
+	// borrower change); a queue place is added and deleted.
+	"library_items": "DELETE,INSERT,SELECT,UPDATE(name,note,owner_id,photo_upload_id,status,updated_at,vocabulary_id,vocabulary_namespace,withdrawn_at,withdrawn_by)",
+	"library_loans": "DELETE,INSERT,SELECT,UPDATE(approved_at,borrower_id,due_at,ended_at,handed_over_at,orphaned_at,reminded_at,state)",
+	"library_queue": "DELETE,INSERT,SELECT",
+	// Issue #261: a material never moves to another tayfa and its kind
+	// and request ID never change; the blocked domain list is managed on
+	// the platform panel (#262): entries are added and removed; account
+	// deletion clears who added one (#334).
+	"materials":       "DELETE,INSERT,SELECT,UPDATE(author_id,deleted_at,deleted_by,domain,photo1_upload_id,photo2_upload_id,photo3_upload_id,subject_key,title,topic_key,updated_at,url)",
+	"blocked_domains": "DELETE,INSERT,SELECT,UPDATE(created_by)",
+	// Issue #272: a garage vehicle never moves to another person and its
+	// request ID never changes; a visibility row never moves.
+	"garage_vehicles":         "DELETE,INSERT,SELECT,UPDATE(color,deleted_at,deleted_by,make,model,model_year,note,photo1_upload_id,photo2_upload_id,photo3_upload_id,updated_at)",
+	"garage_tayfa_visibility": "DELETE,INSERT,SELECT,UPDATE(updated_at,visible)",
+	// Issue #271: the pool_link list is replaced as a whole (deleted and
+	// written again); a link never moves.
+	"event_pool_links": "DELETE,INSERT,SELECT",
 	// Issue #241: an item never moves to another event or list, and its
 	// name and quantity do not change; only the assignee changes and
 	// account deletion clears the people on it.

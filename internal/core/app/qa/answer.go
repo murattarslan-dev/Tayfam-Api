@@ -6,9 +6,11 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/notify"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
@@ -18,8 +20,38 @@ import (
 // CreateAnswerInput is a new answer.
 type CreateAnswerInput struct {
 	Body string
+	// Photos are the question pool's upload IDs (0–MaxPhotos).
+	Photos []string
 	// ClientRequestID is required: a UUID the client reuses on retry.
 	ClientRequestID string
+}
+
+// cleanAnswer checks an answer's body and photos against its pool: in
+// Soru-Cevap the text is required and there are no photos; in the
+// question pool the text and/or a photo is.
+func cleanAnswer(pool, rawBody string, rawPhotos []string) (string, []id.ID, error) {
+	photos, err := cleanPhotos(rawPhotos)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := (poolFields{photos: photos}).check(pool); err != nil {
+		return "", nil, err
+	}
+	if pool == PoolQA {
+		body, err := cleanBody(rawBody, FieldBody, 1, AnswerMax)
+		return body, photos, err
+	}
+	body, err := cleanBody(rawBody, FieldBody, 0, AnswerMax)
+	if err != nil {
+		return "", nil, err
+	}
+	if body == "" && len(photos) == 0 {
+		return "", nil, apperr.Validation(FieldBody)
+	}
+	if err := checkTerms(body); err != nil {
+		return "", nil, err
+	}
+	return body, photos, nil
 }
 
 // CreateAnswer answers a visible question. A repeat with the same
@@ -27,8 +59,11 @@ type CreateAnswerInput struct {
 // nothing. The answer.created event names the question's author for the
 // answer_received notification.
 func (s *Service) CreateAnswer(ctx context.Context, user, tayfa, question id.ID, in CreateAnswerInput) (Answer, error) {
-	body, err := cleanBody(in.Body, FieldBody, 1, AnswerMax)
-	if err != nil {
+	// The pool is known inside the write; this is the widest check.
+	if _, err := cleanBody(in.Body, FieldBody, 0, AnswerMax); err != nil {
+		return Answer{}, err
+	}
+	if _, err := cleanPhotos(in.Photos); err != nil {
 		return Answer{}, err
 	}
 	crid, ok := id.Parse(in.ClientRequestID)
@@ -37,8 +72,12 @@ func (s *Service) CreateAnswer(ctx context.Context, user, tayfa, question id.ID,
 	}
 
 	var v Answer
-	err = s.write(ctx, user, tayfa, authz.AnswerCreate, func(w writer) error {
+	err := s.write(ctx, user, tayfa, questionPool(tayfa, question), authz.AnswerCreate, func(w writer) error {
 		q := w.q
+		body, photos, err := cleanAnswer(w.pool, in.Body, in.Photos)
+		if err != nil {
+			return err
+		}
 		prev, err := q.GetAnswerByClientRequest(ctx, store.GetAnswerByClientRequestParams{AuthorID: user.PG(), ClientRequestID: crid.PG()})
 		switch {
 		case err == nil:
@@ -55,9 +94,14 @@ func (s *Service) CreateAnswer(ctx context.Context, user, tayfa, question id.ID,
 			return err
 		}
 		aid := id.New()
-		if err := q.CreateAnswer(ctx, store.CreateAnswerParams{
+		if err := attachPhotos(ctx, q, user, tayfa, media.Target{Type: media.TargetAnswer, ID: aid}, photos, pgtype.UUID{}, pgtype.UUID{}, w.now); err != nil {
+			return err
+		}
+		p := store.CreateAnswerParams{
 			ID: aid.PG(), QuestionID: question.PG(), TayfaID: tayfa.PG(), AuthorID: user.PG(), Body: body, ClientRequestID: crid.PG(),
-		}); err != nil {
+		}
+		p.Photo1UploadID, p.Photo2UploadID = photoColumns(photos)
+		if err := q.CreateAnswer(ctx, p); err != nil {
 			return fmt.Errorf("cevap: %w", err)
 		}
 		if v, err = getAnswer(ctx, q, tayfa, aid, user); err != nil {
@@ -88,16 +132,24 @@ func (s *Service) CreateAnswer(ctx context.Context, user, tayfa, question id.ID,
 	return v, nil
 }
 
-// UpdateAnswer replaces an answer's body: the author, or a moderator or
-// admin above the author's current role. The same body records nothing.
-func (s *Service) UpdateAnswer(ctx context.Context, user, tayfa, answer id.ID, rawBody string) (Answer, error) {
-	body, err := cleanBody(rawBody, FieldBody, 1, AnswerMax)
-	if err != nil {
+// UpdateAnswer replaces an answer's body and, in the question pool, its
+// photos (rawPhotos after the change; empty removes them): the author, or a
+// moderator or admin above the author's current role. The same values
+// record nothing.
+func (s *Service) UpdateAnswer(ctx context.Context, user, tayfa, answer id.ID, rawBody string, rawPhotos []string) (Answer, error) {
+	if _, err := cleanBody(rawBody, FieldBody, 0, AnswerMax); err != nil {
+		return Answer{}, err
+	}
+	if _, err := cleanPhotos(rawPhotos); err != nil {
 		return Answer{}, err
 	}
 	var v Answer
-	err = s.write(ctx, user, tayfa, 0, func(w writer) error {
+	err := s.write(ctx, user, tayfa, answerPool(tayfa, answer), 0, func(w writer) error {
 		q := w.q
+		body, photos, err := cleanAnswer(w.pool, rawBody, rawPhotos)
+		if err != nil {
+			return err
+		}
 		row, err := lockAnswer(ctx, q, tayfa, answer)
 		if err != nil {
 			return err
@@ -105,8 +157,14 @@ func (s *Service) UpdateAnswer(ctx context.Context, user, tayfa, answer id.ID, r
 		if err := w.authorizeOn(ctx, tayfa, user, row.AuthorID, authz.AnswerEditOwn, authz.AnswerEditAny); err != nil {
 			return err
 		}
-		if body != row.Body {
-			n, err := q.UpdateAnswerBody(ctx, store.UpdateAnswerBodyParams{TayfaID: tayfa.PG(), ID: answer.PG(), Body: body})
+		same := body == row.Body && samePhotos(photos, row.Photo1UploadID, row.Photo2UploadID)
+		if !same {
+			if err := attachPhotos(ctx, q, user, tayfa, media.Target{Type: media.TargetAnswer, ID: answer}, photos, row.Photo1UploadID, row.Photo2UploadID, w.now); err != nil {
+				return err
+			}
+			p := store.UpdateAnswerBodyParams{TayfaID: tayfa.PG(), ID: answer.PG(), Body: body}
+			p.Photo1UploadID, p.Photo2UploadID = photoColumns(photos)
+			n, err := q.UpdateAnswerBody(ctx, p)
 			if err != nil {
 				return fmt.Errorf("cevap güncelleme: %w", err)
 			}
@@ -114,7 +172,7 @@ func (s *Service) UpdateAnswer(ctx context.Context, user, tayfa, answer id.ID, r
 				return apperr.ErrAnswerNotFound
 			}
 		}
-		if v, err = getAnswer(ctx, q, tayfa, answer, user); err != nil || body == row.Body {
+		if v, err = getAnswer(ctx, q, tayfa, answer, user); err != nil || same {
 			return err
 		}
 		audit := ""
@@ -136,7 +194,7 @@ func (s *Service) UpdateAnswer(ctx context.Context, user, tayfa, answer id.ID, r
 // deletion hides it (votes kept); an admin can restore it within
 // RestoreWindow.
 func (s *Service) DeleteAnswer(ctx context.Context, user, tayfa, answer id.ID) error {
-	return s.write(ctx, user, tayfa, 0, func(w writer) error {
+	return s.write(ctx, user, tayfa, answerPool(tayfa, answer), 0, func(w writer) error {
 		q := w.q
 		row, err := lockAnswer(ctx, q, tayfa, answer)
 		if err != nil {
@@ -175,7 +233,7 @@ func (s *Service) DeleteAnswer(ctx context.Context, user, tayfa, answer id.ID) e
 // RestoreWindow, as RestoreQuestion. The question must be visible.
 func (s *Service) RestoreAnswer(ctx context.Context, user, tayfa, answer id.ID) (Answer, error) {
 	var v Answer
-	err := s.write(ctx, user, tayfa, authz.AnswerRestore, func(w writer) error {
+	err := s.write(ctx, user, tayfa, answerPool(tayfa, answer), authz.AnswerRestore, func(w writer) error {
 		q := w.q
 		row, err := q.GetAnswerForUpdate(ctx, store.GetAnswerForUpdateParams{TayfaID: tayfa.PG(), ID: answer.PG()})
 		switch {
@@ -190,7 +248,9 @@ func (s *Service) RestoreAnswer(ctx context.Context, user, tayfa, answer id.ID) 
 			v, err = getAnswer(ctx, q, tayfa, answer, user)
 			return err
 		}
-		if row.Body == "" || w.now.Sub(row.DeletedAt.Time) > RestoreWindow {
+		// Erased by its author: neither text nor photo.
+		erased := row.Body == "" && !row.Photo1UploadID.Valid && !row.Photo2UploadID.Valid
+		if erased || w.now.Sub(row.DeletedAt.Time) > RestoreWindow {
 			return apperr.ErrAnswerNotFound
 		}
 		if err := mayChange(ctx, q, tayfa, w.m, row.AuthorID); err != nil {
@@ -222,7 +282,7 @@ func (s *Service) RestoreAnswer(ctx context.Context, user, tayfa, answer id.ID) 
 // changes nothing.
 func (s *Service) SetVote(ctx context.Context, user, tayfa, answer id.ID, voted bool) (Answer, error) {
 	var v Answer
-	err := s.write(ctx, user, tayfa, authz.AnswerVote, func(w writer) error {
+	err := s.write(ctx, user, tayfa, answerPool(tayfa, answer), authz.AnswerVote, func(w writer) error {
 		q := w.q
 		row, err := lockAnswer(ctx, q, tayfa, answer)
 		if err != nil {
@@ -298,5 +358,6 @@ func answerView(r store.ListAnswersPageRow) Answer {
 		ID: id.ID(r.ID.Bytes), QuestionID: id.ID(r.QuestionID.Bytes), TayfaID: id.ID(r.TayfaID.Bytes),
 		AuthorID: optional(r.AuthorID), Body: r.Body, VoteCount: r.VoteCount, Voted: r.Voted,
 		CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
+		Pool: r.Pool, Photos: photosOf(r.Photo1UploadID, r.Photo2UploadID),
 	}
 }

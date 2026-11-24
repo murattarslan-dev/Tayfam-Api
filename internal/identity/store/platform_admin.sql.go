@@ -357,7 +357,8 @@ SELECT l.id, l.created_at, l.actor_id, u.display_name AS actor_name, l.action,
        l.target_type, l.target_id, l.reason,
        COALESCE(l.metadata->>'tayfa_id', '')::text AS tayfa_id,
        COALESCE(l.metadata->>'user_id', '')::text AS user_id,
-       COALESCE(l.metadata->>'report_id', '')::text AS report_id
+       COALESCE(l.metadata->>'report_id', '')::text AS report_id,
+       COALESCE(l.metadata->>'catalog_key', '')::text AS catalog_key
 FROM platform_audit_logs l
 LEFT JOIN users u ON u.id = l.actor_id AND u.deleted_at IS NULL
 WHERE ($1::text IS NULL OR l.action = $1::text)
@@ -399,11 +400,13 @@ type ListPlatformAuditLogsRow struct {
 	TayfaID    string
 	UserID     string
 	ReportID   string
+	CatalogKey string
 }
 
 // Panelde denetim kaydı (issue #110). En yeni önce, imleçli. related_id
 // kaydın hedefi ya da metadata'daki tayfa, kullanıcı veya şikâyet
-// kimliğidir. Metadata'dan yalnızca bu üç kimlik okunur.
+// kimliğidir. Metadata'dan yalnızca bu üç kimlik ve katalog işlemlerinin
+// anahtarı (catalog_key, issue #262) okunur.
 func (q *Queries) ListPlatformAuditLogs(ctx context.Context, arg ListPlatformAuditLogsParams) ([]ListPlatformAuditLogsRow, error) {
 	rows, err := q.db.Query(ctx, listPlatformAuditLogs,
 		arg.Action,
@@ -435,6 +438,7 @@ func (q *Queries) ListPlatformAuditLogs(ctx context.Context, arg ListPlatformAud
 			&i.TayfaID,
 			&i.UserID,
 			&i.ReportID,
+			&i.CatalogKey,
 		); err != nil {
 			return nil, err
 		}

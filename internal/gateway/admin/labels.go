@@ -49,6 +49,36 @@ func ts(t *timestamppb.Timestamp) string {
 // label is the Turkish name of an enum value shown on the panel.
 func label(v any) string {
 	switch x := v.(type) {
+	case corev1.CatalogStatus:
+		switch x {
+		case corev1.CatalogStatus_CATALOG_STATUS_ACTIVE:
+			return "Aktif"
+		case corev1.CatalogStatus_CATALOG_STATUS_RETIRED:
+			return "Emekli"
+		}
+	case corev1.BadgeScope:
+		switch x {
+		case corev1.BadgeScope_BADGE_SCOPE_USER:
+			return "Kişi"
+		case corev1.BadgeScope_BADGE_SCOPE_TAYFA:
+			return "Tayfa"
+		}
+	case corev1.BadgeRuleKind:
+		switch x {
+		case corev1.BadgeRuleKind_BADGE_RULE_KIND_THRESHOLD:
+			return "Eşik"
+		case corev1.BadgeRuleKind_BADGE_RULE_KIND_FIRST:
+			return "İlk katılım"
+		case corev1.BadgeRuleKind_BADGE_RULE_KIND_CHAMPION:
+			return "Şampiyonluk"
+		}
+	case corev1.EventMode:
+		switch x {
+		case corev1.EventMode_EVENT_MODE_IN_PERSON:
+			return "Yüz yüze"
+		case corev1.EventMode_EVENT_MODE_ONLINE:
+			return "Online"
+		}
 	case corev1.TayfaStatus:
 		switch x {
 		case corev1.TayfaStatus_TAYFA_STATUS_ACTIVE:
@@ -159,6 +189,12 @@ func targetLabel(t corev1.ReportTargetType) string {
 		return "Etkinlik sorusu"
 	case corev1.ReportTargetType_REPORT_TARGET_TYPE_DAILY_ITEM:
 		return "Günün içeriği"
+	case corev1.ReportTargetType_REPORT_TARGET_TYPE_LIBRARY_ITEM:
+		return "Kütüphane kalemi"
+	case corev1.ReportTargetType_REPORT_TARGET_TYPE_MATERIAL:
+		return "Materyal"
+	case corev1.ReportTargetType_REPORT_TARGET_TYPE_GARAGE_VEHICLE:
+		return "Garaj aracı"
 	}
 	return "—"
 }
@@ -197,6 +233,8 @@ func reasonLabel(r corev1.ReportReason) string {
 		return "Yönetici/moderatör davranışı"
 	case corev1.ReportReason_REPORT_REASON_OTHER:
 		return "Diğer"
+	case corev1.ReportReason_REPORT_REASON_PAID_TUTORING:
+		return "Ücretli özel ders"
 	}
 	return "—"
 }

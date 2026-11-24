@@ -1,0 +1,139 @@
+{{define "content"}}
+{{$csrf := .CSRF}}
+{{$d := .Data}}
+<h1>Katalog</h1>
+<p class="hint">Katalog sürümü {{$d.Resp.CatalogVersion}}. Anahtar değişmez, kayıt silinmez: kaldırmak için emekliye ayırın. Her değişiklik önce önizlenir; kaydetmek gerekçe ve son 5 dakikada Google girişi ister, denetim kaydına yazılır.</p>
+
+<h2>İlgi alanları</h2>
+<p><a href="/katalog/ilgi-alani">Yeni ilgi alanı</a></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Anahtar</th><th>Ad</th><th>Sıra</th><th>Durum</th><th>Varsayılan bileşenler</th></tr></thead>
+<tbody>
+{{range $d.Resp.Interests}}
+<tr>
+  <td><a href="/katalog/ilgi-alani?anahtar={{.Key}}">{{.Key}}</a></td>
+  <td>{{index .Labels "tr"}}</td>
+  <td>{{.Position}}</td>
+  <td>{{label .Status}}</td>
+  <td class="ids">{{range $i, $w := .DefaultWidgets}}{{if $i}}, {{end}}{{$w}}{{end}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+
+<h2>Etkinlik türleri</h2>
+<p><a href="/katalog/tur">Yeni tür</a></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Anahtar</th><th>Ad</th><th>İlgi alanları</th><th>Sürüm</th><th>En düşük istemci</th><th>Durum</th></tr></thead>
+<tbody>
+{{range $d.Resp.EventTypes}}
+<tr>
+  <td><a href="/katalog/tur?anahtar={{.Type.Key}}">{{.Type.Key}}</a></td>
+  <td>{{index .Type.Labels "tr"}}</td>
+  <td class="ids">{{range $i, $k := .Type.InterestKeys}}{{if $i}}, {{end}}{{$k}}{{end}}</td>
+  <td>{{.Type.Version}}</td>
+  <td>{{.MinClientVersion}}</td>
+  <td>{{label .Type.Status}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+
+<h2>Rozetler</h2>
+<p><a href="/katalog/rozet">Yeni rozet</a></p>
+{{if $d.Resp.Badges}}
+<div class="table-wrap"><table>
+<thead><tr><th>Anahtar</th><th>Ad</th><th>Kapsam</th><th>Kural</th><th>Durum</th></tr></thead>
+<tbody>
+{{range $d.Resp.Badges}}
+<tr>
+  <td><a href="/katalog/rozet?anahtar={{.Key}}">{{.Key}}</a></td>
+  <td>{{index .Labels "tr"}}</td>
+  <td>{{label .Scope}}</td>
+  <td>{{label .Rule.Kind}}{{if .Rule.Metric}} <span class="ids">{{.Rule.Metric}} ≥ {{.Rule.Value}}</span>{{end}}{{if .Rule.EventType}} <span class="ids">{{.Rule.EventType}}</span>{{end}}</td>
+  <td>{{label .Status}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+{{else}}
+<p>Rozet yok.</p>
+{{end}}
+
+<h2>Ders ve konu etiketleri</h2>
+<p class="hint">Düzey → ders → konu. Yeni düzeyin ve dersin "Diğer" etiketi kaydederken kendiliğinden eklenir.</p>
+<p><a href="/katalog/ders-konu">Yeni etiket</a></p>
+{{if $d.Resp.StudyTags}}
+<ul>
+{{range (index $d.Children "")}}
+  <li><a href="/katalog/ders-konu?anahtar={{.Key}}">{{index .Labels "tr"}}</a> <span class="ids">{{.Key}}</span>{{if eq (label .Status) "Emekli"}} <span class="tag warn">Emekli</span>{{end}}
+  {{with (index $d.Children .Key)}}
+  <ul>
+  {{range .}}
+    <li><a href="/katalog/ders-konu?anahtar={{.Key}}">{{index .Labels "tr"}}</a> <span class="ids">{{.Key}}</span>{{if eq (label .Status) "Emekli"}} <span class="tag warn">Emekli</span>{{end}}
+    {{with (index $d.Children .Key)}}
+    <ul>
+    {{range .}}<li><a href="/katalog/ders-konu?anahtar={{.Key}}">{{index .Labels "tr"}}</a> <span class="ids">{{.Key}}</span>{{if eq (label .Status) "Emekli"}} <span class="tag warn">Emekli</span>{{end}}</li>{{end}}
+    </ul>
+    {{end}}
+    </li>
+  {{end}}
+  </ul>
+  {{end}}
+  </li>
+{{end}}
+</ul>
+{{else}}
+<p>Etiket yok.</p>
+{{end}}
+
+<h2>Yazboz ön ayarları</h2>
+<p><a href="/katalog/on-ayar">Yeni ön ayar</a></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Anahtar</th><th>Ad</th><th>Sıra</th><th>Durum</th></tr></thead>
+<tbody>
+{{range $d.Resp.ScorePresets}}
+<tr>
+  <td><a href="/katalog/on-ayar?anahtar={{.Key}}">{{.Key}}</a></td>
+  <td>{{index .Labels "tr"}}</td>
+  <td>{{.Position}}</td>
+  <td>{{label .Status}}</td>
+</tr>
+{{end}}
+</tbody>
+</table></div>
+
+<h2>Engelli alan adları</h2>
+<p class="hint">Alan adı ve bütün alt alan adları engellidir: yeni materyal bağlantısı reddedilir, var olan materyal gizlenir (silinmez); alan adı listeden çıkınca yeniden görünür.</p>
+{{template "reauth" .}}
+<div class="card">
+<h3>Ekle</h3>
+<form class="stack" method="post" action="/katalog/alan-adi-ekle">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  <label for="alan-adi-ekle">Alan adı</label>
+  <input type="text" id="alan-adi-ekle" name="alan_adi" required maxlength="253" placeholder="ornek.com">
+  {{template "reason" "alan-adi-ekle"}}
+  <button type="submit">Engelle</button>
+</form>
+</div>
+<div class="card">
+<h3>Çıkar</h3>
+<form class="stack" method="post" action="/katalog/alan-adi-kaldir">
+  <input type="hidden" name="csrf" value="{{$csrf}}">
+  <label for="alan-adi-kaldir">Alan adı</label>
+  <select id="alan-adi-kaldir" name="alan_adi" required>
+    {{range $d.Resp.BlockedDomains}}<option value="{{.Domain}}">{{.Domain}}</option>{{end}}
+  </select>
+  {{template "reason" "alan-adi-kaldir"}}
+  <button type="submit">Listeden çıkar</button>
+</form>
+</div>
+<div class="table-wrap"><table>
+<thead><tr><th>Alan adı</th><th>Eklendi</th><th>Kaynak</th></tr></thead>
+<tbody>
+{{range $d.Resp.BlockedDomains}}
+<tr><td>{{.Domain}}</td><td>{{ts .CreateTime}}</td><td>{{if .Initial}}Başlangıç listesi{{else}}Panel{{end}}</td></tr>
+{{end}}
+</tbody>
+</table></div>
+{{end}}

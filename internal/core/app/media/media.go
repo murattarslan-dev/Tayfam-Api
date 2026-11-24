@@ -55,6 +55,22 @@ const (
 	// PurposeReportEvidence is the photo a direct message's reporter
 	// shares from their device; only the platform panel sees it.
 	PurposeReportEvidence = "report_evidence"
+	// PurposeLibraryItem is a library item's photo (issue #270, ADR-0040
+	// §1): one per item, seen by the tayfa's active members.
+	PurposeLibraryItem = "library_item"
+	// PurposeQuestionPool is a question pool question's or answer's photo
+	// (issue #271, ADR-0040 §2): at most two each, seen by the tayfa's
+	// active members while the question_pool module is on.
+	PurposeQuestionPool = "question_pool"
+	// PurposeMaterialNote is a photo of the member's own notes in the
+	// tayfa's material library (issue #261, ADR-0040 §3): at most three per
+	// material, seen by the tayfa's active members while the materials
+	// module is on.
+	PurposeMaterialNote = "material_note"
+	// PurposeGarageVehicle is a photo of a vehicle in the member's garage
+	// (issue #272, ADR-0040 §4): at most three per vehicle, not a tayfa's
+	// (no tayfa_id), seen by the members of the tayfas the garage shows in.
+	PurposeGarageVehicle = "garage_vehicle"
 )
 
 // Statuses (uploads.status). statusDeleting is never returned.
@@ -72,6 +88,16 @@ const (
 	TargetEvent      = "event"
 	TargetLogEntry   = "log_entry"
 	TargetEventPhoto = "event_photo"
+	// TargetLibraryItem is a library item (issue #270).
+	TargetLibraryItem = "library_item"
+	// TargetQuestion and TargetAnswer are a question pool question and
+	// answer (issue #271).
+	TargetQuestion = "question"
+	TargetAnswer   = "answer"
+	// TargetMaterial is a material of the material library (issue #261).
+	TargetMaterial = "material"
+	// TargetGarageVehicle is a vehicle of a member's garage (issue #272).
+	TargetGarageVehicle = "garage_vehicle"
 	// Chat's message IDs (ADR-0031); chat decides who sees them.
 	TargetChannelMessage = "channel_message"
 	TargetDMMessage      = "dm_message"

@@ -252,6 +252,11 @@ olayına yazar; chat teslim eder.
 
 ## Uygulama notları (#265, §4–§5)
 
+Ayrıntı kararları (kişi başı sınırda reddetme, engelli üyeye bildirim
+gitmemesi, `mentions` seviyesinin `now_started` push'unu durdurması, 18 yaş
+altı ve hassas katılım için ek kural olmaması) platform sahibinin
+2026-11-23 sohbet kararıyla onaylı (#323).
+
 - **Tayfa etkinliği:** `event.created` olayının `starts_now` işareti
   `event_created` yerine `now_started` üretir. Alıcılar organizatör
   dışındaki etkin üyelerdir; organizatörle iki yönden engeli olan üye

@@ -31,8 +31,9 @@
 // the tayfa's from its totals without sensitive events, each person's
 // from their totals over every tayfa. Badges are never taken back.
 //
-// Reading: members of the tayfa read its totals and the contributions of
-// its active members (Service.Tayfa; TayfaStatsService). The showcase and
+// Reading: members of the tayfa read its totals and their own
+// contributions, never anyone else's (Service.Tayfa; TayfaStatsService;
+// issue #322). The showcase and
 // the profile (#267) and the home cards (#268) read with TayfaYears,
 // TayfaTotals and UserTotals; who may see what is theirs to decide
 // (ADR-0026 §3–§4). Values are never logged.
@@ -334,15 +335,6 @@ type Stat struct {
 	Events int32
 }
 
-// Contribution is one person's value of a measure or log metric in the
-// tayfa.
-type Contribution struct {
-	User   id.ID
-	Metric string
-	Value  float64
-	Events int32
-}
-
 // TayfaYears returns the years the tayfa has statistics for, newest first.
 func TayfaYears(ctx context.Context, q *store.Queries, tayfa id.ID) ([]int32, error) {
 	ys, err := q.ListTayfaStatYears(ctx, tayfa.PG())
@@ -400,15 +392,20 @@ func New(fw *component.Service) *Service { return &Service{fw: fw} }
 type View struct {
 	Year int32
 	// Years are the years with statistics, newest first.
-	Years         []int32
-	Totals        []Stat
-	Contributions []Contribution
+	Years  []int32
+	Totals []Stat
+	// Own are the reader's own contributions (measure and log metrics) in
+	// the tayfa. Nobody else's contribution is ever in a View (platform
+	// owner, 2026-11-23; issue #322): not for an admin or a moderator
+	// either.
+	Own []Stat
 	// ComputedAt is zero when nothing was computed yet.
 	ComputedAt time.Time
 }
 
-// Tayfa returns the tayfa's totals and its active members' contributions
-// (measures and logs; nothing sensitive is stored) for the year. Open to
+// Tayfa returns the tayfa's totals and the reader's own contributions
+// (measures and logs; nothing sensitive is stored) for the year; other
+// members' contributions are never read (issue #322). Open to
 // every active member (authz.TayfaView), muted ones included. Refused:
 // anyone but an active member (apperr.ErrTayfaNotFound), a bad year
 // (validation error on year).
@@ -430,13 +427,13 @@ func (s *Service) Tayfa(ctx context.Context, user, tayfa id.ID, year int32) (Vie
 		if err != nil {
 			return err
 		}
-		rows, err := q.ListTayfaStatContributions(ctx, store.ListTayfaStatContributionsParams{TayfaID: tayfa.PG(), Year: year})
+		rows, err := q.ListOwnTayfaStatContributions(ctx, store.ListOwnTayfaStatContributionsParams{TayfaID: tayfa.PG(), UserID: user.PG(), Year: year})
 		if err != nil {
-			return fmt.Errorf("kişisel katkılar: %w", err)
+			return fmt.Errorf("kendi katkıları: %w", err)
 		}
-		out = View{Year: year, Years: years, Totals: totals, Contributions: make([]Contribution, 0, len(rows)), ComputedAt: at}
+		out = View{Year: year, Years: years, Totals: totals, Own: make([]Stat, 0, len(rows)), ComputedAt: at}
 		for _, r := range rows {
-			out.Contributions = append(out.Contributions, Contribution{User: id.ID(r.UserID.Bytes), Metric: r.MetricKey, Value: r.Value, Events: r.EventCount})
+			out.Own = append(out.Own, Stat{Metric: r.MetricKey, Source: r.Source, Value: r.Value, Events: r.EventCount})
 		}
 		return nil
 	})

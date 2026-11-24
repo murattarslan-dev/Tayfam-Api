@@ -18,8 +18,11 @@ import "google/protobuf/timestamp.proto";
 //     anything else is ERROR_REASON_VALIDATION.
 //   - A caller who is not an ACTIVE member gets
 //     ERROR_REASON_TAYFA_NOT_FOUND, the same as for an unknown tayfa.
-//   - While the tayfa has the qa module turned off, every method, reads
-//     included, fails with ERROR_REASON_MODULE_DISABLED.
+//   - While the tayfa has the question's module turned off, every method,
+//     reads included, fails with ERROR_REASON_MODULE_DISABLED: the qa
+//     module for the Soru-Cevap pool, the question_pool module for the
+//     question pool. A method on an existing question or answer checks the
+//     module of its pool; the tag methods belong to the qa module.
 //   - The permission table (ADR-0004) decides the rest:
 //     ERROR_REASON_PERMISSION_DENIED for a role that is too low,
 //     ERROR_REASON_MUTED for a muted member's writes.
@@ -48,6 +51,18 @@ import "google/protobuf/timestamp.proto";
 // Audit records and events never hold titles, bodies, tag names or search
 // queries, and the search query is never logged.
 //
+// Pools (issue #271; ADR-0040 §2): the same questions, answers and helpful
+// votes serve two modules. QUESTION_POOL_QA is the tayfa's Soru-Cevap
+// (title, body, free tags). QUESTION_POOL_QUESTION_POOL is the Eğitim
+// question pool: no title and no tags; the subject (required) and topic
+// (optional) come from Tayfam's study tag list (CatalogService study_tags,
+// keys only); the text and/or up to 2 photos (upload purpose
+// UPLOAD_PURPOSE_QUESTION_POOL) of the question and of each answer. There
+// is no "solved" mark in either pool: answers are ordered by helpful votes.
+// A question's pool never changes. The photos are the authors' own
+// uploads; the client reads their links with MediaService.GetMediaUrls
+// (active members, question_pool module on).
+//
 // Paging: page_size 0 means 20; values above 100 are treated as 100;
 // negative values are ERROR_REASON_VALIDATION. page_token is opaque and only
 // valid for the same tayfa and the same request (question, query, tag); a
@@ -59,28 +74,35 @@ service QAService {
   // a new one is created. A repeat with the same client_request_id by the
   // same caller returns the first question and creates nothing.
   //
-  // Errors: the common ones, ERROR_REASON_VALIDATION,
-  // ERROR_REASON_TAG_LIMIT.
+  // Errors: the common ones, ERROR_REASON_VALIDATION (also: a field of the
+  // other pool, subject_key or topic_key not a selectable study tag),
+  // ERROR_REASON_TAG_LIMIT, ERROR_REASON_UPLOAD_NOT_FOUND,
+  // ERROR_REASON_UPLOAD_NOT_READY, ERROR_REASON_UPLOAD_IN_USE.
   rpc CreateQuestion(CreateQuestionRequest) returns (CreateQuestionResponse);
 
   // GetQuestion returns one visible question. Works on read-only tayfas.
   rpc GetQuestion(GetQuestionRequest) returns (GetQuestionResponse);
 
-  // ListQuestions lists visible questions, newest first. With query, only
-  // questions whose title or body match it (Turkish full-text search,
-  // İ/ı aware), most relevant first. With tag_id, only questions with that
-  // tag. Works on read-only tayfas.
+  // ListQuestions lists the visible questions of one pool, newest first.
+  // With query, only questions whose title or body match it (Turkish
+  // full-text search, İ/ı aware), most relevant first. With tag_id, only
+  // questions with that tag (qa pool); with subject_key and topic_key,
+  // only questions with that subject or topic (question pool; retired tags
+  // too). Works on read-only tayfas.
   //
   // Errors: the common ones, ERROR_REASON_VALIDATION,
   // ERROR_REASON_TAG_NOT_FOUND.
   rpc ListQuestions(ListQuestionsRequest) returns (ListQuestionsResponse);
 
   // UpdateQuestion changes the fields named in update_mask. "tags" replaces
-  // the question's tags. Setting the current values succeeds and records
-  // nothing.
+  // the question's tags. In the question pool "subject" sets subject_key
+  // and topic_key together (the same subject and topic stay valid after
+  // being retired) and "photos" replaces the photos (a removed photo's file
+  // is deleted). Setting the current values succeeds and records nothing.
   //
   // Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
-  // ERROR_REASON_VALIDATION, ERROR_REASON_TAG_LIMIT.
+  // ERROR_REASON_VALIDATION, ERROR_REASON_TAG_LIMIT and the upload errors
+  // of CreateQuestion.
   rpc UpdateQuestion(UpdateQuestionRequest) returns (UpdateQuestionResponse);
 
   // DeleteQuestion deletes a question; its answers are no longer visible
@@ -99,7 +121,8 @@ service QAService {
   // client_request_id by the same caller returns the first answer.
   //
   // Errors: the common ones, ERROR_REASON_VALIDATION,
-  // ERROR_REASON_QUESTION_NOT_FOUND.
+  // ERROR_REASON_QUESTION_NOT_FOUND and the upload errors of
+  // CreateQuestion.
   rpc CreateAnswer(CreateAnswerRequest) returns (CreateAnswerResponse);
 
   // ListAnswers lists the visible answers of a visible question: most
@@ -109,11 +132,12 @@ service QAService {
   // ERROR_REASON_QUESTION_NOT_FOUND.
   rpc ListAnswers(ListAnswersRequest) returns (ListAnswersResponse);
 
-  // UpdateAnswer replaces an answer's body. Setting the current body
-  // succeeds and records nothing.
+  // UpdateAnswer replaces an answer's body and, in the question pool, its
+  // photos (empty photo_upload_ids removes them). Setting the current
+  // values succeeds and records nothing.
   //
   // Errors: the common ones, ERROR_REASON_ROLE_HIERARCHY,
-  // ERROR_REASON_VALIDATION.
+  // ERROR_REASON_VALIDATION and the upload errors of CreateQuestion.
   rpc UpdateAnswer(UpdateAnswerRequest) returns (UpdateAnswerResponse);
 
   // DeleteAnswer deletes an answer. The author's own deletion also removes
@@ -141,6 +165,15 @@ service QAService {
   rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
 }
 
+// The module a question belongs to (questions.pool).
+enum QuestionPool {
+  QUESTION_POOL_UNSPECIFIED = 0;
+  // Soru-Cevap (the qa module).
+  QUESTION_POOL_QA = 1;
+  // Eğitim question pool (the question_pool module; issue #271).
+  QUESTION_POOL_QUESTION_POOL = 2;
+}
+
 message Tag {
   string id = 1;
   // 1–30 characters as first written.
@@ -154,17 +187,25 @@ message Question {
   string tayfa_id = 2;
   // Empty when the author's account was deleted.
   string author_user_id = 3;
-  // 10–150 characters, one line.
+  // 10–150 characters, one line; empty in the question pool.
   string title = 4;
-  // Up to 10000 characters; may be empty.
+  // Up to 10000 characters; may be empty (in the question pool only when
+  // the question has a photo).
   string body = 5;
-  // By name.
+  // By name; always empty in the question pool.
   repeated Tag tags = 6;
   // Visible answers.
   int32 answer_count = 7;
   google.protobuf.Timestamp create_time = 8;
   // Changes on every edit and restore.
   google.protobuf.Timestamp update_time = 9;
+  QuestionPool pool = 10;
+  // Question pool only: the subject's study tag key (always set) and the
+  // topic's (empty: none). The tag may have been retired since.
+  string subject_key = 11;
+  string topic_key = 12;
+  // Question pool only: 0–2 uploads, in order.
+  repeated string photo_upload_ids = 13;
 }
 
 message Answer {
@@ -173,7 +214,8 @@ message Answer {
   string tayfa_id = 3;
   // Empty when the author's account was deleted.
   string author_user_id = 4;
-  // 1–10000 characters.
+  // 1–10000 characters; in the question pool 0–10000 (empty only with a
+  // photo).
   string body = 5;
   // Helpful votes.
   int32 vote_count = 6;
@@ -182,21 +224,37 @@ message Answer {
   google.protobuf.Timestamp create_time = 8;
   // Changes on every edit and restore; votes do not change it.
   google.protobuf.Timestamp update_time = 9;
+  // Question pool only: 0–2 uploads, in order.
+  repeated string photo_upload_ids = 10;
 }
 
 message CreateQuestionRequest {
   string tayfa_id = 1;
-  // 10–150 characters after trimming surrounding spaces; no line breaks or
-  // control characters.
+  // qa pool: 10–150 characters after trimming surrounding spaces; no line
+  // breaks or control characters. Question pool: empty.
   string title = 2;
   // Up to 10000 characters after trimming; line breaks and tabs allowed.
+  // Question pool: the text and/or a photo is required.
   string body = 3;
-  // Up to 5 tag names, each 1–30 characters after trimming and joining
-  // inner spaces, one line. Names that fold to the same tag count once.
+  // qa pool: up to 5 tag names, each 1–30 characters after trimming and
+  // joining inner spaces, one line. Names that fold to the same tag count
+  // once. Question pool: empty.
   repeated string tags = 4;
   // Required. A UUID the client generates once per attempt and reuses on
   // retry (offline write protection).
   string client_request_id = 5;
+  // Unspecified means QUESTION_POOL_QA.
+  QuestionPool pool = 6;
+  // Question pool: a selectable (active) subject of the study tag list;
+  // required. qa pool: empty.
+  string subject_key = 7;
+  // Question pool: optional, a selectable topic under subject_key. qa
+  // pool: empty.
+  string topic_key = 8;
+  // Question pool: 0–2 of the caller's READY uploads of purpose
+  // UPLOAD_PURPOSE_QUESTION_POOL for this tayfa, not attached elsewhere.
+  // qa pool: empty.
+  repeated string photo_upload_ids = 9;
 }
 
 message CreateQuestionResponse {
@@ -216,10 +274,16 @@ message ListQuestionsRequest {
   string tayfa_id = 1;
   // Optional search text, up to 100 characters. Empty lists all.
   string query = 2;
-  // Optional tag filter.
+  // Optional tag filter (qa pool only).
   string tag_id = 3;
   int32 page_size = 4;
   string page_token = 5;
+  // Unspecified means QUESTION_POOL_QA.
+  QuestionPool pool = 6;
+  // Optional subject and topic filters (question pool only): any study tag
+  // key, retired ones included. topic_key needs subject_key.
+  string subject_key = 7;
+  string topic_key = 8;
 }
 
 message ListQuestionsResponse {
@@ -230,12 +294,18 @@ message ListQuestionsResponse {
 message UpdateQuestionRequest {
   string tayfa_id = 1;
   string question_id = 2;
-  // Same rules as CreateQuestionRequest.
+  // Same rules as CreateQuestionRequest, for the question's pool.
   string title = 3;
   string body = 4;
   repeated string tags = 5;
-  // Required, non-empty. Allowed paths: "title", "body", "tags".
+  // Required, non-empty. Allowed paths: "title", "body", "tags" (qa pool);
+  // "body", "subject" (subject_key and topic_key), "photos"
+  // (photo_upload_ids) (question pool).
   google.protobuf.FieldMask update_mask = 6;
+  string subject_key = 7;
+  string topic_key = 8;
+  // The new photos, in order; already attached ones are kept.
+  repeated string photo_upload_ids = 9;
 }
 
 message UpdateQuestionResponse {
@@ -261,10 +331,13 @@ message RestoreQuestionResponse {
 message CreateAnswerRequest {
   string tayfa_id = 1;
   string question_id = 2;
-  // 1–10000 characters after trimming; line breaks and tabs allowed.
+  // 1–10000 characters after trimming; line breaks and tabs allowed. In
+  // the question pool 0–10000: the text and/or a photo is required.
   string body = 3;
   // Required; as CreateQuestionRequest.client_request_id.
   string client_request_id = 4;
+  // Question pool only: as CreateQuestionRequest.photo_upload_ids.
+  repeated string photo_upload_ids = 5;
 }
 
 message CreateAnswerResponse {
@@ -288,6 +361,9 @@ message UpdateAnswerRequest {
   string answer_id = 2;
   // Same rules as CreateAnswerRequest.body.
   string body = 3;
+  // Question pool only: the photos after the change, in order (empty
+  // removes them); already attached ones are kept.
+  repeated string photo_upload_ids = 4;
 }
 
 message UpdateAnswerResponse {

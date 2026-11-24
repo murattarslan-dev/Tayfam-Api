@@ -10,7 +10,9 @@ import (
 )
 
 // The tayfa statistics (issue #266; ADR-0026). core decides everything;
-// the gateway only keeps junk out early.
+// the gateway only keeps junk out early. A reader gets only their own
+// contributions (issue #322): the deprecated contributions list is always
+// empty, whatever core sends, and stays only for clients built before.
 
 const statsPath = "/v1/tayfas/{tayfa_id}/stats"
 
@@ -31,20 +33,15 @@ type tayfaStatJSON struct {
 	EventCount int32   `json:"event_count"`
 }
 
-type tayfaStatContributionJSON struct {
-	UserID     string  `json:"user_id"`
-	MetricKey  string  `json:"metric_key"`
-	Value      float64 `json:"value"`
-	EventCount int32   `json:"event_count"`
-}
-
 type tayfaStatsJSON struct {
 	// Year is absent for all time.
-	Year          *int32                      `json:"year,omitempty"`
-	Years         []int32                     `json:"years"`
-	Totals        []tayfaStatJSON             `json:"totals"`
-	Contributions []tayfaStatContributionJSON `json:"contributions"`
-	ComputedAt    *time.Time                  `json:"computed_at,omitempty"`
+	Year             *int32          `json:"year,omitempty"`
+	Years            []int32         `json:"years"`
+	Totals           []tayfaStatJSON `json:"totals"`
+	OwnContributions []tayfaStatJSON `json:"own_contributions"`
+	// Contributions is deprecated and always empty (issue #322).
+	Contributions []struct{} `json:"contributions"`
+	ComputedAt    *time.Time `json:"computed_at,omitempty"`
 }
 
 // statsYear reads the optional year query: absent for all time (0), else
@@ -79,10 +76,11 @@ func (h componentHandlers) getTayfaStats(ctx context.Context, w http.ResponseWri
 		return
 	}
 	out := tayfaStatsJSON{
-		Years:         append([]int32{}, resp.GetYears()...),
-		Totals:        make([]tayfaStatJSON, 0, len(resp.GetTotals())),
-		Contributions: make([]tayfaStatContributionJSON, 0, len(resp.GetContributions())),
-		ComputedAt:    optTime(resp.GetComputeTime()),
+		Years:            append([]int32{}, resp.GetYears()...),
+		Totals:           make([]tayfaStatJSON, 0, len(resp.GetTotals())),
+		OwnContributions: make([]tayfaStatJSON, 0, len(resp.GetOwnContributions())),
+		Contributions:    []struct{}{},
+		ComputedAt:       optTime(resp.GetComputeTime()),
 	}
 	if y := resp.GetYear(); y != 0 {
 		out.Year = &y
@@ -90,10 +88,8 @@ func (h componentHandlers) getTayfaStats(ctx context.Context, w http.ResponseWri
 	for _, s := range resp.GetTotals() {
 		out.Totals = append(out.Totals, tayfaStatJSON{MetricKey: s.GetMetricKey(), Source: s.GetSource(), Value: s.GetValue(), EventCount: s.GetEventCount()})
 	}
-	for _, c := range resp.GetContributions() {
-		out.Contributions = append(out.Contributions, tayfaStatContributionJSON{
-			UserID: c.GetUserId(), MetricKey: c.GetMetricKey(), Value: c.GetValue(), EventCount: c.GetEventCount(),
-		})
+	for _, s := range resp.GetOwnContributions() {
+		out.OwnContributions = append(out.OwnContributions, tayfaStatJSON{MetricKey: s.GetMetricKey(), Source: s.GetSource(), Value: s.GetValue(), EventCount: s.GetEventCount()})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

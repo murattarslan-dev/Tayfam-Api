@@ -89,6 +89,10 @@ type fakeCore struct {
 	*calls
 	tayfaName string
 	err       map[string]error
+	// catalogReq is the last catalog save request (issue #262); check is
+	// what the fake answers it with.
+	catalogReq any
+	check      *corev1.CatalogCheck
 }
 
 func newFakeCore(c *calls) *fakeCore {
@@ -362,6 +366,8 @@ var getPages = []string{
 	"/sikayetler", "/sikayetler?tumu=1", "/sikayetler/" + reportID, "/sikayetler/" + dmReportID, "/sikayetler/" + chanReportID,
 	"/denetim", "/denetim?islem=tayfa.suspend&tur=tayfa&ilgili=" + tayfaID + "&baslangic=2026-11-01&bitis=2026-11-09",
 	"/kesfet",
+	"/katalog", "/katalog/tur", "/katalog/tur?anahtar=chess", "/katalog/ilgi-alani?anahtar=games", "/katalog/rozet?anahtar=first_event",
+	"/katalog/ders-konu?anahtar=lgs", "/katalog/on-ayar?anahtar=batak", "/katalog/rozet",
 }
 
 // changes are every state-changing page request with a valid form.
@@ -385,6 +391,10 @@ func changes() map[string]url.Values {
 		"/sikayetler/" + reportID + "/karar":             r("karar", "kaldir"),
 		"/tayfalar/" + tayfaID + "/kesfet-onay":          r(),
 		"/tayfalar/" + tayfaID + "/kesfet-ret":           r(),
+		"/katalog/tur": r("islem", "kaydet", "anahtar", "chess", "surum", "1", "adlar", `{"tr": "Satranç"}`, "sira", "10",
+			"ikon", "chess", "ilgi_alanlari", "games", "yuz_yuze", "1", "tanim", "{}", "durum", "active"),
+		"/katalog/alan-adi-ekle":   r("alan_adi", "example.com"),
+		"/katalog/alan-adi-kaldir": r("alan_adi", "bit.ly"),
 	}
 }
 
@@ -673,6 +683,9 @@ func TestChangeNeedsRecentSignIn(t *testing.T) {
 		page := path[:strings.LastIndex(path, "/")]
 		if strings.Contains(path, "/kesfet-") { // the Keşfet queue's forms return to it
 			page = "/kesfet"
+		}
+		if path == "/katalog/tur" { // a catalog form returns to itself
+			page = "/katalog/tur?anahtar=chess"
 		}
 		if got := loc.Query().Get("devam"); got != page {
 			t.Errorf("%s: devam %q", path, got)

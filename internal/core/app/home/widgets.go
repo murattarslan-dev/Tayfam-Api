@@ -106,12 +106,16 @@ func Widgets() []Widget {
 		{Key: "daily", Kind: KindModule, Module: "daily"},
 
 		// library (#270)
+		{Key: "library", Kind: KindModule, Module: "library"},
 
 		// question_pool (#271)
+		{Key: "question_pool", Kind: KindModule, Module: "question_pool"},
 
 		// materials (#261)
+		{Key: "materials", Kind: KindModule, Module: "materials"},
 
 		// garage (#272)
+		{Key: "garage", Kind: KindModule, Module: "garage"},
 	}
 }
 

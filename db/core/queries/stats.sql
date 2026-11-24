@@ -141,14 +141,15 @@ FROM tayfa_stats
 WHERE tayfa_id = @tayfa_id AND year = @year
 ORDER BY metric_key;
 
--- Kişisel katkılar: ölçüm ve günlük metrikleri, yalnızca tayfanın etkin
--- üyelerininki (ayrılanın ve hesabı silinenin katkısı listede yoktur).
--- name: ListTayfaStatContributions :many
-SELECT s.user_id, s.metric_key, s.value::float8 AS value, s.event_count
+-- Çağıranın kendi katkıları: ölçüm ve günlük metrikleri, yalnızca kişinin
+-- tayfanın etkin üyesiyken. Başkasının katkısı hiçbir zaman okunmaz
+-- (platform sahibi, 2026-11-23; issue #322, ADR-0026 §3).
+-- name: ListOwnTayfaStatContributions :many
+SELECT s.metric_key, s.source, s.value::float8 AS value, s.event_count
 FROM user_stats AS s
 JOIN memberships AS m ON m.tayfa_id = s.tayfa_id AND m.user_id = s.user_id AND m.status = 'active'
-WHERE s.tayfa_id = @tayfa_id AND s.year = @year AND s.source IN ('measure', 'log')
-ORDER BY s.metric_key, s.value DESC, s.user_id;
+WHERE s.tayfa_id = @tayfa_id AND s.user_id = @user_id AND s.year = @year AND s.source IN ('measure', 'log')
+ORDER BY s.metric_key;
 
 -- Kişinin bütün tayfalardaki toplamları bir yıl (0: tüm zamanlar) için.
 -- name: ListUserStats :many

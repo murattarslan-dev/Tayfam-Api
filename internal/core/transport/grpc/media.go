@@ -52,6 +52,14 @@ var uploadPurposes = map[corev1.UploadPurpose]string{
 	corev1.UploadPurpose_UPLOAD_PURPOSE_CHAT_PHOTO:      media.PurposeChatPhoto,
 	corev1.UploadPurpose_UPLOAD_PURPOSE_DM_ATTACHMENT:   media.PurposeDMAttachment,
 	corev1.UploadPurpose_UPLOAD_PURPOSE_REPORT_EVIDENCE: media.PurposeReportEvidence,
+	// Issue #270 (ADR-0040 §1).
+	corev1.UploadPurpose_UPLOAD_PURPOSE_LIBRARY_ITEM: media.PurposeLibraryItem,
+	// Issue #271 (ADR-0040 §2).
+	corev1.UploadPurpose_UPLOAD_PURPOSE_QUESTION_POOL: media.PurposeQuestionPool,
+	// Issue #261 (ADR-0040 §3).
+	corev1.UploadPurpose_UPLOAD_PURPOSE_MATERIAL_NOTE: media.PurposeMaterialNote,
+	// Issue #272 (ADR-0040 §4).
+	corev1.UploadPurpose_UPLOAD_PURPOSE_GARAGE_VEHICLE: media.PurposeGarageVehicle,
 }
 
 var uploadStatuses = map[string]corev1.UploadStatus{

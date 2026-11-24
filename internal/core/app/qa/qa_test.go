@@ -403,7 +403,7 @@ func TestDeleteAndRestoreQuestion(t *testing.T) {
 	byMember := e.ask(t, c, c.member, "Üyenin gizlenecek sorusu", "Gövde", "kamp")
 	a := e.answer(t, c, c.member2, byMember, "Cevap duruyor")
 	must(t, e.svc.DeleteQuestion(ctx, c.mod, c.tayfa, byMember.ID))
-	_, err = e.svc.UpdateAnswer(ctx, c.member2, c.tayfa, a.ID, "Değişti")
+	_, err = e.svc.UpdateAnswer(ctx, c.member2, c.tayfa, a.ID, "Değişti", nil)
 	is(t, "gizli sorunun cevabı", err, apperr.ErrAnswerNotFound)
 	_, err = e.svc.RestoreQuestion(ctx, c.mod, c.tayfa, byMember.ID)
 	is(t, "moderatör geri aldı", err, apperr.ErrPermissionDenied)
@@ -486,11 +486,11 @@ func TestAnswers(t *testing.T) {
 	field(t, "başka soruda aynı istek", err, "client_request_id")
 
 	// Edit and delete: author or moderator above the author.
-	_, err = e.svc.UpdateAnswer(ctx, c.member2, c.tayfa, a.ID, "Değişti")
+	_, err = e.svc.UpdateAnswer(ctx, c.member2, c.tayfa, a.ID, "Değişti", nil)
 	is(t, "üye başkasının cevabı", err, apperr.ErrPermissionDenied)
-	_, err = e.svc.UpdateAnswer(ctx, c.mod2, c.tayfa, a.ID, "Değişti")
+	_, err = e.svc.UpdateAnswer(ctx, c.mod2, c.tayfa, a.ID, "Değişti", nil)
 	is(t, "moderatör moderatörün cevabı", err, apperr.ErrRoleHierarchy)
-	v, err := e.svc.UpdateAnswer(ctx, c.admin, c.tayfa, a.ID, " Yönetici düzeltti ")
+	v, err := e.svc.UpdateAnswer(ctx, c.admin, c.tayfa, a.ID, " Yönetici düzeltti ", nil)
 	if err != nil || v.Body != "Yönetici düzeltti" {
 		t.Fatalf("düzenleme: %+v %v", v, err)
 	}
@@ -853,7 +853,7 @@ func (e *env) callAll(user, tayfaID, qid, aid, tid id.ID) map[string]error {
 	_, out["RestoreQuestion"] = e.svc.RestoreQuestion(ctx, user, tayfaID, qid)
 	_, out["CreateAnswer"] = e.svc.CreateAnswer(ctx, user, tayfaID, qid, CreateAnswerInput{Body: "Cevap", ClientRequestID: id.New().String()})
 	_, _, out["ListAnswers"] = e.svc.ListAnswers(ctx, user, tayfaID, qid, 0, "")
-	_, out["UpdateAnswer"] = e.svc.UpdateAnswer(ctx, user, tayfaID, aid, "Değişti")
+	_, out["UpdateAnswer"] = e.svc.UpdateAnswer(ctx, user, tayfaID, aid, "Değişti", nil)
 	_, out["SetVote"] = e.svc.SetVote(ctx, user, tayfaID, aid, true)
 	_, out["RestoreAnswer"] = e.svc.RestoreAnswer(ctx, user, tayfaID, aid)
 	_, out["ListTags"] = e.svc.ListTags(ctx, user, tayfaID)

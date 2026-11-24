@@ -40,8 +40,11 @@ func TestTayfaStatsRoute(t *testing.T) {
 	at := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
 	f := &fakeStats{resp: &corev1.GetTayfaStatsResponse{
 		Year: 2025, Years: []int32{2026, 2025},
-		Totals:        []*corev1.TayfaStat{{MetricKey: "events", Source: "common", Value: 4, EventCount: 4}},
-		Contributions: []*corev1.TayfaStatContribution{{UserId: userID, MetricKey: "hike.distance", Value: 12.5, EventCount: 2}},
+		Totals:           []*corev1.TayfaStat{{MetricKey: "events", Source: "common", Value: 4, EventCount: 4}},
+		OwnContributions: []*corev1.TayfaStat{{MetricKey: "hike.distance", Source: "measure", Value: 12.5, EventCount: 2}},
+		// Even if core sent someone's contribution, it would not go out
+		// (issue #322).
+		Contributions: []*corev1.TayfaStatContribution{{UserId: userID, MetricKey: "hike.distance", Value: 12.5, EventCount: 2}}, //nolint:staticcheck // the deprecated field must not go out
 		ComputeTime:   timestamppb.New(at),
 	}}
 	h := componentRouter(fakeServices{statsService: f})
@@ -57,8 +60,11 @@ func TestTayfaStatsRoute(t *testing.T) {
 	if len(v.Totals) != 1 || v.Totals[0] != (tayfaStatJSON{MetricKey: "events", Source: "common", Value: 4, EventCount: 4}) {
 		t.Fatalf("toplamlar: %+v", v.Totals)
 	}
-	if len(v.Contributions) != 1 || v.Contributions[0] != (tayfaStatContributionJSON{UserID: userID, MetricKey: "hike.distance", Value: 12.5, EventCount: 2}) {
-		t.Fatalf("katkılar: %+v", v.Contributions)
+	if len(v.OwnContributions) != 1 || v.OwnContributions[0] != (tayfaStatJSON{MetricKey: "hike.distance", Source: "measure", Value: 12.5, EventCount: 2}) {
+		t.Fatalf("kendi katkıları: %+v", v.OwnContributions)
+	}
+	if body := w.Body.String(); !strings.Contains(body, `"contributions":[]`) || strings.Contains(body, userID) || strings.Contains(body, "user_id") {
+		t.Fatalf("başkasının katkısı yanıtta: %s", body)
 	}
 
 	// All time: no year, empty lists, no time.
@@ -68,7 +74,8 @@ func TestTayfaStatsRoute(t *testing.T) {
 		t.Fatalf("tüm zamanlar: %d %v", w.Code, f.got)
 	}
 	if body := w.Body.String(); strings.Contains(body, `"year"`) || strings.Contains(body, "computed_at") ||
-		!strings.Contains(body, `"years":[]`) || !strings.Contains(body, `"totals":[]`) || !strings.Contains(body, `"contributions":[]`) {
+		!strings.Contains(body, `"years":[]`) || !strings.Contains(body, `"totals":[]`) || !strings.Contains(body, `"own_contributions":[]`) ||
+		!strings.Contains(body, `"contributions":[]`) {
 		t.Fatalf("boş yanıt: %s", body)
 	}
 
