@@ -99,6 +99,23 @@ spec:
             - name: INTEGRITY_SERVICE_ACCOUNT
               valueFrom:
                 secretKeyRef: { name: identity-integrity, key: service-account.json, optional: true }
+            # Apple ile giriş (ADR-0045): bundle kimliği, Team ID, Key ID
+            # (gizli değil) ve Sign in with Apple anahtarı tek secret'tadır;
+            # dördü birlikte gelir. Secret yoksa Apple girişi kapalıdır ve
+            # servis yine başlar (optional); varsa ama eksik ya da bozuksa
+            # identity başlamaz. scripts/new-apple-secret.sh.
+            - name: APPLE_CLIENT_IDS
+              valueFrom:
+                secretKeyRef: { name: identity-apple, key: APPLE_CLIENT_IDS, optional: true }
+            - name: APPLE_TEAM_ID
+              valueFrom:
+                secretKeyRef: { name: identity-apple, key: APPLE_TEAM_ID, optional: true }
+            - name: APPLE_KEY_ID
+              valueFrom:
+                secretKeyRef: { name: identity-apple, key: APPLE_KEY_ID, optional: true }
+            - name: APPLE_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef: { name: identity-apple, key: APPLE_PRIVATE_KEY, optional: true }
             # Çalışma zamanı kullanıcısı identity_app (ADR-0015); sahip
             # (identity-db) yalnızca migrate initContainer'ındadır.
             - { name: DB_HOST, value: tayfam-pg-rw }

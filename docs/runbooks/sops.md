@@ -7,11 +7,11 @@ yedekli) ve cluster'da (`flux-system/sops-age`) bulunur.
 
 ## Tayfam Ops ile (terminalsiz)
 
-R2'yi bağlama, push'u açma ve veri dışa aktarma anahtarı aşağıdaki
+R2'yi bağlama, push'u açma, Apple ile giriş ve veri dışa aktarma anahtarı aşağıdaki
 betiklerle aynı işi yapan yerel bir arayüzle, terminal komutu yazmadan
 yapılabilir (issue #148). Araç yalnızca bu bilgisayarda (WSL) çalışır,
 yalnızca `127.0.0.1`'e bağlanır, dışarıya hiç istek yapmaz ve betikleri
-(`scripts/new-r2-secret.sh`, `new-chat-fcm-secret.sh`, `new-integrity-secret.sh`, `new-export-key.sh`)
+(`scripts/new-r2-secret.sh`, `new-chat-fcm-secret.sh`, `new-integrity-secret.sh`, `new-apple-secret.sh`, `new-export-key.sh`)
 çağırır: değerler yalnızca bellekte tutulur ve betiğe stdin ile verilir.
 Push/PR yapmaz; dosyaları üretir ve klasörü Windows Gezgini'nde açar.
 
@@ -33,7 +33,7 @@ Push/PR yapmaz; dosyaları üretir ve klasörü Windows Gezgini'nde açar.
    kullanımlık bağlantıyla açılır (açılmazsa penceredeki bağlantıyı bir
    kez kullanın; WSL'den: `make ops`).
 2. Ortamı (dev/prod) seçin ve kartlardan birini açın: **R2'yi bağla**,
-   **Push'u aç**, **Uygulama bütünlüğü**, **Dışa aktarma anahtarı**. Panel adımları (bucket,
+   **Push'u aç**, **Uygulama bütünlüğü**, **Apple ile giriş**, **Dışa aktarma anahtarı**. Panel adımları (bucket,
    lifecycle, token; Firebase servis hesabı) aşağıdaki bölümlerdeki gibidir.
 3. Sonuç sayfasında üretilen/değişen dosyalar, `check-secret-refs.sh`
    sonucu ve sonraki adım yazar. **Klasörü aç** ile `deploy/apps/<ortam>`
@@ -448,6 +448,58 @@ Rotasyon: Google Cloud'da yeni JSON anahtarı üretin,
 `deploy/apps/<ortam>/secrets/identity-integrity.sops.yaml`'ı silip
 betiği yeniden çalıştırın; birleşip identity yeniden başlayınca eski
 anahtarı konsolda silin.
+
+## Apple ile giriş (identity-apple)
+
+ADR-0045: identity Apple kimlik token'larını doğrular ve hesap silinirken
+kullanıcının Apple token'larını iptal eder. Secret isteğe bağlıdır: dosya
+yokken Apple girişi kapalıdır (`unsupported-provider`) ve identity onsuz
+başlar. Secret dört değer taşır ve dördü birlikte gelir: iOS bundle kimliği
+(`APPLE_CLIENT_IDS`), `APPLE_TEAM_ID`, `APPLE_KEY_ID` (üçü gizli değildir)
+ve Sign in with Apple anahtarı (`APPLE_PRIVATE_KEY`). Aynı dosyada
+durmalarının sebebi girişin tek dosyayla, yarım yapılandırma olmadan
+açılmasıdır: biri eksik ya da anahtar bozuksa identity **başlamaz**
+(silerken token'ını iptal edemeyeceğimiz Apple hesabı kabul edilmez).
+identity'nin internet çıkışı zaten vardır (`identity-egress-internet`,
+443); ağ kuralı eklenmez.
+
+Platform sahibinin adımları (ortam başına bir kez):
+
+1. **Apple Developer** → *Certificates, Identifiers & Profiles →
+   Identifiers*: uygulama kimliğinde **Sign in with Apple** yeteneği açık
+   olmalı.
+2. *Keys → +*: ad `tayfam-siwa-<ortam>`, **Sign in with Apple** işaretli,
+   *Configure* ile birincil uygulama kimliği olarak uygulamanın bundle
+   kimliği. **Download** ile `.p8` dosyasını indirin: Apple onu yalnızca
+   bir kez verir. Sayfadaki **Key ID**'yi not edin. **Team ID** *Membership
+   details* sayfasındadır.
+3. Anahtarı hemen şifreleyin (Tayfam Ops'ta **Apple ile giriş**, ya da):
+
+   ```sh
+   ./scripts/new-apple-secret.sh dev <team-id> <key-id> <bundle-kimliği> ~/Downloads/AuthKey_<key-id>.p8
+   ```
+
+   Betik indirilen açık dosyayı siler; Tayfam Ops'ta yüklediyseniz
+   Windows'taki kopyayı siz silin. Anahtarın bir kopyası parola
+   yöneticinizde kalsın. Üretilen dosyayı sohbete bırakın, PR'ı oturum
+   açar.
+
+Önce dev'de açın ve gerçek bir iOS cihazdan giriş ile hesap silmeyi
+deneyin; prod dosyası ondan sonra. Birleşip identity yeniden başlayınca
+log'da `apple ile giriş açık` görünür. Girişler `giriş yapıldı`
+(`provider=apple`), silmedeki iptal `apple token'ı iptal edildi` satırıdır;
+kod, token ve e-posta loglanmaz. `hesap silme: apple token iptali
+yapılamadı` satırındaki `HTTP 400 invalid_client` Team ID, Key ID, bundle
+kimliği ya da anahtarın birbirini tutmadığını gösterir.
+
+Kapatma: dosyayı silen PR birleşip identity yeniden başlayınca Apple
+girişi kapanır. O sırada var olan Apple hesapları giriş yapamaz ve
+silinemez (`503`); kapatmadan önce bunu hesaba katın.
+
+Rotasyon: portalda yeni anahtar üretin,
+`deploy/apps/<ortam>/secrets/identity-apple.sops.yaml`'ı silip betiği yeni
+Key ID ile yeniden çalıştırın; birleşip identity yeniden başlayınca eski
+anahtarı portalda iptal edin (*Revoke*).
 
 ## Cloudflare Tunnel token'ı
 

@@ -112,6 +112,78 @@ func (e *testEnv) postKeyTo(path, env string, key []byte) *httptest.ResponseReco
 	return e.do(req)
 }
 
+// postApple posts the Apple form: the three identifiers and the key file.
+func (e *testEnv) postApple(env string, fields map[string]string, key []byte) *httptest.ResponseRecorder {
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	_ = mw.WriteField("csrf", e.csrf())
+	_ = mw.WriteField("env", env)
+	for _, name := range []string{"team_id", "key_id", "bundle", "baska"} {
+		if v, ok := fields[name]; ok {
+			_ = mw.WriteField(name, v)
+		}
+	}
+	if key != nil {
+		fw, _ := mw.CreateFormFile("key", "AuthKey.p8")
+		_, _ = fw.Write(key)
+	}
+	_ = mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/apple", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Origin", e.origin())
+	req.AddCookie(e.cookie)
+	return e.do(req)
+}
+
+// TestAppleFormValidation: wrong identifiers and a missing key are refused
+// with a readable message before any script runs, and the key never shows
+// up in the page or the log.
+func TestAppleFormValidation(t *testing.T) {
+	e := newTestEnv(t, "")
+	e.login()
+	key := []byte("-----BEGIN PRIVATE KEY-----\nGIZLI-ANAHTAR-GOVDESI\n-----END PRIVATE KEY-----\n")
+	good := map[string]string{"team_id": "TEAM123456", "key_id": "KEY1234567", "bundle": "com.example.tayfam"}
+	with := func(k, v string) map[string]string {
+		m := map[string]string{}
+		for kk, vv := range good {
+			m[kk] = vv
+		}
+		m[k] = v
+		return m
+	}
+	for name, tc := range map[string]struct {
+		fields map[string]string
+		key    []byte
+		want   string
+	}{
+		"kısa team id":       {with("team_id", "TEAM"), key, "Team ID"},
+		"küçük harf key id":  {with("key_id", "key1234567"), key, "Key ID"},
+		"noktasız bundle":    {with("bundle", "tayfam"), key, "Bundle kimliği"},
+		"bundle'da boşluk":   {with("bundle", "com.example tayfam"), key, "Bundle kimliği"},
+		"bundle çok uzun":    {with("bundle", "com."+strings.Repeat("a", 160)), key, "Bundle kimliği"},
+		"anahtar seçilmemiş": {good, nil, ".p8"},
+		"anahtar boş":        {good, []byte(" \n"), ".p8"},
+	} {
+		rec := e.postApple("dev", tc.fields, tc.key)
+		if rec.Code != http.StatusUnprocessableEntity || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Errorf("%s: %d\n%s", name, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "GIZLI-ANAHTAR-GOVDESI") {
+			t.Errorf("%s: anahtar sayfada", name)
+		}
+	}
+	// A field the page does not have is a malformed form.
+	if rec := e.postApple("dev", with("baska", "x"), key); rec.Code != http.StatusBadRequest {
+		t.Errorf("bilinmeyen alan: %d", rec.Code)
+	}
+	if rec := e.postApple("uretim", good, key); rec.Code != http.StatusBadRequest {
+		t.Errorf("bilinmeyen ortam: %d", rec.Code)
+	}
+	if strings.Contains(e.log.String(), "GIZLI-ANAHTAR-GOVDESI") {
+		t.Error("anahtar log'da")
+	}
+}
+
 func TestListenOnlyLoopback(t *testing.T) {
 	for _, addr := range []string{"0.0.0.0:0", ":0", "[::]:0", "[::1]:0", "localhost:0", "192.168.1.10:0", "127.0.0.2:0", "nonsense"} {
 		if ln, err := Listen(context.Background(), addr); err == nil {
@@ -152,7 +224,7 @@ func TestHostHeaderChecked(t *testing.T) {
 
 func TestLaunchTokenIsOneTime(t *testing.T) {
 	e := newTestEnv(t, "")
-	for _, p := range []string{"/", "/r2", "/fcm", "/integrity", "/export", "/?t=00", "/?t=" + strings.Repeat("ab", 32)} {
+	for _, p := range []string{"/", "/r2", "/fcm", "/integrity", "/apple", "/export", "/?t=00", "/?t=" + strings.Repeat("ab", 32)} {
 		if rec := e.do(httptest.NewRequest(http.MethodGet, p, nil)); rec.Code != http.StatusForbidden {
 			t.Errorf("GET %s without session: %d", p, rec.Code)
 		}
