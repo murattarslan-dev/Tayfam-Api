@@ -1,0 +1,23 @@
+{{define "apple"}}{{template "head" .}}
+<p><a href="/?env={{.Env}}">← Ana sayfa</a></p>
+<h1>Apple ile giriş</h1>
+{{if .Result}}
+{{template "result" .}}
+<div class="box warn"><strong>İndirdiğiniz .p8 dosyasını Windows'ta şimdi silin</strong> (Geri Dönüşüm Kutusu'ndan da); bir kopyası parola yöneticinizde kalsın, Apple anahtarı ikinci kez indirtmez. Araç dosyayı yalnızca belleğe okudu; Windows'taki kopyaya dokunmaz.</div>
+<p>Bu dosya birleşip identity yeniden başlayınca ortamda Apple ile giriş açılır; dosya silinirse kapanır (docs/runbooks/sops.md, "Apple ile giriş").</p>
+{{if .Result.OK}}{{template "next" (nextData .Env "identity" "apple ile giriş açık")}}{{end}}
+{{else}}
+{{template "notready" .}}
+<p>Apple Developer portalında <em>Keys</em> altında <em>Sign in with Apple</em> anahtarı üretin (birincil uygulama kimliği uygulamanın bundle kimliği) ve .p8 dosyasını indirin (docs/runbooks/sops.md, "Apple ile giriş"). Team ID, Key ID ve bundle kimliği gizli değildir; anahtarla aynı şifreli dosyaya yazılır. Dosya yalnızca belleğe okunur, diske yazılmaz.</p>
+{{template "error" .}}
+<form method="post" action="/apple" enctype="multipart/form-data" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  {{template "envpick" .}}
+  <label>Team ID (10 karakter) <input type="text" name="team_id" maxlength="10" required></label>
+  <label>Key ID (10 karakter) <input type="text" name="key_id" maxlength="10" required></label>
+  <label>Bundle kimliği <input type="text" name="bundle" maxlength="155" placeholder="com.ornek.uygulama" required></label>
+  <label>Sign in with Apple anahtarı (.p8) <input type="file" name="key" accept=".p8" required></label>
+  <button type="submit">Şifrele ve dosyaları yaz</button>
+</form>
+{{end}}
+{{template "foot" .}}{{end}}

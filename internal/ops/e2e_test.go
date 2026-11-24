@@ -3,10 +3,14 @@ package ops
 import (
 	"bufio"
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -307,6 +311,32 @@ func TestEndToEndWithSops(t *testing.T) {
 		t.Errorf("integrity result page:\n%s", rec.Body.String())
 	}
 
+	// --- Apple sign-in (dev): one secret with the key and its identifiers ---
+	appleKey := applePEM(t)
+	appleIDs := map[string]string{"team_id": "TEAM123456", "key_id": "KEY1234567", "bundle": "com.example.tayfam"}
+	rec = e.postApple("dev", appleIDs, appleKey)
+	bodies.WriteString(rec.Body.String())
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Tamam") {
+		t.Fatalf("apple: %d\n%s", rec.Code, rec.Body.String())
+	}
+	appleFile := filepath.Join(dev, "secrets", "identity-apple.sops.yaml")
+	if got := decrypt(t, appleFile, "APPLE_PRIVATE_KEY"); strings.TrimSpace(got) != strings.TrimSpace(string(appleKey)) {
+		t.Error("identity-apple: decrypted key differs")
+	}
+	for field, want := range map[string]string{"APPLE_TEAM_ID": "TEAM123456", "APPLE_KEY_ID": "KEY1234567", "APPLE_CLIENT_IDS": "com.example.tayfam"} {
+		if got := decrypt(t, appleFile, field); got != want {
+			t.Errorf("identity-apple %s = %q", field, got)
+		}
+	}
+	if !strings.Contains(rec.Body.String(), "apple ile giriş açık") || !strings.Contains(rec.Body.String(), "Windows'ta şimdi silin") {
+		t.Errorf("apple result page:\n%s", rec.Body.String())
+	}
+	// The key never reaches a page: only its PEM armour could, and the
+	// script does not print it.
+	if strings.Contains(bodies.String(), strings.Split(strings.TrimSpace(string(appleKey)), "\n")[1]) {
+		t.Error("apple key leaked into a page")
+	}
+
 	// --- Export key (dev) ---
 	rec = e.postForm("/export", url.Values{"csrf": {e.csrf()}, "env": {"dev"}})
 	bodies.WriteString(rec.Body.String())
@@ -346,4 +376,19 @@ func TestEndToEndWithSops(t *testing.T) {
 	if !strings.Contains(e.log.String(), `"op":"r2"`) {
 		t.Errorf("operation not logged: %s", e.log.String())
 	}
+}
+
+// applePEM returns a throwaway Sign in with Apple key the way Apple hands it
+// out: a PKCS #8 P-256 key in PEM.
+func applePEM(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
 }

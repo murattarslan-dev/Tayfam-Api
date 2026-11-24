@@ -187,6 +187,9 @@ func changed(before, after map[string][32]byte, prefix string) []string {
 // checking them here gives a readable error before anything runs.
 type validators struct {
 	account, bucket, keyID, secret *regexp.Regexp
+	// appleID is an Apple Team ID or Key ID; bundle an iOS bundle ID
+	// (scripts/new-apple-secret.sh).
+	appleID, bundle *regexp.Regexp
 }
 
 func newValidators() validators {
@@ -195,6 +198,8 @@ func newValidators() validators {
 		bucket:  regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$`),
 		keyID:   regexp.MustCompile(`^[A-Za-z0-9]{20,128}$`),
 		secret:  regexp.MustCompile(`^[A-Za-z0-9/+=]{32,256}$`),
+		appleID: regexp.MustCompile(`^[A-Z0-9]{10}$`),
+		bundle:  regexp.MustCompile(`^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`),
 	}
 }
 

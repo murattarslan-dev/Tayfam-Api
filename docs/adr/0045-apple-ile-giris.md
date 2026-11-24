@@ -141,6 +141,14 @@ Hata durumları:
   (`scripts/new-apple-secret.sh`, mevcut betiklerle aynı kalıp) doğrudan
   sops'a verilir; açık hali diske, terminale ya da sohbete yazılmaz (kesin
   kural 6). Yenileme adımları `docs/runbooks/sops.md`'ye eklenir.
+- **Uygulama notu (2026-11-24):** dört değer tek secret'ta
+  (`identity-apple`) durur; gizli olmayan üçü de anahtarla aynı şifreli
+  dosyadadır. Böylece Apple girişi bir ortamda tek dosyayla açılır ve yarım
+  yapılandırma (kimlikler yazılmış, anahtar yok) oluşamaz. Secret
+  Deployment'ta isteğe bağlıdır; yoksa Apple girişi kapalıdır.
+  `APPLE_CLIENT_IDS` tek bir bundle kimliği taşır: yetkilendirme kodu tek
+  bir uygulamaya verilir ve takas isteği onu adıyla bildirir. Tayfam Ops'ta
+  "Apple ile giriş" kartı aynı betiği çalıştırır.
 - Ağ: identity'nin mevcut dış 443 çıkışı yeterlidir; yeni NetworkPolicy
   gerekip gerekmediği uygulama işinde manifestten doğrulanır.
 - Önce dev'de açılır; prod'da `APPLE_CLIENT_IDS` iOS istemcisi hazır olunca
