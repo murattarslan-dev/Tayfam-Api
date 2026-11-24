@@ -91,8 +91,17 @@ func TestDeleteAccountAppleCode(t *testing.T) {
 		t.Fatalf("silme: %d %T %q", w.Code, got, req.GetAppleAuthorizationCode())
 	}
 
+	// Whitespace is no body: released clients that send nothing keep working
+	// even behind a proxy that changes the framing.
+	f = &fakeCore{}
+	w = as(coreRouter(f), "DELETE", "/v1/me", " \n")
+	if _, _, n := f.last(); w.Code != http.StatusNoContent || n != 1 {
+		t.Fatalf("boş gövde: %d, identity çağrısı %d", w.Code, n)
+	}
+
 	for name, body := range map[string]string{
 		"uzun kod":        `{"apple_authorization_code":"` + strings.Repeat("k", 1025) + `"}`,
+		"iki değer":       `{"apple_authorization_code":"kod-1"}{}`,
 		"bilinmeyen alan": `{"apple_authorization_code":"kod-1","baska":1}`,
 		"JSON değil":      `kod-1`,
 	} {

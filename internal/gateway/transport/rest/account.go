@@ -1,7 +1,11 @@
 package rest
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -67,13 +71,23 @@ const maxAppleCode = 1024
 
 func (h coreHandlers) deleteAccount(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	// The body is optional: only an account with an Apple identity sends
-	// one. An empty request stays valid.
+	// one. A request without a body stays valid whatever its headers say
+	// (released clients send none), so the body is read first and judged by
+	// its content, not by Content-Length or Content-Type.
 	var b deleteAccountBody
-	if r.ContentLength != 0 {
-		if !decodeLimit(w, r, &b, maxAuthBodyBytes) {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAuthBodyBytes))
+	if err != nil {
+		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
+		return
+	}
+	if len(bytes.TrimSpace(raw)) != 0 {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&b); err != nil {
+			httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 			return
 		}
-		if len(b.AppleAuthorizationCode) > maxAppleCode {
+		if _, err := dec.Token(); !errors.Is(err, io.EOF) || len(b.AppleAuthorizationCode) > maxAppleCode {
 			httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 			return
 		}
