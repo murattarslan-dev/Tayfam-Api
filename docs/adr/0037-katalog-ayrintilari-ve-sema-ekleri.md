@@ -4,7 +4,8 @@
 - **Tarih:** 2026-11-18 (revizyon 2026-11-23: §3 `vote` kaynakları, §1
   sohbet kanalı istisnası; uygulama notları 2026-11-23, #323: §1
   katılımcı listesi, §6 misafir, §7 kişisel katkı; revizyon 2026-11-23
-  akşam: §6 misafir takma adı etkinlikle silinir)
+  akşam: §6 misafir takma adı etkinlikle silinir; 2026-11-24: §5 eşli
+  kip, ADR-0044)
 - **Karar veren:** Murat Arslan (2026-11-18 katalog oturumu). Ürün kararları
   Notion "Faz 3 — Katalog ayrıntıları ve şema ekleri (2026-11-18)"
   sayfasındadır; bu ADR onların mimariye taşınmasıdır.
@@ -182,6 +183,10 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
   tur oyunu, Serbest. **Marka adı ön ayar adı olmaz** (ör. "Kelime
   anlatma").
 - Para, bahis ya da ödül alanı hiçbir ön ayarda yoktur (ADR-0025 §4).
+- **Eşli kip (2026-11-24, #343):** ön ayardaki "takım/eşli" kuralı
+  [ADR-0044](0044-yazboz-esli-kip.md)'te tanımlandı: taraf `pair`, 4 yer,
+  karşılıklı oturanlar eş (1–3, 2–4), puan eş başına. İlk ön ayarlara
+  Batak, 101 Okey, Okey ve Pişti'nin eşlileri eklendi (migration 00070).
 
 ### 6. Misafir oyuncu
 

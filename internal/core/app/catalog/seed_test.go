@@ -13,6 +13,10 @@ import (
 // second version (00068, issue #333; ADR-0043 §6).
 var studyTypes = []string{"study_group", "problem_session", "peer_teaching", "mock_exam"}
 
+// pairPresets are the scoreboard's pair presets; the board game night
+// offers them since its second version (00070, issue #343; ADR-0044).
+var pairPresets = []string{"pair_batak", "pair_101", "pair_tiles", "pair_pisti"}
+
 // seedTypes is the number of active types the migrations leave (00066,
 // issue #260).
 const seedTypes = 65
@@ -77,15 +81,16 @@ func TestSeedCatalogData(t *testing.T) {
 		t.Fatalf("ilgi alanları = %v", interests)
 	}
 
-	// The types, in order; the Faz 1 types but fishing and the Eğitim types
-	// are at version 2 (00068, issue #333), the others at 1.
+	// The types, in order; the Faz 1 types but fishing, the Eğitim types
+	// (00068, issue #333) and the board game night (00070, issue #343) are
+	// at version 2, the others at 1.
 	var types []string
 	byKey := map[string]EventType{}
 	for _, et := range c.Types {
 		types = append(types, et.Key)
 		byKey[et.Key] = et
 		want := int32(1)
-		if (slices.Contains(faz1Types, et.Key) && et.Key != "fishing") || slices.Contains(studyTypes, et.Key) {
+		if (slices.Contains(faz1Types, et.Key) && et.Key != "fishing") || slices.Contains(studyTypes, et.Key) || et.Key == "board_game_night" {
 			want = 2
 		}
 		if et.Version != want || et.Status != StatusActive || et.Parsed == nil || !slices.Contains(clientIcons, et.Icon) {
@@ -233,7 +238,7 @@ func TestSeedCatalogData(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	if len(presets) != 8 {
+	if len(presets) != 12 {
 		t.Fatalf("ön ayarlar = %v", presets)
 	}
 	for _, et := range c.Types {
@@ -246,8 +251,14 @@ func TestSeedCatalogData(t *testing.T) {
 			}
 		}
 	}
-	if ps, _ := comp("board_game_night", "scoreboard").Params["presets"].Value.([]string); len(ps) != 7 || slices.Contains(ps, "team_rounds") {
+	if ps, _ := comp("board_game_night", "scoreboard").Params["presets"].Value.([]string); len(ps) != 11 || slices.Contains(ps, "team_rounds") {
 		t.Errorf("masa oyunu ön ayarları = %v", ps)
+	} else {
+		for _, p := range pairPresets {
+			if !slices.Contains(ps, p) {
+				t.Errorf("masa oyunu gecesinde %s yok", p)
+			}
+		}
 	}
 
 	// The badges pass the panel's check (ADR-0039).

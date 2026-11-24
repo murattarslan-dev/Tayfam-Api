@@ -3556,7 +3556,12 @@ paths:
   # kişinin yeri ve skorları "Silinmiş kullanıcı" olarak kalır. Masalar
   # katılımdır, seri örneğine kopyalanmaz. Yazan her uç bileşeni güncel
   # haliyle döner. `guests` parametresi açık bileşende kişi masasına
-  # misafir oyuncu da oturur (#252, `…/guests`).
+  # misafir oyuncu da oturur (#252, `…/guests`). Eşli masada (`side:
+  # pair`, ADR-0044; Batak, 101 Okey, Okey, Pişti'nin eşli ön ayarları)
+  # tam 4 yer vardır; koltuk 1 ve 3 eş 1, koltuk 2 ve 4 eş 2'dir
+  # (`EventScorePlayer.pair`). Puan eş başına girilir ve eşin iki yerine de
+  # yazılır; toplam, sıra ve kazanan eş başınadır (kazanan eşin iki yeri
+  # `winner_ids`'tedir).
 
   /v1/tayfas/{tayfa_id}/events/{event_id}/components/{component_key}/scoreboard:
     parameters:
@@ -3599,7 +3604,8 @@ paths:
         `first_to` ya da `first` kuralında hedef puan yoksa, etiket 1–30
         karakter değilse, yer tam olarak bir kişi ya da takım değilse, bir
         kişi ya da takım iki kez geçerse, ön ayarın oyuncu sayısı dışındaysa,
-        oyuncu masasına takım ya da takım masasına kişi verilirse, takım
+        oyuncu ya da eşli masaya takım ya da takım masasına kişi verilirse,
+        eşli masada yer sayısı 4 değilse, takım
         masasında `teams_key` etkinliğin türündeki bir `teams` bileşeni
         değilse `invalid-request`. Katılımcı olmayan kişi ya da takım
         bileşeninde olmayan takım `score-player-not-participant`; masalar
@@ -3725,7 +3731,10 @@ paths:
         en fazla bir kez; `points` modunda `points` (−1000000…1000000),
         `wdl` modunda `outcome` verilir ve el en az iki yerde ya birinin
         galibiyeti ile diğerlerinin mağlubiyeti ya da herkesin
-        beraberliğidir (aksi `invalid-request`). Biten masada
+        beraberliğidir (aksi `invalid-request`). Eşli masada skor eş
+        başınadır: eşin herhangi bir yeriyle verilir, iki yeri birlikte
+        verilirse değerleri aynı olmalıdır; kurallar eş düzeyinde geçerlidir
+        (`wdl` modunda iki eş) ve skor eşin iki yerine de yazılır. Biten masada
         `score-table-finished`; 200 elden sonra `event-limit`; etkinlik
         başlamadıysa `score-not-started`. Bileşen uçlarının ortak kuralları
         geçerlidir.
@@ -11210,7 +11219,7 @@ components:
         Yazboz kuralları (#250). Ön ayarda verilmeyen kural boştur ve
         bileşenden gelir; masada ve bileşende hepsi doludur.
       properties:
-        side: { type: string, enum: [player, team], description: "Oyuncular kişiler (`player`) ya da takımlar (`team`)." }
+        side: { type: string, enum: [player, team, pair], description: "Oyuncular kişiler (`player`), takımlar (`team`) ya da eşler (`pair`; 4 yer, karşılıklı oturanlar eş, ADR-0044)." }
         rounds: { type: string, enum: [round, single, first_to], description: "El el, tek maç ya da hedefe ilk ulaşana kadar." }
         winner: { type: string, enum: [high, low, first], description: "Yüksek, düşük toplam ya da hedefe ilk ulaşan kazanır." }
         result: { type: string, enum: [points, wdl], description: "Puan ya da galibiyet (1) / beraberlik (½) / mağlubiyet (0)." }
@@ -11239,6 +11248,7 @@ components:
         user_id: { type: string, format: uuid }
         team_id: { type: string, format: uuid, description: Takım masasında takım bileşeninin takımı. }
         guest_id: { type: string, format: uuid, description: "Misafir oyuncunun kimliği (`EventGuestPlayer.id`)." }
+        pair: { type: integer, format: int32, minimum: 1, maximum: 2, description: "Yalnızca eşli masada eş numarası; koltuk 1 ve 3 eş 1, koltuk 2 ve 4 eş 2." }
     EventScoreEntry:
       type: object
       required: [player_id]
@@ -11258,6 +11268,7 @@ components:
     EventScoreStanding:
       type: object
       required: [player_id, total, rounds_won, rank]
+      description: Bir yerin masadaki sırası. Eşli masada her yer eşinin toplamını, el sayısını ve sırasını taşır.
       properties:
         player_id: { type: string, format: uuid }
         total: { type: number, format: double, description: "Puan toplamı; `wdl` modunda galibiyet 1, beraberlik 0.5." }
@@ -11292,7 +11303,7 @@ components:
           items: { $ref: "#/components/schemas/EventScoreStanding" }
         winner_ids:
           type: array
-          description: Biten masada birinci sıradaki yerler (beraberlikte birden çok); açık masada boş.
+          description: Biten masada birinci sıradaki yerler (beraberlikte birden çok; eşli masada kazanan eşin iki yeri); açık masada boş.
           items: { type: string, format: uuid }
         caller_can_score:
           type: boolean
@@ -14796,7 +14807,7 @@ components:
         | `teams` | `mode` (`random`, `balanced`, `manual`; seçimli), `team_size` (1–50), `team_count` (2–50) |
         | `draw` | — |
         | `bracket` | `format` (`elimination`, `league`, `swiss`; seçimli), `best_of` (1, 3, 5; seçimli) |
-        | `scoreboard` | `side` (`player`, `team`), `tables` (boolean), `presets` (ön ayar anahtarları), `rounds` (`round`, `single`, `first_to`; seçimli), `target` (1–100000), `winner` (`high`, `low`, `first`; seçimli), `result` (`points`, `wdl`), `best_of` (1, 3, 5; seçimli), `guests` (boolean) |
+        | `scoreboard` | `side` (`player`, `team`, `pair`), `tables` (boolean), `presets` (ön ayar anahtarları), `rounds` (`round`, `single`, `first_to`; seçimli), `target` (1–100000), `winner` (`high`, `low`, `first`; seçimli), `result` (`points`, `wdl`), `best_of` (1, 3, 5; seçimli), `guests` (boolean) |
         | `ranking` | `source` (kişisel bir ölçümün `key`'i) ya da `metric` (`duration`, `rank`); biri zorunlu, ikisi birlikte olmaz; `direction` (`asc`, `desc`) |
         | `vote` | `source` (`free`, `participants`, `vehicles`, `album`; zorunlu). `vehicles` türde `vehicles` bileşeni ister; `participants` hassas katılımlı (`sensitive_attendance`) türde olmaz |
         | `celebration` | `source` (bir `scoreboard`, `bracket`, `ranking` ya da `vote` bileşeninin `key`'i) |
