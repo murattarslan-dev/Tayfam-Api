@@ -79,7 +79,7 @@ func newApple(t *testing.T) (*apple, *Client) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.tokenURL, c.revokeURL = a.srv.URL+"/token", a.srv.URL+"/revoke"
+	c.exchangeURL, c.revokeURL = a.srv.URL+"/token", a.srv.URL+"/revoke"
 	return a, c
 }
 

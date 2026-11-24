@@ -28,16 +28,16 @@ import (
 )
 
 const (
-	// TokenURL exchanges an authorization code for tokens.
-	TokenURL = "https://appleid.apple.com/auth/token"
+	// ExchangeURL exchanges an authorization code for tokens.
+	ExchangeURL = "https://appleid.apple.com/auth/token"
 	// RevokeURL revokes a refresh or access token.
 	RevokeURL = "https://appleid.apple.com/auth/revoke"
 
 	// MaxCode bounds the authorization code (ADR-0045 §3).
 	MaxCode = 1024
 
-	secretAudience = "https://appleid.apple.com"
-	secretTTL      = 5 * time.Minute
+	appleAudience = "https://appleid.apple.com"
+	assertionTTL      = 5 * time.Minute
 	maxBody        = 64 << 10
 )
 
@@ -72,7 +72,7 @@ type Config struct {
 // Client revokes Apple tokens.
 type Client struct {
 	cfg       Config
-	tokenURL  string
+	exchangeURL  string
 	revokeURL string
 }
 
@@ -87,7 +87,7 @@ func New(cfg Config) (*Client, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Client{cfg: cfg, tokenURL: TokenURL, revokeURL: RevokeURL}, nil
+	return &Client{cfg: cfg, exchangeURL: ExchangeURL, revokeURL: RevokeURL}, nil
 }
 
 // ParseKey reads the Sign in with Apple private key as Apple hands it out:
@@ -147,7 +147,7 @@ type tokenResponse struct {
 }
 
 func (c *Client) exchange(ctx context.Context, secret, code string) (tokenResponse, error) {
-	status, body, err := c.post(ctx, c.tokenURL, url.Values{
+	status, body, err := c.post(ctx, c.exchangeURL, url.Values{
 		"client_id":     {c.cfg.ClientID},
 		"client_secret": {secret},
 		"code":          {code},
@@ -241,8 +241,8 @@ func (c *Client) clientSecret() (string, error) {
 	claims, err := json.Marshal(map[string]any{
 		"iss": c.cfg.TeamID,
 		"iat": now.Unix(),
-		"exp": now.Add(secretTTL).Unix(),
-		"aud": secretAudience,
+		"exp": now.Add(assertionTTL).Unix(),
+		"aud": appleAudience,
 		"sub": c.cfg.ClientID,
 	})
 	if err != nil {
