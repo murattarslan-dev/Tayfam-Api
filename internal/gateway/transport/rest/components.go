@@ -103,6 +103,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerRankingComponent,
 
 		// vote (#254)
+		registerVoteComponent,
 
 		// celebration (#255)
 		registerCelebrationComponent,
@@ -111,6 +112,7 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 		registerQuestionsComponent,
 
 		// pool_link (#271)
+		registerPoolLinkComponent,
 
 		// tayfa statistics (#266)
 		registerTayfaStats,
@@ -120,6 +122,15 @@ func componentRoutes() []func(mux *http.ServeMux, h componentHandlers) {
 
 		// daily content (#269)
 		registerTayfaDaily,
+
+		// shared library (#270)
+		registerTayfaLibrary,
+
+		// material library (#261)
+		registerTayfaMaterials,
+
+		// member garage (#272)
+		registerMemberGarage,
 	}
 }
 

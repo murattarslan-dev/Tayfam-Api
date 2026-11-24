@@ -116,6 +116,12 @@ const (
 	ModuleQA            = "qa"
 	ModulePolls         = "polls"
 	ModuleDaily         = "daily"
+	ModuleLibrary       = "library"
+	ModuleMaterials     = "materials"
+	// ModuleGarage is the member garage (issue #272).
+	ModuleGarage = "garage"
+	// ModuleQuestionPool is the Eğitim question pool (issue #271).
+	ModuleQuestionPool = "question_pool"
 )
 
 // RequireModule returns apperr.ErrModuleDisabled unless module is enabled

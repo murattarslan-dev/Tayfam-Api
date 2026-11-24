@@ -6,11 +6,15 @@
 // parameter is off). A table seats players (participants of the event, and
 // the event's guest players when the `guests` parameter is on; package
 // guest, issue #252) or, in a team scoreboard, the teams of a teams
-// component of the event (teams.Load). Its rules are resolved when it is created and kept on the
+// component of the event (teams.Load). A pair table (ADR-0044) seats four
+// people or guests: the partners face each other (seats 1 and 3 are pair
+// 1, seats 2 and 4 pair 2), a round's score is entered per pair and written
+// to both of its seats, and the pair is ranked and wins together. Its
+// rules are resolved when it is created and kept on the
 // table, so that a later change of the catalog does not change a game that
 // was played:
 //
-//	side      player (default) or team
+//	side      player (default), team or pair
 //	rounds    round (default; round by round), single (one match) or
 //	          first_to (until a total reaches the target)
 //	winner    high (default), low or first (the first to reach the target)
@@ -89,6 +93,7 @@ const (
 const (
 	SidePlayer    = "player"
 	SideTeam      = "team"
+	SidePair      = "pair"
 	RoundsRound   = "round"
 	RoundsSingle  = "single"
 	RoundsFirstTo = "first_to"
@@ -120,6 +125,8 @@ const (
 	MaxRounds  = 200
 	PointsMax  = 1_000_000
 	TargetMax  = 100_000
+	// PairSeats is the number of seats at a pair table (ADR-0044).
+	PairSeats = 4
 	// maxRuneBytes bounds the byte length before counting characters.
 	maxRuneBytes = 4
 )
@@ -168,6 +175,19 @@ type Player struct {
 	User     id.ID
 	Team     id.ID
 	Guest    id.ID
+	// Pair is 1 (seats 1 and 3) or 2 (seats 2 and 4) at a pair table, 0
+	// elsewhere (PairOf).
+	Pair int32
+}
+
+// PairOf is the pair a seat's position belongs to at a pair table:
+// partners face each other, so odd positions are pair 1 and even ones
+// pair 2 (ADR-0044).
+func PairOf(position int32) int32 {
+	if position%2 == 1 {
+		return 1
+	}
+	return 2
 }
 
 // Score is a seat's score in a round: Points, or Outcome in wdl mode.
@@ -387,6 +407,10 @@ func ParsePreset(key string, labels, params []byte, status string) (Preset, erro
 		(out.PlayersMax > 0 && out.PlayersMin > out.PlayersMax) {
 		return Preset{}, fmt.Errorf("ön ayar %s: oyuncu sayısı bozuk", key)
 	}
+	// A pair table seats exactly PairSeats: the bounds may not leave it out.
+	if out.Rules.Side == SidePair && (out.PlayersMin > PairSeats || (out.PlayersMax > 0 && out.PlayersMax < PairSeats)) {
+		return Preset{}, fmt.Errorf("ön ayar %s: eşli masa %d kişiliktir", key, PairSeats)
+	}
 	return out, nil
 }
 
@@ -462,10 +486,14 @@ func Load(ctx context.Context, q *store.Queries, event id.ID, key string) ([]Tab
 	}
 	for _, p := range players {
 		if i, ok := at[id.ID(p.TableID.Bytes)]; ok {
-			out[i].Players = append(out[i].Players, Player{
+			seat := Player{
 				ID: id.ID(p.ID.Bytes), Position: int32(p.Position), User: optID(p.UserID), Team: optID(p.TeamID),
 				Guest: optID(p.GuestID),
-			})
+			}
+			if out[i].Rules.Side == SidePair {
+				seat.Pair = PairOf(seat.Position)
+			}
+			out[i].Players = append(out[i].Players, seat)
 		}
 	}
 	scores, err := q.ListScores(ctx, store.ListScoresParams{EventID: event.PG(), ComponentKey: key})
@@ -612,10 +640,14 @@ func cleanPlayers(in []PlayerInput) error {
 // seatable checks seats against a table's side, the preset's bounds and
 // the event: people must be participants, teams must be teams of the
 // table's teams component, guests must be the event's guest players and
-// the component must take guests (`guests`).
+// the component must take guests (`guests`). A pair table seats exactly
+// PairSeats people or guests.
 func seatable(ctx context.Context, sc *component.Scope, side, teamsKey string, bounds Preset, in []PlayerInput) error {
 	if len(in) == 0 {
 		return nil
+	}
+	if side == SidePair && len(in) != PairSeats {
+		return apperr.Validation("players")
 	}
 	if (bounds.PlayersMin > 0 && len(in) < int(bounds.PlayersMin)) || (bounds.PlayersMax > 0 && len(in) > int(bounds.PlayersMax)) {
 		return apperr.Validation("players")
@@ -1045,6 +1077,78 @@ func checkRound(t Table, in []ScoreInput) error {
 	return nil
 }
 
+// pairScores reads a pair table's round: one score per pair, named by
+// either seat of the pair; both seats of a pair may be given only with the
+// same score (a client that does not know pairs writes it twice). It
+// returns one score per pair on the pair's first seat in seat order, for
+// checkRound.
+func pairScores(t Table, in []ScoreInput) ([]ScoreInput, error) {
+	pairOf := make(map[id.ID]int32, len(t.Players))
+	first := map[int32]id.ID{}
+	for _, p := range t.Players {
+		pair := PairOf(p.Position)
+		pairOf[p.ID] = pair
+		if _, ok := first[pair]; !ok {
+			first[pair] = p.ID
+		}
+	}
+	byPair := map[int32]ScoreInput{}
+	for _, s := range in {
+		pair, ok := pairOf[s.Player]
+		if !ok {
+			return nil, apperr.Validation("scores")
+		}
+		if prev, ok := byPair[pair]; ok {
+			if prev.Points != s.Points || prev.Outcome != s.Outcome {
+				return nil, apperr.Validation("scores")
+			}
+			continue
+		}
+		byPair[pair] = ScoreInput{Player: first[pair], Points: s.Points, Outcome: s.Outcome}
+	}
+	out := make([]ScoreInput, 0, len(byPair))
+	for _, pair := range []int32{1, 2} {
+		if s, ok := byPair[pair]; ok {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+// roundScores checks a round's scores against the table (checkRound) and
+// returns the rows to write: the scores as given, or at a pair table each
+// pair's score on both of its seats, in seat order.
+func roundScores(t Table, in []ScoreInput) ([]ScoreInput, error) {
+	if t.Rules.Side != SidePair {
+		if err := checkRound(t, in); err != nil {
+			return nil, err
+		}
+		return in, nil
+	}
+	pairs, err := pairScores(t, in)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkRound(t, pairs); err != nil {
+		return nil, err
+	}
+	byPair := make(map[int32]ScoreInput, len(pairs))
+	for _, s := range pairs {
+		for _, p := range t.Players {
+			if p.ID == s.Player {
+				byPair[PairOf(p.Position)] = s
+			}
+		}
+	}
+	out := make([]ScoreInput, 0, len(t.Players))
+	for _, p := range t.Players {
+		if s, ok := byPair[PairOf(p.Position)]; ok {
+			out = append(out, ScoreInput{Player: p.ID, Points: s.Points, Outcome: s.Outcome})
+		}
+	}
+	return out, nil
+}
+
 // writeRound writes a round's scores.
 func writeRound(ctx context.Context, sc *component.Scope, t Table, round int32, in []ScoreInput) error {
 	for _, s := range in {
@@ -1103,7 +1207,8 @@ func (s *Service) AddRound(ctx context.Context, ref component.Ref, table id.ID, 
 		if t.Status == StatusFinished {
 			return apperr.ErrScoreTableFinished
 		}
-		if err := checkRound(t, in); err != nil {
+		scores, err := roundScores(t, in)
+		if err != nil {
 			return err
 		}
 		round, err := sc.Q().LastScoreRound(ctx, store.LastScoreRoundParams{TableID: table.PG(), EventID: sc.Event.PG(), ComponentKey: sc.Key})
@@ -1113,7 +1218,7 @@ func (s *Service) AddRound(ctx context.Context, ref component.Ref, table id.ID, 
 		if round >= MaxRounds {
 			return apperr.ErrEventLimit
 		}
-		if err := writeRound(ctx, sc, t, round+1, in); err != nil {
+		if err := writeRound(ctx, sc, t, round+1, scores); err != nil {
 			return err
 		}
 		if err := settle(ctx, sc, table); err != nil {
@@ -1150,7 +1255,8 @@ func (s *Service) CorrectRound(ctx context.Context, ref component.Ref, table id.
 		if err != nil {
 			return err
 		}
-		if err := checkRound(t, in); err != nil {
+		scores, err := roundScores(t, in)
+		if err != nil {
 			return err
 		}
 		n, err := sc.Q().DeleteScoreRound(ctx, store.DeleteScoreRoundParams{
@@ -1162,7 +1268,7 @@ func (s *Service) CorrectRound(ctx context.Context, ref component.Ref, table id.
 		if n == 0 {
 			return apperr.Validation("round")
 		}
-		if err := writeRound(ctx, sc, t, round, in); err != nil {
+		if err := writeRound(ctx, sc, t, round, scores); err != nil {
 			return err
 		}
 		if err := settle(ctx, sc, table); err != nil {

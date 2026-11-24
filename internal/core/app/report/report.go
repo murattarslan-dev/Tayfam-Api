@@ -116,6 +116,15 @@ const (
 	// TargetDailyItem: an item of the tayfa's daily content pool (issue
 	// #269, ADR-0027 §5); its subject is the member who added it.
 	TargetDailyItem TargetType = "daily_item"
+	// TargetLibraryItem: an item of the tayfa's library (issue #270,
+	// ADR-0040 §1); its subject is the item's owner.
+	TargetLibraryItem TargetType = "library_item"
+	// TargetMaterial: a material of the tayfa's material library (issue
+	// #261, ADR-0040 §3); its subject is the author.
+	TargetMaterial TargetType = "material"
+	// TargetGarageVehicle: a vehicle of a member's garage that shows in the
+	// tayfa (issue #272, ADR-0040 §4); its subject is the owner.
+	TargetGarageVehicle TargetType = "garage_vehicle"
 	// TargetDMMessage: a direct message (issue #95). Not about a tayfa; see
 	// createDirect.
 	TargetDMMessage TargetType = "dm_message"
@@ -129,7 +138,8 @@ const (
 func (t TargetType) content() bool {
 	switch t {
 	case TargetAnnouncement, TargetEvent, TargetQuestion, TargetAnswer, TargetPoll, TargetLogEntry, TargetEventPhoto,
-		TargetChannelMessage, TargetEventQuestion, TargetDailyItem:
+		TargetChannelMessage, TargetEventQuestion, TargetDailyItem, TargetLibraryItem, TargetMaterial,
+		TargetGarageVehicle:
 		return true
 	}
 	return false
@@ -164,6 +174,9 @@ const (
 	// platform only.
 	ReasonStaffConduct Reason = "staff_conduct"
 	ReasonOther        Reason = "other"
+	// ReasonPaidTutoring: a paid private lesson offer or advertisement
+	// (issue #271; ADR-0040 §2, Topluluk Kuralları).
+	ReasonPaidTutoring Reason = "paid_tutoring"
 )
 
 // Reasons lists every reason, in the proto's order.
@@ -172,6 +185,7 @@ func Reasons() []Reason {
 		ReasonHarassment, ReasonHateSpeech, ReasonViolence, ReasonPrivacy, ReasonImpersonation,
 		ReasonIllegalTrade, ReasonDrugs, ReasonGambling, ReasonDangerousActivity, ReasonFakeEvent,
 		ReasonSexualContent, ReasonChildSafety, ReasonSpam, ReasonCopyright, ReasonStaffConduct, ReasonOther,
+		ReasonPaidTutoring,
 	}
 }
 
@@ -572,13 +586,18 @@ func (s *Service) subjectOf(ctx context.Context, q *store.Queries, tayfa, user i
 		}
 		return target, nil
 	}
-	if err := access.RequireModule(ctx, q, tayfa, moduleOf(t)); errors.Is(err, apperr.ErrModuleDisabled) {
-		return id.ID{}, apperr.ErrReportTargetNotFound
-	} else if err != nil {
-		return id.ID{}, err
-	}
 	c, err := lookup(ctx, q, tayfa, t, target)
 	if err != nil {
+		return id.ID{}, err
+	}
+	// A question's or answer's module is its pool's (issue #271).
+	module := moduleOf(t)
+	if c.module != "" {
+		module = c.module
+	}
+	if err := access.RequireModule(ctx, q, tayfa, module); errors.Is(err, apperr.ErrModuleDisabled) {
+		return id.ID{}, apperr.ErrReportTargetNotFound
+	} else if err != nil {
 		return id.ID{}, err
 	}
 	if !c.found || !c.visible {
@@ -600,8 +619,23 @@ func moduleOf(t TargetType) string {
 		return access.ModulePolls
 	case TargetDailyItem:
 		return access.ModuleDaily
+	case TargetLibraryItem:
+		return access.ModuleLibrary
+	case TargetMaterial:
+		return access.ModuleMaterials
+	case TargetGarageVehicle:
+		return access.ModuleGarage
 	}
 	return access.ModuleEvents // events, log entries, album photos and event questions
+}
+
+// poolModule is the module of a question pool (questions.pool): the pool
+// names its module.
+func poolModule(pool string) string {
+	if pool == access.ModuleQuestionPool {
+		return access.ModuleQuestionPool
+	}
+	return access.ModuleQA
 }
 
 // content is a reported piece of content as the report needs it.
@@ -612,6 +646,9 @@ type content struct {
 	// event), or gone for good.
 	removed bool
 	author  id.ID // zero when the account was deleted
+	// module is set for content whose module depends on the row: a
+	// question's or answer's pool (qa or question_pool, issue #271).
+	module string
 }
 
 // lookup reads content of tayfa; a missing row is found = false.
@@ -636,11 +673,11 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 	case TargetQuestion:
 		var r store.GetReportTargetQuestionRow
 		r, err = q.GetReportTargetQuestion(ctx, store.GetReportTargetQuestionParams{TayfaID: p.t, ID: p.i})
-		author, visible = r.AuthorID, r.Visible
+		author, visible, c.module = r.AuthorID, r.Visible, poolModule(r.Pool)
 	case TargetAnswer:
 		var r store.GetReportTargetAnswerRow
 		r, err = q.GetReportTargetAnswer(ctx, store.GetReportTargetAnswerParams{TayfaID: p.t, ID: p.i})
-		author, visible = r.AuthorID, r.Visible
+		author, visible, c.module = r.AuthorID, r.Visible, poolModule(r.Pool)
 	case TargetPoll:
 		var r store.GetReportTargetPollRow
 		r, err = q.GetReportTargetPoll(ctx, store.GetReportTargetPollParams{TayfaID: p.t, ID: p.i})
@@ -662,6 +699,18 @@ func lookup(ctx context.Context, q *store.Queries, tayfa id.ID, t TargetType, ta
 	case TargetDailyItem:
 		var r store.GetReportTargetDailyItemRow
 		r, err = q.GetReportTargetDailyItem(ctx, store.GetReportTargetDailyItemParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetLibraryItem:
+		var r store.GetReportTargetLibraryItemRow
+		r, err = q.GetReportTargetLibraryItem(ctx, store.GetReportTargetLibraryItemParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetMaterial:
+		var r store.GetReportTargetMaterialRow
+		r, err = q.GetReportTargetMaterial(ctx, store.GetReportTargetMaterialParams{TayfaID: p.t, ID: p.i})
+		author, visible = r.AuthorID, r.Visible
+	case TargetGarageVehicle:
+		var r store.GetReportTargetGarageVehicleRow
+		r, err = q.GetReportTargetGarageVehicle(ctx, store.GetReportTargetGarageVehicleParams{TayfaID: p.t, ID: p.i})
 		author, visible = r.AuthorID, r.Visible
 	default:
 		return content{}, errors.New("içerik olmayan hedef")

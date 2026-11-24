@@ -20,7 +20,9 @@ type Stats interface {
 
 // TayfaStatsServer implements corev1.TayfaStatsServiceServer (issue #266;
 // ADR-0026). Every method needs a verified token (auth.Guard); the acting
-// user is always the token's. Values are never logged.
+// user is always the token's. Values are never logged. The deprecated
+// contributions field is never filled: a reader gets only their own
+// contributions (issue #322).
 type TayfaStatsServer struct {
 	corev1.UnimplementedTayfaStatsServiceServer
 	app Stats
@@ -54,8 +56,8 @@ func (s *TayfaStatsServer) GetTayfaStats(ctx context.Context, req *corev1.GetTay
 	}
 	out := &corev1.GetTayfaStatsResponse{
 		Year: v.Year, Years: v.Years,
-		Totals:        make([]*corev1.TayfaStat, 0, len(v.Totals)),
-		Contributions: make([]*corev1.TayfaStatContribution, 0, len(v.Contributions)),
+		Totals:           make([]*corev1.TayfaStat, 0, len(v.Totals)),
+		OwnContributions: make([]*corev1.TayfaStat, 0, len(v.Own)),
 	}
 	if out.Years == nil {
 		out.Years = []int32{}
@@ -66,10 +68,8 @@ func (s *TayfaStatsServer) GetTayfaStats(ctx context.Context, req *corev1.GetTay
 	for _, st := range v.Totals {
 		out.Totals = append(out.Totals, &corev1.TayfaStat{MetricKey: st.Metric, Source: st.Source, Value: st.Value, EventCount: st.Events})
 	}
-	for _, c := range v.Contributions {
-		out.Contributions = append(out.Contributions, &corev1.TayfaStatContribution{
-			UserId: c.User.String(), MetricKey: c.Metric, Value: c.Value, EventCount: c.Events,
-		})
+	for _, st := range v.Own {
+		out.OwnContributions = append(out.OwnContributions, &corev1.TayfaStat{MetricKey: st.Metric, Source: st.Source, Value: st.Value, EventCount: st.Events})
 	}
 	return out, nil
 }

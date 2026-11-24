@@ -95,6 +95,14 @@ var notificationTypeNames = map[chatv1.NotificationType]string{
 	chatv1.NotificationType_NOTIFICATION_TYPE_CELEBRATION:              "celebration",
 	chatv1.NotificationType_NOTIFICATION_TYPE_BADGE_EARNED:             "badge_earned",
 	chatv1.NotificationType_NOTIFICATION_TYPE_NOW_STARTED:              "now_started",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_DUE:              "library_due",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_ORPHANED:    "library_loan_orphaned",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_REQUESTED:   "library_loan_requested",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_JOINED:     "library_queue_joined",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_APPROVED:    "library_loan_approved",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_DECLINED:    "library_loan_declined",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_LOAN_HANDED_OVER: "library_loan_handed_over",
+	chatv1.NotificationType_NOTIFICATION_TYPE_LIBRARY_QUEUE_TURN:       "library_queue_turn",
 	chatv1.NotificationType_NOTIFICATION_TYPE_TAYFA_INVITATION:         "tayfa_invitation",
 	chatv1.NotificationType_NOTIFICATION_TYPE_REPORT_RESOLVED:          "report_resolved",
 	chatv1.NotificationType_NOTIFICATION_TYPE_DM_REQUEST:               "dm_request",
@@ -117,6 +125,7 @@ var notificationTargetNames = map[chatv1.NotificationTargetType]string{
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_REPORT:          "report",
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DM_CONVERSATION: "dm_conversation",
 	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_DATA_EXPORT:     "data_export",
+	chatv1.NotificationTargetType_NOTIFICATION_TARGET_TYPE_LIBRARY_ITEM:    "library_item",
 }
 
 var notificationLevelNames = map[chatv1.NotificationLevel]string{

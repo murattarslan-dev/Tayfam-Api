@@ -80,6 +80,8 @@ type env struct {
 	audit    *fakeAudit
 	// signingKey signs further admin tokens (old sign-ins).
 	signingKey auth.SigningKey
+	// cfg is the router's configuration (handler builds variants).
+	cfg Config
 }
 
 func setup(t *testing.T) *env {
@@ -125,15 +127,29 @@ func setup(t *testing.T) *env {
 		"iss": "https://" + team, "aud": []string{aud}, "sub": "cf-1", "email": accessTo, "type": "app",
 		"iat": now.Unix(), "exp": now.Add(8 * time.Hour).Unix(),
 	}})
-	e.h, err = NewHandler(Config{
+	e.cfg = Config{
 		Host: host, Access: av, Admin: adminV, Identity: e.identity,
 		Core: e.core, Users: e.users, Audit: e.audit, GoogleClientID: googleClient,
 		Log: slog.New(slog.NewJSONHandler(e.logs, nil)), SignInLimit: ratelimit.New(60, 60),
-	})
+	}
+	e.h, err = NewHandler(e.cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return e
+}
+
+// handler builds the router again with mod applied to setup's
+// configuration.
+func (e *env) handler(t *testing.T, mod func(*Config)) http.Handler {
+	t.Helper()
+	c := e.cfg
+	mod(&c)
+	h, err := NewHandler(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
 }
 
 // req builds a request to the panel that passed Cloudflare Access.
@@ -456,13 +472,13 @@ func TestRoutesMatchContract(t *testing.T) {
 			continue
 		}
 		ops++
-		p := strings.NewReplacer("{id}", tayfaID, "{file}", "panel.css").Replace(path)
+		p := strings.NewReplacer("{id}", tayfaID, "{file}", "panel.css", "{kind}", "tur").Replace(path)
 		w := e.do(e.req(strings.ToUpper(m[1]), p, "{}"))
 		if w.Code == http.StatusNotFound || w.Code == http.StatusMethodNotAllowed {
 			t.Errorf("sözleşmedeki %s %s sunulmuyor (%d)", m[1], path, w.Code)
 		}
 	}
-	if ops != 29 {
+	if ops != 34 {
 		t.Fatalf("sözleşmede %d işlem bulundu", ops)
 	}
 }

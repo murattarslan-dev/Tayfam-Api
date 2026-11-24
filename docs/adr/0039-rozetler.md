@@ -80,7 +80,14 @@ Hesap silinince `user_badges` aynı transaction'da silinir.
 
 ## Uygulama notları (#258)
 
-Karar değişmedi; issue #258 uygulamasındaki ayrıntılar:
+Karar değişmedi; issue #258 uygulamasındaki ayrıntılar (platform sahibi
+2026-11-23'te sohbette onayladı, #323). İlk rozet listesi (#260):
+`first_attendance`, `attended_10`, `attended_50`, `attended_100`,
+`championship` (hepsi kişisel); türe özel eşikler ve tayfa rozetleri için
+değer verilmedi, liste platform panelinden genişler. Kişinin kendi
+rozetleri ve kişisel istatistiği Profil sekmesinde görünürlük ayarından
+bağımsız gösterilir (2026-11-23, Tayfam-App #300; §3 "kişinin kendisine
+her zaman").
 
 - **Ortak metrik anahtarları:** `events` (tayfa), `attended`, `participants`
   (tayfa), `duration` (dakika). Türe özel metrik `<tür>.<anahtar>`: türün

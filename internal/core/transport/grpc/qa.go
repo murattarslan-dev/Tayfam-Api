@@ -21,7 +21,7 @@ type QA interface {
 	RestoreQuestion(ctx context.Context, user, tayfa, question id.ID) (qa.Question, error)
 	CreateAnswer(ctx context.Context, user, tayfa, question id.ID, in qa.CreateAnswerInput) (qa.Answer, error)
 	ListAnswers(ctx context.Context, user, tayfa, question id.ID, pageSize int32, pageToken string) ([]qa.Answer, string, error)
-	UpdateAnswer(ctx context.Context, user, tayfa, answer id.ID, body string) (qa.Answer, error)
+	UpdateAnswer(ctx context.Context, user, tayfa, answer id.ID, body string, photos []string) (qa.Answer, error)
 	DeleteAnswer(ctx context.Context, user, tayfa, answer id.ID) error
 	RestoreAnswer(ctx context.Context, user, tayfa, answer id.ID) (qa.Answer, error)
 	SetVote(ctx context.Context, user, tayfa, answer id.ID, voted bool) (qa.Answer, error)
@@ -65,8 +65,14 @@ func (s *QAServer) CreateQuestion(ctx context.Context, req *corev1.CreateQuestio
 	if err != nil {
 		return nil, err
 	}
+	pool, err := questionPoolFromProto(req.GetPool())
+	if err != nil {
+		return nil, err
+	}
 	v, err := s.app.CreateQuestion(ctx, user, t, qa.CreateQuestionInput{
-		Title: req.GetTitle(), Body: req.GetBody(), Tags: req.GetTags(), ClientRequestID: req.GetClientRequestId(),
+		Pool: pool, Title: req.GetTitle(), Body: req.GetBody(), Tags: req.GetTags(),
+		SubjectKey: req.GetSubjectKey(), TopicKey: req.GetTopicKey(), Photos: req.GetPhotoUploadIds(),
+		ClientRequestID: req.GetClientRequestId(),
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -97,7 +103,12 @@ func (s *QAServer) ListQuestions(ctx context.Context, req *corev1.ListQuestionsR
 	if err != nil {
 		return nil, err
 	}
+	pool, err := questionPoolFromProto(req.GetPool())
+	if err != nil {
+		return nil, err
+	}
 	list, next, err := s.app.ListQuestions(ctx, user, t, qa.ListQuestionsInput{
+		Pool: pool, SubjectKey: req.GetSubjectKey(), TopicKey: req.GetTopicKey(),
 		Query: req.GetQuery(), TagID: req.GetTagId(), PageSize: req.GetPageSize(), PageToken: req.GetPageToken(),
 	})
 	if err != nil {
@@ -118,6 +129,7 @@ func (s *QAServer) UpdateQuestion(ctx context.Context, req *corev1.UpdateQuestio
 	}
 	v, err := s.app.UpdateQuestion(ctx, user, t, q, qa.UpdateQuestionInput{
 		Fields: req.GetUpdateMask().GetPaths(), Title: req.GetTitle(), Body: req.GetBody(), Tags: req.GetTags(),
+		SubjectKey: req.GetSubjectKey(), TopicKey: req.GetTopicKey(), Photos: req.GetPhotoUploadIds(),
 	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
@@ -156,7 +168,9 @@ func (s *QAServer) CreateAnswer(ctx context.Context, req *corev1.CreateAnswerReq
 	if err != nil {
 		return nil, err
 	}
-	v, err := s.app.CreateAnswer(ctx, user, t, q, qa.CreateAnswerInput{Body: req.GetBody(), ClientRequestID: req.GetClientRequestId()})
+	v, err := s.app.CreateAnswer(ctx, user, t, q, qa.CreateAnswerInput{
+		Body: req.GetBody(), Photos: req.GetPhotoUploadIds(), ClientRequestID: req.GetClientRequestId(),
+	})
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
@@ -186,7 +200,7 @@ func (s *QAServer) UpdateAnswer(ctx context.Context, req *corev1.UpdateAnswerReq
 	if err != nil {
 		return nil, err
 	}
-	v, err := s.app.UpdateAnswer(ctx, user, t, a, req.GetBody())
+	v, err := s.app.UpdateAnswer(ctx, user, t, a, req.GetBody(), req.GetPhotoUploadIds())
 	if err != nil {
 		return nil, errorStatus(ctx, s.log, err)
 	}
@@ -260,11 +274,38 @@ func (s *QAServer) DeleteTag(ctx context.Context, req *corev1.DeleteTagRequest) 
 	return &corev1.DeleteTagResponse{}, nil
 }
 
+// questionPoolFromProto reads a requested pool; unspecified is Soru-Cevap.
+func questionPoolFromProto(p corev1.QuestionPool) (string, error) {
+	switch p {
+	case corev1.QuestionPool_QUESTION_POOL_UNSPECIFIED, corev1.QuestionPool_QUESTION_POOL_QA:
+		return qa.PoolQA, nil
+	case corev1.QuestionPool_QUESTION_POOL_QUESTION_POOL:
+		return qa.PoolQuestionPool, nil
+	}
+	return "", validation("pool")
+}
+
+func questionPoolPB(pool string) corev1.QuestionPool {
+	if pool == qa.PoolQuestionPool {
+		return corev1.QuestionPool_QUESTION_POOL_QUESTION_POOL
+	}
+	return corev1.QuestionPool_QUESTION_POOL_QA
+}
+
+func idStrings(ids []id.ID) []string {
+	out := make([]string, 0, len(ids))
+	for _, x := range ids {
+		out = append(out, x.String())
+	}
+	return out
+}
+
 func questionPB(v qa.Question) *corev1.Question {
 	return &corev1.Question{
 		Id: v.ID.String(), TayfaId: v.TayfaID.String(), AuthorUserId: optionalID(v.AuthorID),
 		Title: v.Title, Body: v.Body, Tags: tagsPB(v.Tags), AnswerCount: v.AnswerCount,
 		CreateTime: timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
+		Pool: questionPoolPB(v.Pool), SubjectKey: v.SubjectKey, TopicKey: v.TopicKey, PhotoUploadIds: idStrings(v.Photos),
 	}
 }
 
@@ -273,6 +314,7 @@ func answerPB(v qa.Answer) *corev1.Answer {
 		Id: v.ID.String(), QuestionId: v.QuestionID.String(), TayfaId: v.TayfaID.String(),
 		AuthorUserId: optionalID(v.AuthorID), Body: v.Body, VoteCount: v.VoteCount, Voted: v.Voted,
 		CreateTime: timestamppb.New(v.CreatedAt), UpdateTime: timestamppb.New(v.UpdatedAt),
+		PhotoUploadIds: idStrings(v.Photos),
 	}
 }
 

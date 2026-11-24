@@ -53,6 +53,7 @@ func eventCelebrationPB(c celebration.Celebration) *corev1.EventCelebration {
 	for _, w := range c.Winners {
 		out.Winners = append(out.Winners, &corev1.CelebrationWinner{
 			UserId: idString(w.User), TeamId: idString(w.Team), GuestId: idString(w.Guest), TableId: idString(w.Table),
+			VoteOptionId: idString(w.VoteOption),
 		})
 	}
 	return out

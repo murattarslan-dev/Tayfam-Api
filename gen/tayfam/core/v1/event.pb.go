@@ -1223,7 +1223,8 @@ type Event struct {
 	// key. Each value is the JSON text of the stored form: a string for text,
 	// long_text, choice and date ("YYYY-MM-DD"), a number for integer,
 	// decimal and duration (minutes), true or false for boolean, a list of
-	// strings for multi_choice. A field without a value is not in the map.
+	// strings for multi_choice, a list of study tag keys for study_tags
+	// (ADR-0043). A field without a value is not in the map.
 	// Set by GetEvent and the methods that return the event they changed;
 	// never by ListUpcomingEvents.
 	Fields map[string]string `protobuf:"bytes,39,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`

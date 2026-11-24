@@ -35,6 +35,9 @@ type Answer struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+	Pool            string
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
 }
 
 type AnswerVote struct {
@@ -52,6 +55,13 @@ type AuditLog struct {
 	TargetID   pgtype.UUID
 	Metadata   []byte
 	CreatedAt  pgtype.Timestamptz
+}
+
+type BlockedDomain struct {
+	Domain    string
+	CreatedAt pgtype.Timestamptz
+	CreatedBy pgtype.UUID
+	Initial   bool
 }
 
 type CatalogBadge struct {
@@ -373,6 +383,14 @@ type EventPhoto struct {
 	DeletedBy       pgtype.UUID
 }
 
+type EventPoolLink struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	QuestionID   pgtype.UUID
+	Position     int16
+	CreatedAt    pgtype.Timestamptz
+}
+
 type EventQuestion struct {
 	ID              pgtype.UUID
 	EventID         pgtype.UUID
@@ -593,6 +611,37 @@ type EventVehicleSeatRequest struct {
 	DecidedAt      pgtype.Timestamptz
 }
 
+type EventVote struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	ComponentKey    string
+	UserID          pgtype.UUID
+	OptionID        pgtype.UUID
+	CandidateUserID pgtype.UUID
+	EventVehicleID  pgtype.UUID
+	PhotoID         pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+type EventVoteClosure struct {
+	EventID      pgtype.UUID
+	ComponentKey string
+	ClosedBy     pgtype.UUID
+	ClosedAt     pgtype.Timestamptz
+}
+
+type EventVoteOption struct {
+	ID              pgtype.UUID
+	EventID         pgtype.UUID
+	ComponentKey    string
+	Label           string
+	LabelNormalized string
+	Position        int16
+	CreatedBy       pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+}
+
 type FriendRequestOutcome struct {
 	RequesterID pgtype.UUID
 	RecipientID pgtype.UUID
@@ -627,6 +676,31 @@ type Friendship struct {
 	AcceptedAt  pgtype.Timestamptz
 }
 
+type GarageTayfaVisibility struct {
+	UserID    pgtype.UUID
+	TayfaID   pgtype.UUID
+	Visible   bool
+	UpdatedAt pgtype.Timestamptz
+}
+
+type GarageVehicle struct {
+	ID              pgtype.UUID
+	OwnerID         pgtype.UUID
+	Make            string
+	Model           pgtype.Text
+	ModelYear       pgtype.Int4
+	Color           pgtype.Text
+	Note            pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
+	Photo3UploadID  pgtype.UUID
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
+}
+
 type InvitationOutcome struct {
 	TayfaID    pgtype.UUID
 	UserID     pgtype.UUID
@@ -652,6 +726,68 @@ type JobRun struct {
 	Succeeded       bool
 	Changed         int64
 	LastSucceededAt pgtype.Timestamptz
+}
+
+type LibraryItem struct {
+	ID                  pgtype.UUID
+	TayfaID             pgtype.UUID
+	OwnerID             pgtype.UUID
+	Kind                string
+	Name                string
+	VocabularyID        pgtype.UUID
+	VocabularyNamespace pgtype.Text
+	Note                pgtype.Text
+	PhotoUploadID       pgtype.UUID
+	Status              string
+	WithdrawnAt         pgtype.Timestamptz
+	WithdrawnBy         pgtype.UUID
+	ClientRequestID     pgtype.UUID
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+}
+
+type LibraryLoan struct {
+	ID           pgtype.UUID
+	ItemID       pgtype.UUID
+	TayfaID      pgtype.UUID
+	BorrowerID   pgtype.UUID
+	State        string
+	RequestedAt  pgtype.Timestamptz
+	ApprovedAt   pgtype.Timestamptz
+	HandedOverAt pgtype.Timestamptz
+	DueAt        pgtype.Timestamptz
+	RemindedAt   pgtype.Timestamptz
+	OrphanedAt   pgtype.Timestamptz
+	EndedAt      pgtype.Timestamptz
+}
+
+type LibraryQueue struct {
+	ID        pgtype.UUID
+	ItemID    pgtype.UUID
+	TayfaID   pgtype.UUID
+	UserID    pgtype.UUID
+	Position  int32
+	CreatedAt pgtype.Timestamptz
+}
+
+type Material struct {
+	ID              pgtype.UUID
+	TayfaID         pgtype.UUID
+	AuthorID        pgtype.UUID
+	Kind            string
+	Title           string
+	Url             pgtype.Text
+	Domain          pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
+	Photo3UploadID  pgtype.UUID
+	SubjectKey      string
+	TopicKey        pgtype.Text
+	ClientRequestID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	DeletedAt       pgtype.Timestamptz
+	DeletedBy       pgtype.UUID
 }
 
 type Membership struct {
@@ -719,6 +855,11 @@ type Question struct {
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
 	DeletedBy       pgtype.UUID
+	Pool            string
+	SubjectKey      pgtype.Text
+	TopicKey        pgtype.Text
+	Photo1UploadID  pgtype.UUID
+	Photo2UploadID  pgtype.UUID
 }
 
 type QuestionTag struct {

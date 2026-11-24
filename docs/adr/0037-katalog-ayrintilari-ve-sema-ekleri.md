@@ -1,7 +1,11 @@
 # ADR-0037: Katalog ayrıntıları ve şema ekleri (v3)
 
 - **Durum:** Kabul edildi (platform sahibi, 2026-11-18, sohbette)
-- **Tarih:** 2026-11-18
+- **Tarih:** 2026-11-18 (revizyon 2026-11-23: §3 `vote` kaynakları, §1
+  sohbet kanalı istisnası; uygulama notları 2026-11-23, #323: §1
+  katılımcı listesi, §6 misafir, §7 kişisel katkı; revizyon 2026-11-23
+  akşam: §6 misafir takma adı etkinlikle silinir; 2026-11-24: §5 eşli
+  kip, ADR-0044)
 - **Karar veren:** Murat Arslan (2026-11-18 katalog oturumu). Ürün kararları
   Notion "Faz 3 — Katalog ayrıntıları ve şema ekleri (2026-11-18)"
   sayfasındadır; bu ADR onların mimariye taşınmasıdır.
@@ -59,6 +63,16 @@ modelin ifade edemediği ihtiyaçlar çıktı:
     Kontrol sunucudadır; istemcide atlanamaz. Bayrağı taşıyan tür:
     Ziyaret.
 - `personal_scope_forbidden` (ADR-0025 §4) tür bayrakları arasına taşınır.
+- **İstisna, etkinlik sohbet kanalı** (platform sahibi, 2026-11-23, #301):
+  `sensitive_attendance` türünde de etkinliğin sohbet kanalı ve üye
+  listesi olduğu gibi kalır. Kanala katılan kendi isteğiyle görünür kabul
+  edilir; chat'te kod değişikliği yoktur, bildirim alıcıları etkilenmez.
+- **Uygulama notu (#257, onay 2026-11-23, #323):** `sensitive_attendance`
+  türünde katılımcı listesi organizatörün yanında moderatör ve yöneticiye
+  de döner (katılımı onlar da düzeltebilir, `SetAttendance` Any; kutlamadaki
+  "organizatör (yöneticiler)" kullanımıyla aynı). Diğer katılımcılar
+  yalnızca sayıyı görür. Hassas katılımın tek kaynağı SQL
+  `event_attendance_sensitive(ev)`; albüm yüklemesi `consent_ack`.
 
 ### 2. Tanım şeması ekleri
 
@@ -92,7 +106,7 @@ ADR-0025 §3'teki şemaya, bilinen anahtar listesine eklenerek:
 | `scoreboard` | **Masalar** ve **ön ayarlar** (§5), sonuç modu `wdl`, **misafir oyuncu** (§6). |
 | `bracket` | İsviçre eşitlik bozma sırası sabit: puan → aralarındaki maç → Buchholz. Rating/ELO yok. |
 | `vehicles` | `seats: true`: araç sahibi boş koltuk sayısını (0–8) yazar; katılımcı bir araca yer ister, araç sahibi onaylar. Masraf ya da para alanı yok. |
-| `vote` | Seçenek kaynağı: `free`, `participants`, `vehicles`, `album`, `route_stops`. |
+| `vote` | Seçenek kaynağı: `free`, `participants`, `vehicles`, `album`. (`route_stops` platform sahibinin 2026-11-23 kararıyla kaldırıldı: mola yeri gibi oylamalar serbest seçenekle yapılır, rota bileşeni değişmez; #254.) `participants` kaynağı `sensitive_attendance` türünde kullanılamaz (seçenekler kimin geldiğini gösterirdi). |
 | `timer` (yeni) | Modlar `countdown` / `stopwatch` / `chess_clock` (`organizer_choice` olabilir), `presets` (saniye, en fazla 6). **Sunucuda veri yok**: tablo, uç ve olay yoktur; yalnızca tanımda yer alır ki istemci çizsin. |
 | `pool_link` (yeni) | Etkinliği tayfanın soru havuzundaki sorulara bağlar (en fazla 50). Soru havuzu modülü kapalıysa bileşen gösterilmez. Modülün ADR'siyle birlikte gelir. |
 
@@ -103,6 +117,20 @@ Bileşen listesi (20): `route`, `meeting_point`, `schedule`, `checklist`,
 
 Yeni birimler: `night`, `nm` (deniz mili), `box` (koli), `section`
 (bölüm), `net`.
+
+Uygulama notu (#254, `vote`): kişi başına bileşen başına bir oy, yeni oy
+öncekinin yerine geçer. Oy veren `going` ya da katılımı doğrulanmış etkin
+üyedir; kendine, kendi aracına ve kendi fotoğrafına oy veremez. Yalnızca
+serbest seçenekler saklanır (organizatör yazar, en fazla 20); diğer
+kaynakların seçenekleri her okumada kaynaktan gelir, kaynaktan çıkan
+seçeneğe (gelmekten vazgeçen katılımcı) verilen oy sayılmaz, silinen araç
+ya da fotoğraf oylarıyla gider. Oy gizlidir: kimin neye oy verdiği hiçbir
+yanıtta, denetim kaydında ve olayda yer almaz. Seçenek başına sayılar ve
+kazananlar organizatör oylamayı kapatınca (geri alınmaz) ya da bileşen
+donunca görünür; kutlama yalnızca kapatılmış oylamanın kazananını okur
+(kazanan seçeneğin arkasındaki kişi: katılımcı, aracın sahibi, fotoğrafı
+yükleyen; serbest seçenekte kişi yoktur ve ana sayfa şampiyon kartına
+girmez).
 
 ### 4. Tayfa sözlüğü
 
@@ -155,6 +183,10 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
   tur oyunu, Serbest. **Marka adı ön ayar adı olmaz** (ör. "Kelime
   anlatma").
 - Para, bahis ya da ödül alanı hiçbir ön ayarda yoktur (ADR-0025 §4).
+- **Eşli kip (2026-11-24, #343):** ön ayardaki "takım/eşli" kuralı
+  [ADR-0044](0044-yazboz-esli-kip.md)'te tanımlandı: taraf `pair`, 4 yer,
+  karşılıklı oturanlar eş (1–3, 2–4), puan eş başına. İlk ön ayarlara
+  Batak, 101 Okey, Okey ve Pişti'nin eşlileri eklendi (migration 00070).
 
 ### 6. Misafir oyuncu
 
@@ -165,8 +197,20 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
   fazla 30.
 - Misafir hiçbir istatistiğe, kutlama bildirimine ve arkadaşlık puanına
   girmez; profil, kişisel kayıt ve iletişim alanı yoktur.
-- Etkinlik bitiminden **30 gün** sonra takma ad silinir; skor satırı
-  "Misafir" olarak kalır (şampiyonlar bileşeni misafiri adsız gösterir).
+- ~~Etkinlik bitiminden **30 gün** sonra takma ad silinir; skor satırı
+  "Misafir" olarak kalır (şampiyonlar bileşeni misafiri adsız gösterir).~~
+  **Revizyon (2026-11-23, platform sahibinin sohbetteki kararı):** takma ad
+  etkinlik var olduğu sürece kalır ve etkinlikle birlikte silinir
+  (`event_guest_players` → `events` `ON DELETE CASCADE`); bitişten sonra
+  çalışan temizlik işi (`guest-nicknames`) kaldırıldı. Ekleyen hesabını
+  silince takma ad yine hemen boşalır.
+- **Uygulama notu (#252, onay 2026-11-23, #323):** misafiri organizatör,
+  moderatör, yönetici ve etkinliğin, bileşenin ya da masanın hakemi ekler
+  (`event.guest_add`); silme yalnızca yönetenlerde, masada ya da kurada yeri
+  olan misafir silinmez. Misafir `guests` açık yazboz bileşeniyle eklenir,
+  eşleşme ağacında katılımcı kurasına girer, dereceye girmez. Takma ad
+  ekleyenin içeriğidir: ekleyen hesabını silince hemen boşalır, ekleyenin
+  dışa aktarmasına girer (`core/guest_players.json`).
 
 ### 7. ADR-0026 değişiklikleri
 
@@ -176,9 +220,47 @@ ise "dış içerik yok" ilkesine aykırıdır. Çözüm tayfanın kendi sözlü�
 - Kişisel katkı listesinde `entered_by: organizer` olan kişisel ölçümler de
   yer alır (gol krallığı tayfa içinde görünür; vitrinde yalnızca toplam,
   §3 kuralı değişmez).
+  **Güncelleme (2026-11-23, #322):** tayfa içinde de her üye yalnızca kendi
+  katkısını görür (ADR-0026 §3, "Uygulama notları (#322)"); organizatörün
+  girdiği kişisel ölçüm o kişinin kendi katkısında görünür, başkalarına
+  listelenmez. "Gol krallığı tayfa içinde görünür" ifadesi bu kararla
+  geçersizdir.
 - `sensitive_attendance` türleri ortak metriklerden yalnızca etkinlik
   sayısı ve toplam katılıma girer; "farklı katılımcı sayısı" ve kişisel
   istatistik hesaplanmaz.
+
+### Uygulama notları (#260, katalog verisi)
+
+Karar değişmedi; tam katalog seed'inin (`db/core/migrations/00066`)
+ayrıntıları:
+
+- **Sürümleme:** Faz 1 türlerinden tanımı Notion'la değişen altısı (`convoy`,
+  `hike`, `camp`, `sports`, `gaming`, `general`) **sürüm 2** ile gelir; sürüm
+  1 satırları değişmez ve o sürümle açılmış etkinlikler onunla kalır
+  (ADR-0025 §2). `fishing` Notion'la aynıdır, sürüm 1'de kalır. Faz 1
+  türleri bugünkü iki modunu korur; yeni türlerden yalnızca Notion'da
+  "(yüz yüze/online)" yazanlar iki modludur.
+- **"(ops)"** bileşenler `optional: {"default": false}` olarak yazıldı;
+  Genel'in araç kutusu (liste, oylama, takım kurma, yazboz, kronometre) da
+  varsayılan kapalıdır. Notion'da alarmı belirtilmeyen yoklamalar alarmlı
+  (30 dk tolerans), "alarmsız" yazanlar alarmsızdır.
+- **Oylama kaynağı:** Notion'daki "rota durakları" (Gastronomi turu) §3'teki
+  karara göre serbest (`free`) oylamadır.
+- **Anahtarlar:** ölçüm ve günlük anahtarları ortak metrik adlarıyla
+  (`events`, `attended`, `participants`, `duration`) çakışmaz; koşu ve
+  antrenmanın süre ölçümleri `run_time` ve `training_time`'dır.
+- **Tür alanında sözlük:** Notion'da "[sözlük]" işaretli tür alanları
+  (kitap, oyun, dal) tanımda `vocabulary` taşır; sözlüğe bağlama bugün
+  yalnızca günlük kayıtlarındadır (§4 uygulama notu), tür alanının değeri
+  düz metindir.
+- **Eğitim türlerinin ders/konu alanları** tanımda yoktur: şemada ders-konu
+  listesine (ADR-0040 §5) bağlı bir alan türü yoktur; karar platform
+  sahibindedir.
+  **Güncelleme (2026-11-23, #333):** platform sahibi alan türünü onayladı;
+  [ADR-0043](0043-ders-konu-alan-turu.md) `study_tags`'i ekler, dört Eğitim
+  türü sürüm 2 ile bu alanları alır (migration 00068).
+- Varsayılan ana sayfa bileşenleri her ilgi alanında yalnızca temel
+  bölümlerdir (platform sahibi, 2026-11-23, #260).
 
 ## Gerekçe
 

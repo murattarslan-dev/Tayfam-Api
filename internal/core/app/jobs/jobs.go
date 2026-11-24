@@ -25,6 +25,9 @@
 //	                or dropped out, or whose vocabulary was merged, and
 //	                gives the threshold and first badges (#266, ADR-0026;
 //	                stats.go)
+//	catalog-publish publishes catalog.changed when the catalog's version is
+//	                above the last published one (#280, ADR-0042;
+//	                catalog.go)
 //
 // The outcome of every pass (finish time, success, rows changed) is written
 // to job_runs for the panel's dashboard (issue #110).
@@ -185,12 +188,14 @@ type Intervals struct {
 	FriendSuggestions time.Duration
 	// Issue #210.
 	SafetyAlert time.Duration
-	// Issue #252.
-	GuestNicknames time.Duration
 	// Issue #258.
 	ChampionBadges time.Duration
 	// Issue #266.
 	Stats time.Duration
+	// Issue #270.
+	Library time.Duration
+	// Issue #280.
+	CatalogPublish time.Duration
 }
 
 func (i Intervals) withDefaults() Intervals {
@@ -209,9 +214,10 @@ func (i Intervals) withDefaults() Intervals {
 	def(&i.Retention, DefaultRetentionInterval)
 	def(&i.FriendSuggestions, DefaultFriendSuggestionsInterval)
 	def(&i.SafetyAlert, DefaultSafetyAlertInterval)
-	def(&i.GuestNicknames, DefaultGuestNicknamesInterval)
 	def(&i.ChampionBadges, DefaultChampionBadgesInterval)
 	def(&i.Stats, DefaultStatsInterval)
+	def(&i.Library, DefaultLibraryInterval)
+	def(&i.CatalogPublish, DefaultCatalogPublishInterval)
 	return i
 }
 
@@ -268,9 +274,10 @@ func (s *Service) Workers() []Worker {
 		{JobRetention, s.every(JobRetention, iv.Retention, s.ExpireRecords)},
 		{JobFriendSuggestions, s.every(JobFriendSuggestions, iv.FriendSuggestions, s.SuggestFriends)},
 		{JobSafetyAlert, s.every(JobSafetyAlert, iv.SafetyAlert, s.AlertMissedReturns)},
-		{JobGuestNicknames, s.every(JobGuestNicknames, iv.GuestNicknames, s.ClearGuestNicknames)},
 		{JobChampionBadges, s.every(JobChampionBadges, iv.ChampionBadges, s.AwardChampionBadges)},
 		{JobStats, s.every(JobStats, iv.Stats, s.ComputeStats)},
+		{JobLibrary, s.every(JobLibrary, iv.Library, s.RunLibrary)},
+		{JobCatalogPublish, s.every(JobCatalogPublish, iv.CatalogPublish, s.PublishCatalog)},
 	}
 }
 

@@ -149,7 +149,7 @@ func TestMediaServer(t *testing.T) {
 	for name, req := range map[string]*corev1.CreateUploadRequest{
 		"amaç yok":           {ClientRequestId: "x"},
 		"bozuk tayfa":        {Purpose: corev1.UploadPurpose_UPLOAD_PURPOSE_COVER, TayfaId: "x"},
-		"bilinmeyen 9":       {Purpose: corev1.UploadPurpose(9)},
+		"bilinmeyen 99":      {Purpose: corev1.UploadPurpose(99)},
 		"bilinmeyen varyant": {Purpose: corev1.UploadPurpose_UPLOAD_PURPOSE_AVATAR, Variants: []*corev1.UploadVariant{{Kind: corev1.VariantKind(7)}}},
 	} {
 		if _, err := srv.CreateUpload(ctx, req); codeOf(t, err) != codes.InvalidArgument {

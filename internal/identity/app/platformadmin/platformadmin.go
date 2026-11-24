@@ -356,6 +356,30 @@ func auditParams(actor id.ID, e Entry) (store.InsertPlatformAuditLogParams, erro
 	return params, nil
 }
 
+// maxCatalogKey bounds a catalog_key: a catalog key is at most 40
+// characters, a blocked domain at most 253.
+const maxCatalogKey = 253
+
+// ValidCatalogKey reports whether s may be stored as an entry's
+// catalog_key (issue #262): a catalog key (^[a-z][a-z0-9_]{1,39}$) or a
+// lower case host name. Lower case letters, digits, "_", "-" and "." only;
+// it starts with a letter or a digit.
+func ValidCatalogKey(s string) bool {
+	if s == "" || len(s) > maxCatalogKey {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= '0' && c <= '9':
+		case i > 0 && (c == '_' || c == '-' || c == '.'):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // CoreEntry is a platform audit entry of an action core carried out
 // (PlatformAuditService, issue #104). core writes the action and the entry
 // in one transaction to its outbox; the relay delivers it at least once.

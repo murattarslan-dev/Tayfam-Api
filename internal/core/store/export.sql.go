@@ -137,7 +137,7 @@ func (q *Queries) ExportAnswerVotes(ctx context.Context, arg ExportAnswerVotesPa
 
 const exportAnswers = `-- name: ExportAnswers :many
 SELECT a.id AS k, jsonb_build_object(
-  'id', a.id, 'question_id', a.question_id, 'tayfa_id', a.tayfa_id, 'body', a.body, 'vote_count', a.vote_count,
+  'id', a.id, 'question_id', a.question_id, 'tayfa_id', a.tayfa_id, 'pool', a.pool, 'body', a.body, 'vote_count', a.vote_count,
   'created_at', a.created_at, 'updated_at', a.updated_at, 'deleted_at', a.deleted_at
 ) AS data
 FROM answers a
@@ -365,11 +365,59 @@ func (q *Queries) ExportCelebrationWins(ctx context.Context, arg ExportCelebrati
 	return items, nil
 }
 
+const exportChecklistItems = `-- name: ExportChecklistItems :many
+SELECT c.id AS k, jsonb_build_object(
+  'id', c.id, 'event_id', c.event_id, 'component_key', c.component_key,
+  'name', c.name, 'quantity', c.quantity,
+  'assigned_to_me', COALESCE(c.assigned_user_id = $1, false),
+  'added_by_me', COALESCE(c.created_by = $1, false),
+  'created_at', c.created_at, 'updated_at', c.updated_at
+) AS data
+FROM event_checklist_items c
+WHERE (c.assigned_user_id = $1 OR c.created_by = $1) AND c.id > $2
+ORDER BY c.id
+LIMIT $3
+`
+
+type ExportChecklistItemsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportChecklistItemsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Liste maddeleri (`checklist` bileşeni, issue #241; dışa aktarma #275):
+// eklediğiniz ya da üstlendiğiniz maddeler. Maddeyi kimin eklediği ya da
+// üstlendiği yalnızca "ben mi" olarak yer alır.
+func (q *Queries) ExportChecklistItems(ctx context.Context, arg ExportChecklistItemsParams) ([]ExportChecklistItemsRow, error) {
+	rows, err := q.db.Query(ctx, exportChecklistItems, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportChecklistItemsRow{}
+	for rows.Next() {
+		var i ExportChecklistItemsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportConvoyVehicles = `-- name: ExportConvoyVehicles :many
 SELECT v.id AS k, jsonb_build_object(
   'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
   'model_year', v.model_year, 'color', v.color, 'plate', v.plate, 'seats', v.seats,
-  'created_at', v.created_at, 'updated_at', v.updated_at
+  'garage_vehicle_id', v.vehicle_id, 'created_at', v.created_at, 'updated_at', v.updated_at
 ) AS data
 FROM event_vehicles v
 WHERE v.user_id = $1 AND v.id > $2
@@ -642,6 +690,105 @@ func (q *Queries) ExportEventRSVPs(ctx context.Context, arg ExportEventRSVPsPara
 	return items, nil
 }
 
+const exportEventReferees = `-- name: ExportEventReferees :many
+SELECT r.id AS k, jsonb_build_object(
+  'event_id', r.event_id, 'tayfa_id', e.tayfa_id, 'component_key', r.component_key,
+  'scope_id', r.scope_id, 'created_at', r.created_at
+) AS data
+FROM event_referees r
+JOIN events e ON e.id = r.event_id
+WHERE r.user_id = $1 AND r.id > $2
+ORDER BY r.id
+LIMIT $3
+`
+
+type ExportEventRefereesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportEventRefereesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Hakem atamalarınız (issue #238; dışa aktarma #275): hangi etkinlikte,
+// hangi bileşende ve kapsamda (masa, maç) hakemsiniz. Atayan ve diğer
+// hakemler dışa aktarılmaz.
+func (q *Queries) ExportEventReferees(ctx context.Context, arg ExportEventRefereesParams) ([]ExportEventRefereesRow, error) {
+	rows, err := q.db.Query(ctx, exportEventReferees, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportEventRefereesRow{}
+	for rows.Next() {
+		var i ExportEventRefereesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportEventVotes = `-- name: ExportEventVotes :many
+SELECT v.id AS k, jsonb_build_object(
+  'event_id', v.event_id, 'component_key', v.component_key,
+  'target', CASE
+    WHEN v.option_id IS NOT NULL THEN 'option'
+    WHEN v.candidate_user_id IS NOT NULL THEN 'participant'
+    WHEN v.event_vehicle_id IS NOT NULL THEN 'vehicle'
+    ELSE 'photo' END,
+  'option_label', o.label,
+  'created_at', v.created_at, 'updated_at', v.updated_at
+) AS data
+FROM event_votes AS v
+LEFT JOIN event_vote_options AS o ON o.id = v.option_id
+WHERE v.user_id = $1 AND v.id > $2
+ORDER BY v.id
+LIMIT $3
+`
+
+type ExportEventVotesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportEventVotesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Oylarınız (`vote` bileşeni, issue #254): etkinlik, bileşen, hedefin türü,
+// serbest seçenekte seçeneğin etiketi ve zamanlar. Oy verdiğiniz kişinin,
+// aracın ya da fotoğrafın kimliği (başkasının verisi), başkalarının oyları ve
+// yazdığınız seçenekler (etkinliğin planı) dışa aktarılmaz.
+func (q *Queries) ExportEventVotes(ctx context.Context, arg ExportEventVotesParams) ([]ExportEventVotesRow, error) {
+	rows, err := q.db.Query(ctx, exportEventVotes, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportEventVotesRow{}
+	for rows.Next() {
+		var i ExportEventVotesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportEvents = `-- name: ExportEvents :many
 SELECT e.id AS k, jsonb_build_object(
   'id', e.id, 'tayfa_id', e.tayfa_id, 'type', e.type, 'mode', e.mode, 'title', e.title,
@@ -649,6 +796,10 @@ SELECT e.id AS k, jsonb_build_object(
   'meeting_point_name', e.meeting_point_name, 'meeting_lat', e.meeting_lat, 'meeting_lng', e.meeting_lng,
   'city', e.city, 'district', e.district, 'online_url', e.online_url, 'capacity', e.capacity,
   'status', e.status, 'cancelled_at', e.cancelled_at, 'cancel_reason', e.cancel_reason,
+  'type_version', e.type_version, 'open_ended', e.open_ended,
+  'fields', COALESCE((
+    SELECT jsonb_object_agg(f.field_key, f.value ORDER BY f.field_key)
+    FROM event_field_values f WHERE f.event_id = e.id), '{}'::jsonb),
   'created_at', e.created_at, 'updated_at', e.updated_at, 'deleted_at', e.deleted_at
 ) AS data
 FROM events e
@@ -668,6 +819,8 @@ type ExportEventsRow struct {
 	Data []byte
 }
 
+// Açtığınız etkinlikler; katalog türünün alan değerleri (`fields`, issue
+// #237) ve "Şimdi başlat"ın açık uçlu işareti (issue #263) dahil (#275).
 func (q *Queries) ExportEvents(ctx context.Context, arg ExportEventsParams) ([]ExportEventsRow, error) {
 	rows, err := q.db.Query(ctx, exportEvents, arg.UserID, arg.After, arg.N)
 	if err != nil {
@@ -776,6 +929,92 @@ func (q *Queries) ExportFriendships(ctx context.Context, arg ExportFriendshipsPa
 	return items, nil
 }
 
+const exportGarageVehicles = `-- name: ExportGarageVehicles :many
+SELECT g.id AS k, jsonb_build_object(
+  'id', g.id, 'make', g.make, 'model', g.model, 'model_year', g.model_year, 'color', g.color, 'note', g.note,
+  'created_at', g.created_at, 'updated_at', g.updated_at, 'deleted_at', g.deleted_at
+) AS data
+FROM garage_vehicles g
+WHERE g.owner_id = $1 AND g.id > $2
+ORDER BY g.id
+LIMIT $3
+`
+
+type ExportGarageVehiclesParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportGarageVehiclesRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Üye garajı (issue #272; ADR-0040 §4): garajınızdaki araçlar (silinenler
+// dahil) ve tayfa başına görünürlük seçimleriniz. Fotoğraf ve silen yer
+// almaz.
+func (q *Queries) ExportGarageVehicles(ctx context.Context, arg ExportGarageVehiclesParams) ([]ExportGarageVehiclesRow, error) {
+	rows, err := q.db.Query(ctx, exportGarageVehicles, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportGarageVehiclesRow{}
+	for rows.Next() {
+		var i ExportGarageVehiclesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportGarageVisibility = `-- name: ExportGarageVisibility :many
+SELECT v.tayfa_id AS k, jsonb_build_object(
+  'tayfa_id', v.tayfa_id, 'visible', v.visible, 'updated_at', v.updated_at
+) AS data
+FROM garage_tayfa_visibility v
+WHERE v.user_id = $1 AND v.tayfa_id > $2
+ORDER BY v.tayfa_id
+LIMIT $3
+`
+
+type ExportGarageVisibilityParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportGarageVisibilityRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+func (q *Queries) ExportGarageVisibility(ctx context.Context, arg ExportGarageVisibilityParams) ([]ExportGarageVisibilityRow, error) {
+	rows, err := q.db.Query(ctx, exportGarageVisibility, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportGarageVisibilityRow{}
+	for rows.Next() {
+		var i ExportGarageVisibilityRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportGuestPlayers = `-- name: ExportGuestPlayers :many
 SELECT g.id AS k, jsonb_build_object(
   'id', g.id, 'event_id', g.event_id, 'nickname', g.nickname, 'created_at', g.created_at
@@ -869,6 +1108,103 @@ func (q *Queries) ExportHikeCheckins(ctx context.Context, arg ExportHikeCheckins
 	return items, nil
 }
 
+const exportLibraryItems = `-- name: ExportLibraryItems :many
+SELECT i.id AS k, jsonb_build_object(
+  'id', i.id, 'tayfa_id', i.tayfa_id, 'kind', i.kind, 'name', i.name, 'note', i.note, 'status', i.status,
+  'created_at', i.created_at, 'updated_at', i.updated_at, 'withdrawn_at', i.withdrawn_at
+) AS data
+FROM library_items i
+WHERE i.owner_id = $1 AND i.id > $2
+ORDER BY i.id
+LIMIT $3
+`
+
+type ExportLibraryItemsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportLibraryItemsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Ortak kütüphane (issue #270; ADR-0040 §1): sahibi olduğunuz kalemler
+// (geri çekilenler dahil). Fotoğraf yer almaz.
+func (q *Queries) ExportLibraryItems(ctx context.Context, arg ExportLibraryItemsParams) ([]ExportLibraryItemsRow, error) {
+	rows, err := q.db.Query(ctx, exportLibraryItems, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportLibraryItemsRow{}
+	for rows.Next() {
+		var i ExportLibraryItemsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportLibraryLoans = `-- name: ExportLibraryLoans :many
+SELECT l.id AS k, jsonb_build_object(
+  'id', l.id, 'item_id', l.item_id, 'tayfa_id', l.tayfa_id, 'item_name', i.name,
+  'role', CASE WHEN l.borrower_id = $2 THEN 'borrower' ELSE 'owner' END,
+  'state', l.state, 'requested_at', l.requested_at, 'approved_at', l.approved_at,
+  'handed_over_at', l.handed_over_at, 'due_at', l.due_at, 'ended_at', l.ended_at
+) AS data
+FROM library_loans l JOIN library_items i ON i.id = l.item_id
+WHERE (l.borrower_id = $2 OR i.owner_id = $2) AND l.id > $3
+UNION ALL
+SELECT lq.id AS k, jsonb_build_object(
+  'id', lq.id, 'item_id', lq.item_id, 'tayfa_id', lq.tayfa_id, 'item_name', qi.name,
+  'role', 'borrower', 'state', 'queued', 'requested_at', lq.created_at
+) AS data
+FROM library_queue lq JOIN library_items qi ON qi.id = lq.item_id
+WHERE lq.user_id = $2 AND lq.id > $3
+ORDER BY k
+LIMIT $1
+`
+
+type ExportLibraryLoansParams struct {
+	N      int32
+	UserID pgtype.UUID
+	After  pgtype.UUID
+}
+
+type ExportLibraryLoansRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Ödünçleriniz (borç alan ya da sahip olarak) ve beklediğiniz sıralar.
+// Karşı taraf yer almaz.
+func (q *Queries) ExportLibraryLoans(ctx context.Context, arg ExportLibraryLoansParams) ([]ExportLibraryLoansRow, error) {
+	rows, err := q.db.Query(ctx, exportLibraryLoans, arg.N, arg.UserID, arg.After)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportLibraryLoansRow{}
+	for rows.Next() {
+		var i ExportLibraryLoansRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exportLogEntries = `-- name: ExportLogEntries :many
 SELECT f.id AS k, jsonb_build_object(
   'id', f.id, 'event_id', f.event_id, 'component_key', f.component_key, 'values', f.field_values,
@@ -908,6 +1244,51 @@ func (q *Queries) ExportLogEntries(ctx context.Context, arg ExportLogEntriesPara
 	items := []ExportLogEntriesRow{}
 	for rows.Next() {
 		var i ExportLogEntriesRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportMaterials = `-- name: ExportMaterials :many
+SELECT m.id AS k, jsonb_build_object(
+  'id', m.id, 'tayfa_id', m.tayfa_id, 'kind', m.kind, 'title', m.title, 'url', m.url, 'domain', m.domain,
+  'subject_key', m.subject_key, 'topic_key', m.topic_key,
+  'created_at', m.created_at, 'updated_at', m.updated_at, 'deleted_at', m.deleted_at
+) AS data
+FROM materials m
+WHERE m.author_id = $1 AND m.id > $2
+ORDER BY m.id
+LIMIT $3
+`
+
+type ExportMaterialsParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportMaterialsRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Materyal kütüphanesi (issue #261; ADR-0040 §3): eklediğiniz materyaller
+// (silinenler dahil). Fotoğraf ve silen yer almaz.
+func (q *Queries) ExportMaterials(ctx context.Context, arg ExportMaterialsParams) ([]ExportMaterialsRow, error) {
+	rows, err := q.db.Query(ctx, exportMaterials, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportMaterialsRow{}
+	for rows.Next() {
+		var i ExportMaterialsRow
 		if err := rows.Scan(&i.K, &i.Data); err != nil {
 			return nil, err
 		}
@@ -1108,7 +1489,8 @@ func (q *Queries) ExportPolls(ctx context.Context, arg ExportPollsParams) ([]Exp
 
 const exportQuestions = `-- name: ExportQuestions :many
 SELECT q.id AS k, jsonb_build_object(
-  'id', q.id, 'tayfa_id', q.tayfa_id, 'title', q.title, 'body', q.body,
+  'id', q.id, 'tayfa_id', q.tayfa_id, 'pool', q.pool, 'subject_key', q.subject_key, 'topic_key', q.topic_key,
+  'title', q.title, 'body', q.body,
   'created_at', q.created_at, 'updated_at', q.updated_at, 'deleted_at', q.deleted_at
 ) AS data
 FROM questions q
@@ -1553,6 +1935,51 @@ func (q *Queries) ExportVehicleSeatRequests(ctx context.Context, arg ExportVehic
 	items := []ExportVehicleSeatRequestsRow{}
 	for rows.Next() {
 		var i ExportVehicleSeatRequestsRow
+		if err := rows.Scan(&i.K, &i.Data); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const exportVocabulary = `-- name: ExportVocabulary :many
+SELECT v.id AS k, jsonb_build_object(
+  'id', v.id, 'tayfa_id', v.tayfa_id, 'namespace', v.namespace, 'value', v.value,
+  'merged_into', v.merged_into, 'created_at', v.created_at
+) AS data
+FROM tayfa_vocabulary v
+WHERE v.created_by = $1 AND v.id > $2
+ORDER BY v.id
+LIMIT $3
+`
+
+type ExportVocabularyParams struct {
+	UserID pgtype.UUID
+	After  pgtype.UUID
+	N      int32
+}
+
+type ExportVocabularyRow struct {
+	K    pgtype.UUID
+	Data []byte
+}
+
+// Tayfa sözlüğüne ilk eklediğiniz değerler (issue #244; dışa aktarma #275).
+// Değer tayfanın ortak verisidir: hesap silinince kalır, ekleyen boşalır.
+// Birleştirildiyse hedef değerin kimliği yer alır.
+func (q *Queries) ExportVocabulary(ctx context.Context, arg ExportVocabularyParams) ([]ExportVocabularyRow, error) {
+	rows, err := q.db.Query(ctx, exportVocabulary, arg.UserID, arg.After, arg.N)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExportVocabularyRow{}
+	for rows.Next() {
+		var i ExportVocabularyRow
 		if err := rows.Scan(&i.K, &i.Data); err != nil {
 			return nil, err
 		}

@@ -391,6 +391,19 @@ const (
 	// FAILED_PRECONDITION. The ranking is computed from a measure (its
 	// `source` parameter); the measure's values are entered instead.
 	ErrorReason_ERROR_REASON_RANKING_FROM_MEASURE ErrorReason = 2532
+	// FAILED_PRECONDITION. The organizer closed the vote: no votes and no
+	// option changes.
+	ErrorReason_ERROR_REASON_VOTE_CLOSED ErrorReason = 2540
+	// FAILED_PRECONDITION. The option is the caller: themselves, their own
+	// vehicle or their own photo.
+	ErrorReason_ERROR_REASON_VOTE_OWN_OPTION ErrorReason = 2541
+	// FAILED_PRECONDITION. The vote's options come from its source
+	// (participants, vehicles, album); only a free vote takes options
+	// written by the organizer.
+	ErrorReason_ERROR_REASON_VOTE_OPTIONS_FIXED ErrorReason = 2542
+	// ALREADY_EXISTS. A free option with the same label (Turkish lower case)
+	// is already in the vote.
+	ErrorReason_ERROR_REASON_VOTE_OPTION_EXISTS ErrorReason = 2543
 	// FAILED_PRECONDITION. A winner is announced once the event has started.
 	ErrorReason_ERROR_REASON_CELEBRATION_NOT_STARTED ErrorReason = 2550
 	// FAILED_PRECONDITION. The source component has no winner yet: a table
@@ -441,6 +454,42 @@ const (
 	// FAILED_PRECONDITION. The pool already has 1000 items; nothing is
 	// added or restored.
 	ErrorReason_ERROR_REASON_DAILY_ITEM_LIMIT ErrorReason = 2691
+	// NOT_FOUND. A library item that is not in the tayfa's library (never
+	// there or withdrawn), or, for an owner's step, not the caller's.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_NOT_FOUND ErrorReason = 2700
+	// NOT_FOUND. A loan that is not the caller's to act on: the owner's steps
+	// need the caller to own the item.
+	ErrorReason_ERROR_REASON_LIBRARY_LOAN_NOT_FOUND ErrorReason = 2701
+	// FAILED_PRECONDITION. The caller asked for their own item.
+	ErrorReason_ERROR_REASON_LIBRARY_OWN_ITEM ErrorReason = 2702
+	// FAILED_PRECONDITION. The loan is not in a state the step follows
+	// (approve: requested; hand over: approved; take back: handed over;
+	// decline: requested or approved).
+	ErrorReason_ERROR_REASON_LIBRARY_LOAN_STATE ErrorReason = 2703
+	// FAILED_PRECONDITION. The item is handed over; the owner takes it back
+	// before withdrawing it.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_ON_LOAN ErrorReason = 2704
+	// FAILED_PRECONDITION. The caller already has 100 items in the tayfa's
+	// library.
+	ErrorReason_ERROR_REASON_LIBRARY_ITEM_LIMIT ErrorReason = 2705
+	// FAILED_PRECONDITION. 20 members already wait for the item.
+	ErrorReason_ERROR_REASON_LIBRARY_QUEUE_FULL ErrorReason = 2706
+	// NOT_FOUND. A material that is not visible in the tayfa's material
+	// library (never there, deleted, or linking to a blocked domain), or,
+	// for an author's step, not the caller's.
+	ErrorReason_ERROR_REASON_MATERIAL_NOT_FOUND ErrorReason = 2720
+	// INVALID_ARGUMENT. The link's domain, or a domain above it, is on the
+	// platform's blocked domain list.
+	ErrorReason_ERROR_REASON_BLOCKED_LINK ErrorReason = 2721
+	// FAILED_PRECONDITION. The caller already has 200 materials in the
+	// tayfa's material library.
+	ErrorReason_ERROR_REASON_MATERIAL_LIMIT ErrorReason = 2722
+	// NOT_FOUND. A vehicle that is not in the caller's garage (for the
+	// owner's steps and the vehicles component), or that does not show in
+	// the tayfa (a moderator's removal).
+	ErrorReason_ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND ErrorReason = 2730
+	// FAILED_PRECONDITION. The caller already has 10 vehicles in the garage.
+	ErrorReason_ERROR_REASON_GARAGE_LIMIT ErrorReason = 2731
 )
 
 // Enum value maps for ErrorReason.
@@ -567,6 +616,10 @@ var (
 		2530: "ERROR_REASON_RANKING_NOT_STARTED",
 		2531: "ERROR_REASON_RANKING_NOT_PARTICIPANT",
 		2532: "ERROR_REASON_RANKING_FROM_MEASURE",
+		2540: "ERROR_REASON_VOTE_CLOSED",
+		2541: "ERROR_REASON_VOTE_OWN_OPTION",
+		2542: "ERROR_REASON_VOTE_OPTIONS_FIXED",
+		2543: "ERROR_REASON_VOTE_OPTION_EXISTS",
 		2550: "ERROR_REASON_CELEBRATION_NOT_STARTED",
 		2551: "ERROR_REASON_CELEBRATION_NO_WINNER",
 		2552: "ERROR_REASON_CELEBRATION_NOT_PARTICIPANT",
@@ -580,6 +633,18 @@ var (
 		2680: "ERROR_REASON_HOME_WIDGET_NOT_FOUND",
 		2690: "ERROR_REASON_DAILY_ITEM_NOT_FOUND",
 		2691: "ERROR_REASON_DAILY_ITEM_LIMIT",
+		2700: "ERROR_REASON_LIBRARY_ITEM_NOT_FOUND",
+		2701: "ERROR_REASON_LIBRARY_LOAN_NOT_FOUND",
+		2702: "ERROR_REASON_LIBRARY_OWN_ITEM",
+		2703: "ERROR_REASON_LIBRARY_LOAN_STATE",
+		2704: "ERROR_REASON_LIBRARY_ITEM_ON_LOAN",
+		2705: "ERROR_REASON_LIBRARY_ITEM_LIMIT",
+		2706: "ERROR_REASON_LIBRARY_QUEUE_FULL",
+		2720: "ERROR_REASON_MATERIAL_NOT_FOUND",
+		2721: "ERROR_REASON_BLOCKED_LINK",
+		2722: "ERROR_REASON_MATERIAL_LIMIT",
+		2730: "ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND",
+		2731: "ERROR_REASON_GARAGE_LIMIT",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                  0,
@@ -703,6 +768,10 @@ var (
 		"ERROR_REASON_RANKING_NOT_STARTED":          2530,
 		"ERROR_REASON_RANKING_NOT_PARTICIPANT":      2531,
 		"ERROR_REASON_RANKING_FROM_MEASURE":         2532,
+		"ERROR_REASON_VOTE_CLOSED":                  2540,
+		"ERROR_REASON_VOTE_OWN_OPTION":              2541,
+		"ERROR_REASON_VOTE_OPTIONS_FIXED":           2542,
+		"ERROR_REASON_VOTE_OPTION_EXISTS":           2543,
 		"ERROR_REASON_CELEBRATION_NOT_STARTED":      2550,
 		"ERROR_REASON_CELEBRATION_NO_WINNER":        2551,
 		"ERROR_REASON_CELEBRATION_NOT_PARTICIPANT":  2552,
@@ -716,6 +785,18 @@ var (
 		"ERROR_REASON_HOME_WIDGET_NOT_FOUND":        2680,
 		"ERROR_REASON_DAILY_ITEM_NOT_FOUND":         2690,
 		"ERROR_REASON_DAILY_ITEM_LIMIT":             2691,
+		"ERROR_REASON_LIBRARY_ITEM_NOT_FOUND":       2700,
+		"ERROR_REASON_LIBRARY_LOAN_NOT_FOUND":       2701,
+		"ERROR_REASON_LIBRARY_OWN_ITEM":             2702,
+		"ERROR_REASON_LIBRARY_LOAN_STATE":           2703,
+		"ERROR_REASON_LIBRARY_ITEM_ON_LOAN":         2704,
+		"ERROR_REASON_LIBRARY_ITEM_LIMIT":           2705,
+		"ERROR_REASON_LIBRARY_QUEUE_FULL":           2706,
+		"ERROR_REASON_MATERIAL_NOT_FOUND":           2720,
+		"ERROR_REASON_BLOCKED_LINK":                 2721,
+		"ERROR_REASON_MATERIAL_LIMIT":               2722,
+		"ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND":     2730,
+		"ERROR_REASON_GARAGE_LIMIT":                 2731,
 	}
 )
 
@@ -750,7 +831,7 @@ var File_tayfam_core_v1_errors_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"\n" +
-	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xfc&\n" +
+	"\x1btayfam/core/v1/errors.proto\x12\x0etayfam.core.v1*\xd0+\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ERROR_REASON_VALIDATION\x10\x01\x12 \n" +
@@ -873,7 +954,11 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	" ERROR_REASON_GUEST_PLAYER_IN_USE\x10\xda\x13\x12%\n" +
 	" ERROR_REASON_RANKING_NOT_STARTED\x10\xe2\x13\x12)\n" +
 	"$ERROR_REASON_RANKING_NOT_PARTICIPANT\x10\xe3\x13\x12&\n" +
-	"!ERROR_REASON_RANKING_FROM_MEASURE\x10\xe4\x13\x12)\n" +
+	"!ERROR_REASON_RANKING_FROM_MEASURE\x10\xe4\x13\x12\x1d\n" +
+	"\x18ERROR_REASON_VOTE_CLOSED\x10\xec\x13\x12!\n" +
+	"\x1cERROR_REASON_VOTE_OWN_OPTION\x10\xed\x13\x12$\n" +
+	"\x1fERROR_REASON_VOTE_OPTIONS_FIXED\x10\xee\x13\x12$\n" +
+	"\x1fERROR_REASON_VOTE_OPTION_EXISTS\x10\xef\x13\x12)\n" +
 	"$ERROR_REASON_CELEBRATION_NOT_STARTED\x10\xf6\x13\x12'\n" +
 	"\"ERROR_REASON_CELEBRATION_NO_WINNER\x10\xf7\x13\x12-\n" +
 	"(ERROR_REASON_CELEBRATION_NOT_PARTICIPANT\x10\xf8\x13\x12\"\n" +
@@ -886,7 +971,19 @@ const file_tayfam_core_v1_errors_proto_rawDesc = "" +
 	"(ERROR_REASON_NOW_BROADCAST_LIMIT_REACHED\x10\xda\x14\x12'\n" +
 	"\"ERROR_REASON_HOME_WIDGET_NOT_FOUND\x10\xf8\x14\x12&\n" +
 	"!ERROR_REASON_DAILY_ITEM_NOT_FOUND\x10\x82\x15\x12\"\n" +
-	"\x1dERROR_REASON_DAILY_ITEM_LIMIT\x10\x83\x15B\xbd\x01\n" +
+	"\x1dERROR_REASON_DAILY_ITEM_LIMIT\x10\x83\x15\x12(\n" +
+	"#ERROR_REASON_LIBRARY_ITEM_NOT_FOUND\x10\x8c\x15\x12(\n" +
+	"#ERROR_REASON_LIBRARY_LOAN_NOT_FOUND\x10\x8d\x15\x12\"\n" +
+	"\x1dERROR_REASON_LIBRARY_OWN_ITEM\x10\x8e\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_LOAN_STATE\x10\x8f\x15\x12&\n" +
+	"!ERROR_REASON_LIBRARY_ITEM_ON_LOAN\x10\x90\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_ITEM_LIMIT\x10\x91\x15\x12$\n" +
+	"\x1fERROR_REASON_LIBRARY_QUEUE_FULL\x10\x92\x15\x12$\n" +
+	"\x1fERROR_REASON_MATERIAL_NOT_FOUND\x10\xa0\x15\x12\x1e\n" +
+	"\x19ERROR_REASON_BLOCKED_LINK\x10\xa1\x15\x12 \n" +
+	"\x1bERROR_REASON_MATERIAL_LIMIT\x10\xa2\x15\x12*\n" +
+	"%ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND\x10\xaa\x15\x12\x1e\n" +
+	"\x19ERROR_REASON_GARAGE_LIMIT\x10\xab\x15B\xbd\x01\n" +
 	"\x12com.tayfam.core.v1B\vErrorsProtoP\x01Z@github.com/murattarslan-dev/tayfam-api/gen/tayfam/core/v1;corev1\xa2\x02\x03TCX\xaa\x02\x0eTayfam.Core.V1\xca\x02\x0eTayfam\\Core\\V1\xe2\x02\x1aTayfam\\Core\\V1\\GPBMetadata\xea\x02\x10Tayfam::Core::V1b\x06proto3"
 
 var (

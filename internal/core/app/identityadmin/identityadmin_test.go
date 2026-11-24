@@ -50,6 +50,16 @@ func TestRequest(t *testing.T) {
 		req.GetTargetId() != tf.String() || req.GetTayfaId() != tf.String() || req.GetReason() == "" {
 		t.Fatalf("istek = %v", req)
 	}
+	// A catalog action (issue #262): no target, the key goes along.
+	cat := outbox.Event{ID: id.New(), Type: EventAudit, Actor: admin, OccurredAt: time.Now(),
+		Payload: []byte(`{"action":"catalog.type_update","reason":"Yeni bileşen eklendi","admin_session_id":"` + admin.String() + `","catalog_key":"chess"}`)}
+	req, err = Request(cat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.GetCatalogKey() != "chess" || req.GetTargetType() != "" || req.GetTargetId() != "" {
+		t.Fatalf("katalog isteği = %v", req)
+	}
 	e.Actor = id.ID{}
 	if _, err := Request(e); err == nil {
 		t.Fatal("aktörsüz denetim olayı kabul edildi")

@@ -23,7 +23,9 @@ const (
 )
 
 // CelebrationWinner is one winner: exactly one of user_id, team_id and
-// guest_id is set.
+// guest_id is set, except for a vote source (vote_option_id), where
+// user_id is the person behind the option (the participant, the vehicle's
+// owner, the photo's uploader) and is empty for a free option.
 type CelebrationWinner struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	UserId string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -33,7 +35,11 @@ type CelebrationWinner struct {
 	// the event's guests).
 	GuestId string `protobuf:"bytes,3,opt,name=guest_id,json=guestId,proto3" json:"guest_id,omitempty"`
 	// The scoreboard table the winner won at; empty for the other sources.
-	TableId       string `protobuf:"bytes,4,opt,name=table_id,json=tableId,proto3" json:"table_id,omitempty"`
+	TableId string `protobuf:"bytes,4,opt,name=table_id,json=tableId,proto3" json:"table_id,omitempty"`
+	// For a vote source (issue #254): the winning option's ID in the vote
+	// component (GetVote: a free option, a participant's user ID, an event
+	// vehicle or an album photo). Empty for the other sources.
+	VoteOptionId  string `protobuf:"bytes,5,opt,name=vote_option_id,json=voteOptionId,proto3" json:"vote_option_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -92,6 +98,13 @@ func (x *CelebrationWinner) GetGuestId() string {
 func (x *CelebrationWinner) GetTableId() string {
 	if x != nil {
 		return x.TableId
+	}
+	return ""
+}
+
+func (x *CelebrationWinner) GetVoteOptionId() string {
+	if x != nil {
+		return x.VoteOptionId
 	}
 	return ""
 }
@@ -391,12 +404,13 @@ var File_tayfam_core_v1_component_celebration_proto protoreflect.FileDescriptor
 
 const file_tayfam_core_v1_component_celebration_proto_rawDesc = "" +
 	"\n" +
-	"*tayfam/core/v1/component_celebration.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1etayfam/core/v1/component.proto\"{\n" +
+	"*tayfam/core/v1/component_celebration.proto\x12\x0etayfam.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1etayfam/core/v1/component.proto\"\xa1\x01\n" +
 	"\x11CelebrationWinner\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x17\n" +
 	"\ateam_id\x18\x02 \x01(\tR\x06teamId\x12\x19\n" +
 	"\bguest_id\x18\x03 \x01(\tR\aguestId\x12\x19\n" +
-	"\btable_id\x18\x04 \x01(\tR\atableId\"\xaf\x02\n" +
+	"\btable_id\x18\x04 \x01(\tR\atableId\x12$\n" +
+	"\x0evote_option_id\x18\x05 \x01(\tR\fvoteOptionId\"\xaf\x02\n" +
 	"\x10EventCelebration\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x1f\n" +
 	"\vsource_kind\x18\x02 \x01(\tR\n" +

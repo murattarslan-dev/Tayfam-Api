@@ -8,6 +8,9 @@
   [ADR-0037](0037-katalog-ayrintilari-ve-sema-ekleri.md) §7): `log`
   metrikleri, organizatörün girdiği kişisel ölçümler,
   `sensitive_attendance` türleri.
+- **Revizyon:** 2026-11-23 (platform sahibi, sohbette; issue #322): tayfa
+  içinde üye katkıları listelenmez; her üye yalnızca kendi katkısını görür.
+  §3 tablosu güncellendi; ayrıntı "Uygulama notları (#322)".
 - **Karar veren:** Ürün kararları platform sahibinindir (2026-11-15, Notion
   "Faz 3 (v3)" §5). Bu ADR onların mimariye taşınmasıdır.
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),
@@ -75,7 +78,7 @@ toplam yeniden kurulur.
 
 | Kitle | Ne görür |
 |-------|----------|
-| Tayfa üyesi | Tayfa toplamları (her yıl ve tüm zamanlar), kişisel katkılar (kişisel ölçümlerde kim ne kadar; `sensitive` ölçümler hariç) |
+| Tayfa üyesi | Tayfa toplamları (her yıl ve tüm zamanlar) ve **yalnızca kendi** kişisel katkısı (`sensitive` ölçümler hariç). Başka üyelerin katkısı yönetici ve moderatör dahil kimseye listelenmez (2026-11-23, #322) |
 | Keşfet vitrini (üye olmayan) | Yalnızca vitrine izin verilen ölçüm metrikleri ve ortak metriklerin **tayfa toplamı**; yıl ve tayfanın şehri. Kişi, tarih, saat, gün, ilçe, koordinat yok |
 | Profil (başkası) | Kişinin seçtiği görünürlüğe göre kendi `user_stats`'ı |
 
@@ -203,6 +206,34 @@ Karar değişmedi; issue #267 uygulamasındaki ayrıntılar:
   bağlıdır. İzin yoksa iki alan da yoktur.
 - **KVKK:** ayar `identity/profile.json` dışa aktarmasında gelir; hesap
   silinince identity'de ve core'un mezar taşında `none`'a döner.
+
+## Uygulama notları (#322)
+
+Platform sahibinin 2026-11-23 kararı (sohbette): tayfa istatistiğinde üye
+katkıları herkese listelenmez; her üye yalnızca kendi katkısını görür, tayfa
+toplamları herkese açık kalır. Yönetici ve moderatör için istisna yoktur.
+
+- **Uç:** `GET /v1/tayfas/{tayfa_id}/stats` yeni `own_contributions`
+  alanında yalnızca çağıranın ölçüm ve günlük katkısını (`TayfaStat`:
+  `metric_key`, `source`, `value`, `event_count`; kişi kimliği yok) döner.
+  core başka üyenin satırını hiç okumaz: sorgu
+  (`ListOwnTayfaStatContributions`) `user_id`'yi doğrulanmış token'ın
+  kullanıcısıyla sınırlar. "Tutmadığın veri sızmaz" (ADR-0011): yanıt
+  yapısında başkasının kimliğini taşıyacak alan yoktur.
+- **Geriye uyum:** proto'da `GetTayfaStatsResponse.contributions` (4) ve
+  `TayfaStatContribution` silinmedi, `deprecated` işaretlendi ve hiç
+  doldurulmaz; `buf breaking` (FILE) `reserved` olsa da alan silmeye izin
+  vermez (ADR-0018'deki kalıp). REST'te `contributions` her zaman boş
+  dizidir (`deprecated`, `maxItems: 0`); gateway core ne gönderirse
+  göndersin onu boş yazar. Böylece bu değişiklikten önce derlenmiş istemci
+  bozulmaz, yalnızca katkı bölümünü göstermez. Alan istemci (App) yeni
+  alana geçip yayınlandıktan sonra ayrı bir işle kaldırılır.
+- **Tablo ve hesaplama değişmedi:** `user_stats` tayfa başına kişi
+  satırlarını tutmaya devam eder (profil toplamı, rozetler ve KVKK dışa
+  aktarması onu kullanır); yalnızca okuma ucu daraldı. Migration yok.
+- **Testler:** `TestTayfaView` üye, moderatör ve yönetici için yalnızca
+  kendi değerinin döndüğünü ve tayfa toplamının herkesinkini içerdiğini;
+  gRPC ve gateway testleri eski listenin boş kaldığını sabitler.
 
 ## Gerekçe
 

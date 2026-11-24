@@ -82,6 +82,7 @@ type payload struct {
 	TayfaID        string `json:"tayfa_id"`
 	UserID         string `json:"user_id"`
 	ReportID       string `json:"report_id"`
+	CatalogKey     string `json:"catalog_key"`
 }
 
 // Request converts a platform.audit event to identity's request.
@@ -100,6 +101,7 @@ func Request(e outbox.Event) (*identityv1.RecordPlatformAuditRequest, error) {
 		EventId: e.ID.String(), OccurTime: timestamppb.New(e.OccurredAt), ActorId: e.Actor.String(),
 		Action: p.Action, TargetType: p.TargetType, TargetId: p.TargetID, Reason: p.Reason,
 		AdminSessionId: p.AdminSessionID, TayfaId: p.TayfaID, UserId: p.UserID, ReportId: p.ReportID,
+		CatalogKey: p.CatalogKey,
 	}, nil
 }
 

@@ -190,6 +190,11 @@ var problemsByDomain = map[string]map[string]problem{
 		"ERROR_REASON_RANKING_NOT_STARTED":     {http.StatusConflict, "ranking-not-started"},
 		"ERROR_REASON_RANKING_NOT_PARTICIPANT": {http.StatusConflict, "ranking-not-participant"},
 		"ERROR_REASON_RANKING_FROM_MEASURE":    {http.StatusConflict, "ranking-from-measure"},
+		// Vote component (issue #254).
+		"ERROR_REASON_VOTE_CLOSED":        {http.StatusConflict, "vote-closed"},
+		"ERROR_REASON_VOTE_OWN_OPTION":    {http.StatusConflict, "vote-own-option"},
+		"ERROR_REASON_VOTE_OPTIONS_FIXED": {http.StatusConflict, "vote-options-fixed"},
+		"ERROR_REASON_VOTE_OPTION_EXISTS": {http.StatusConflict, "vote-option-exists"},
 		// Celebration component (issue #255).
 		"ERROR_REASON_CELEBRATION_NOT_STARTED":     {http.StatusConflict, "celebration-not-started"},
 		"ERROR_REASON_CELEBRATION_NO_WINNER":       {http.StatusConflict, "celebration-no-winner"},
@@ -210,6 +215,21 @@ var problemsByDomain = map[string]map[string]problem{
 		// Günün içeriği (issue #269; ADR-0027 §5).
 		"ERROR_REASON_DAILY_ITEM_NOT_FOUND": {http.StatusNotFound, "daily-item-not-found"},
 		"ERROR_REASON_DAILY_ITEM_LIMIT":     {http.StatusConflict, "daily-item-limit"},
+		// Ortak kütüphane (issue #270; ADR-0040 §1).
+		"ERROR_REASON_LIBRARY_ITEM_NOT_FOUND": {http.StatusNotFound, "library-item-not-found"},
+		"ERROR_REASON_LIBRARY_LOAN_NOT_FOUND": {http.StatusNotFound, "library-loan-not-found"},
+		"ERROR_REASON_LIBRARY_OWN_ITEM":       {http.StatusConflict, "library-own-item"},
+		"ERROR_REASON_LIBRARY_LOAN_STATE":     {http.StatusConflict, "library-loan-state"},
+		"ERROR_REASON_LIBRARY_ITEM_ON_LOAN":   {http.StatusConflict, "library-item-on-loan"},
+		"ERROR_REASON_LIBRARY_ITEM_LIMIT":     {http.StatusConflict, "library-item-limit"},
+		"ERROR_REASON_LIBRARY_QUEUE_FULL":     {http.StatusConflict, "library-queue-full"},
+		// Materyal kütüphanesi (issue #261; ADR-0040 §3).
+		"ERROR_REASON_MATERIAL_NOT_FOUND": {http.StatusNotFound, "material-not-found"},
+		"ERROR_REASON_BLOCKED_LINK":       {http.StatusBadRequest, "blocked-link"},
+		"ERROR_REASON_MATERIAL_LIMIT":     {http.StatusConflict, "material-limit"},
+		// Üye garajı (issue #272; ADR-0040 §4).
+		"ERROR_REASON_GARAGE_VEHICLE_NOT_FOUND": {http.StatusNotFound, "garage-vehicle-not-found"},
+		"ERROR_REASON_GARAGE_LIMIT":             {http.StatusConflict, "garage-limit"},
 	},
 	// proto/tayfam/chat/v1/errors.proto
 	"chat.tayfam.app": {

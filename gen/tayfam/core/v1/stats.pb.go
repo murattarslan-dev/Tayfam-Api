@@ -97,8 +97,11 @@ func (x *TayfaStat) GetEventCount() int32 {
 	return 0
 }
 
-// TayfaStatContribution is one active member's value of a measure or log
-// metric in the tayfa.
+// TayfaStatContribution was one active member's value of a measure or log
+// metric in the tayfa. Deprecated (issue #322): members' contributions are
+// no longer listed; it stays only for buf breaking (FILE).
+//
+// Deprecated: Marked as deprecated in tayfam/core/v1/stats.proto.
 type TayfaStatContribution struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserId        string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
@@ -225,13 +228,21 @@ type GetTayfaStatsResponse struct {
 	// The year asked for; 0 for all time.
 	Year int32 `protobuf:"varint,1,opt,name=year,proto3" json:"year,omitempty"`
 	// The years with statistics, newest first.
-	Years         []int32                  `protobuf:"varint,2,rep,packed,name=years,proto3" json:"years,omitempty"`
-	Totals        []*TayfaStat             `protobuf:"bytes,3,rep,name=totals,proto3" json:"totals,omitempty"`
+	Years  []int32      `protobuf:"varint,2,rep,packed,name=years,proto3" json:"years,omitempty"`
+	Totals []*TayfaStat `protobuf:"bytes,3,rep,name=totals,proto3" json:"totals,omitempty"`
+	// Deprecated (issue #322): never filled. It stays only because buf
+	// breaking (FILE) does not allow deleting a field, even a reserved one.
+	//
+	// Deprecated: Marked as deprecated in tayfam/core/v1/stats.proto.
 	Contributions []*TayfaStatContribution `protobuf:"bytes,4,rep,name=contributions,proto3" json:"contributions,omitempty"`
 	// When the totals were computed; unset when nothing was computed yet.
-	ComputeTime   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=compute_time,json=computeTime,proto3" json:"compute_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ComputeTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=compute_time,json=computeTime,proto3" json:"compute_time,omitempty"`
+	// The caller's own contributions in the tayfa: their measure and log
+	// metrics (source "measure" or "log"; nothing sensitive), in metric_key
+	// order. Nobody else's contribution is ever in the response.
+	OwnContributions []*TayfaStat `protobuf:"bytes,6,rep,name=own_contributions,json=ownContributions,proto3" json:"own_contributions,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetTayfaStatsResponse) Reset() {
@@ -285,6 +296,7 @@ func (x *GetTayfaStatsResponse) GetTotals() []*TayfaStat {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in tayfam/core/v1/stats.proto.
 func (x *GetTayfaStatsResponse) GetContributions() []*TayfaStatContribution {
 	if x != nil {
 		return x.Contributions
@@ -295,6 +307,13 @@ func (x *GetTayfaStatsResponse) GetContributions() []*TayfaStatContribution {
 func (x *GetTayfaStatsResponse) GetComputeTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ComputeTime
+	}
+	return nil
+}
+
+func (x *GetTayfaStatsResponse) GetOwnContributions() []*TayfaStat {
+	if x != nil {
+		return x.OwnContributions
 	}
 	return nil
 }
@@ -383,23 +402,24 @@ const file_tayfam_core_v1_stats_proto_rawDesc = "" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\x01R\x05value\x12\x1f\n" +
 	"\vevent_count\x18\x04 \x01(\x05R\n" +
-	"eventCount\"\x86\x01\n" +
+	"eventCount\"\x8a\x01\n" +
 	"\x15TayfaStatContribution\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1d\n" +
 	"\n" +
 	"metric_key\x18\x02 \x01(\tR\tmetricKey\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\x01R\x05value\x12\x1f\n" +
 	"\vevent_count\x18\x04 \x01(\x05R\n" +
-	"eventCount\"E\n" +
+	"eventCount:\x02\x18\x01\"E\n" +
 	"\x14GetTayfaStatsRequest\x12\x19\n" +
 	"\btayfa_id\x18\x01 \x01(\tR\atayfaId\x12\x12\n" +
-	"\x04year\x18\x02 \x01(\x05R\x04year\"\x80\x02\n" +
+	"\x04year\x18\x02 \x01(\x05R\x04year\"\xcc\x02\n" +
 	"\x15GetTayfaStatsResponse\x12\x12\n" +
 	"\x04year\x18\x01 \x01(\x05R\x04year\x12\x14\n" +
 	"\x05years\x18\x02 \x03(\x05R\x05years\x121\n" +
-	"\x06totals\x18\x03 \x03(\v2\x19.tayfam.core.v1.TayfaStatR\x06totals\x12K\n" +
-	"\rcontributions\x18\x04 \x03(\v2%.tayfam.core.v1.TayfaStatContributionR\rcontributions\x12=\n" +
-	"\fcompute_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vcomputeTime\"x\n" +
+	"\x06totals\x18\x03 \x03(\v2\x19.tayfam.core.v1.TayfaStatR\x06totals\x12O\n" +
+	"\rcontributions\x18\x04 \x03(\v2%.tayfam.core.v1.TayfaStatContributionB\x02\x18\x01R\rcontributions\x12=\n" +
+	"\fcompute_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vcomputeTime\x12F\n" +
+	"\x11own_contributions\x18\x06 \x03(\v2\x19.tayfam.core.v1.TayfaStatR\x10ownContributions\"x\n" +
 	"\bUserStat\x12\x1d\n" +
 	"\n" +
 	"metric_key\x18\x01 \x01(\tR\tmetricKey\x12\x16\n" +
@@ -437,13 +457,14 @@ var file_tayfam_core_v1_stats_proto_depIdxs = []int32{
 	0, // 0: tayfam.core.v1.GetTayfaStatsResponse.totals:type_name -> tayfam.core.v1.TayfaStat
 	1, // 1: tayfam.core.v1.GetTayfaStatsResponse.contributions:type_name -> tayfam.core.v1.TayfaStatContribution
 	5, // 2: tayfam.core.v1.GetTayfaStatsResponse.compute_time:type_name -> google.protobuf.Timestamp
-	2, // 3: tayfam.core.v1.TayfaStatsService.GetTayfaStats:input_type -> tayfam.core.v1.GetTayfaStatsRequest
-	3, // 4: tayfam.core.v1.TayfaStatsService.GetTayfaStats:output_type -> tayfam.core.v1.GetTayfaStatsResponse
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	0, // 3: tayfam.core.v1.GetTayfaStatsResponse.own_contributions:type_name -> tayfam.core.v1.TayfaStat
+	2, // 4: tayfam.core.v1.TayfaStatsService.GetTayfaStats:input_type -> tayfam.core.v1.GetTayfaStatsRequest
+	3, // 5: tayfam.core.v1.TayfaStatsService.GetTayfaStats:output_type -> tayfam.core.v1.GetTayfaStatsResponse
+	5, // [5:6] is the sub-list for method output_type
+	4, // [4:5] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_core_v1_stats_proto_init() }

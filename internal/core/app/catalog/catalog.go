@@ -7,8 +7,9 @@
 // catalog_event_type_versions (every version, immutable), catalog_study_tags
 // (the study tag list, study_tags.go), catalog_badges (badge definitions,
 // badges.go) and catalog_meta (the version of the
-// catalog as a whole). The service's database user can
-// only read them.
+// catalog as a whole). This package only reads them; the platform panel
+// writes them through package admin (issue #262) with the narrow grants
+// of 00067.
 //
 // What is read is checked again before it leaves (ADR-0011, "assume
 // breach"): keys, labels and every definition go through the closed schema
@@ -120,22 +121,8 @@ func (s *Service) Get(ctx context.Context, known int64) (c Catalog, notModified 
 			notModified = true
 			return nil
 		}
-		interests, err := q.ListCatalogInterests(ctx)
-		if err != nil {
-			return fmt.Errorf("ilgi alanları: %w", err)
-		}
-		c.Interests = make([]Interest, 0, len(interests))
-		for _, r := range interests {
-			in := Interest{Key: r.Key, Position: r.Position, Icon: r.Icon, Status: r.Status, DefaultWidgets: r.DefaultWidgets}
-			if in.Labels, err = entry(r.Key, r.Icon, r.Status, r.Labels); err != nil {
-				return fmt.Errorf("ilgi alanı %q: %w", r.Key, err)
-			}
-			for _, w := range r.DefaultWidgets {
-				if !definition.ValidKey(w) {
-					return fmt.Errorf("ilgi alanı %q: geçersiz ana sayfa bileşeni", r.Key)
-				}
-			}
-			c.Interests = append(c.Interests, in)
+		if c.Interests, err = Interests(ctx, q); err != nil {
+			return err
 		}
 		types, err := q.ListActiveCatalogEventTypes(ctx)
 		if err != nil {
@@ -252,13 +239,24 @@ func entry(key, icon, status string, labels []byte) (map[string]string, error) {
 	if err := json.Unmarshal(labels, &m); err != nil {
 		return nil, fmt.Errorf("adlar okunamadı: %w", err)
 	}
-	if _, ok := m["tr"]; !ok || len(m) > definition.MaxLanguages {
-		return nil, errors.New("tr adı yok ya da çok fazla dil")
-	}
-	for lang, text := range m {
-		if len(lang) != 2 || !definition.ValidLabel(text) {
-			return nil, errors.New("geçersiz ad")
-		}
+	if err := CheckLabels(m); err != nil {
+		return nil, err
 	}
 	return m, nil
+}
+
+// CheckLabels checks a catalog entry's names: Turkish is required, at most
+// definition.MaxLanguages languages with two-letter lower case codes, each
+// name a valid label (one line, no control or format characters, at most
+// 60 characters). Errors name the rule, never the value.
+func CheckLabels(m map[string]string) error {
+	if _, ok := m["tr"]; !ok || len(m) > definition.MaxLanguages {
+		return errors.New("tr adı yok ya da çok fazla dil")
+	}
+	for lang, text := range m {
+		if len(lang) != 2 || lang[0] < 'a' || lang[0] > 'z' || lang[1] < 'a' || lang[1] > 'z' || !definition.ValidLabel(text) {
+			return errors.New("geçersiz ad")
+		}
+	}
+	return nil
 }

@@ -188,6 +188,19 @@ DELETE FROM tayfa_daily_items WHERE id IN (
   SELECT x.id FROM tayfa_daily_items x WHERE x.deleted_at <= @deleted_before
   ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
 
+-- Materyal kütüphanesi (issue #261).
+-- name: PurgeMaterials :execrows
+DELETE FROM materials WHERE id IN (
+  SELECT x.id FROM materials x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
+-- Üye garajı (issue #272): fotoğraflar silme kuyruğuna girer, etkinlik
+-- kayıtlarındaki garaj bağı boşalır.
+-- name: PurgeGarageVehicles :execrows
+DELETE FROM garage_vehicles WHERE id IN (
+  SELECT x.id FROM garage_vehicles x WHERE x.deleted_at <= @deleted_before
+  ORDER BY x.deleted_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
 -- Albüm fotoğrafı; dosyası uploads_release_ref ile silme kuyruğuna girer.
 -- name: PurgeEventPhotos :execrows
 DELETE FROM event_photos WHERE id IN (
@@ -247,24 +260,6 @@ WHERE id IN (
   )
   AND plate IS NOT NULL;
 
--- ---------------------------------------------------------------------------
--- Misafir takma adı temizliği (issue #252; ADR-0037 §6)
--- ---------------------------------------------------------------------------
-
--- Bitişi @ended_before'dan önce olan etkinliklerin misafir takma adları
--- silinir; misafir satırı kalır (skor ve kura yeri "Misafir" olur).
--- name: ClearOldGuestNicknames :execrows
-UPDATE event_guest_players SET nickname = NULL
-WHERE id IN (
-    SELECT g.id FROM event_guest_players g
-    JOIN events e ON e.id = g.event_id
-    WHERE g.nickname IS NOT NULL AND e.ends_at <= @ended_before
-    ORDER BY g.id
-    LIMIT @n
-    FOR UPDATE OF g SKIP LOCKED
-  )
-  AND nickname IS NOT NULL;
-
 -- Alarmın alıcıları: organizatör (tayfada hâlâ aktif üyeyse) ve aktif
 -- yöneticiler ve moderatörler; dönmeyen kişinin kendisi hariç. Organizatör
 -- önce, sonra yönetici, sonra moderatör.
@@ -287,3 +282,37 @@ SET finished_at = EXCLUDED.finished_at,
     changed = EXCLUDED.changed,
     last_succeeded_at = COALESCE(EXCLUDED.last_succeeded_at, job_runs.last_succeeded_at)
 WHERE job_runs.finished_at < EXCLUDED.finished_at;
+
+-- Ortak kütüphane (issue #270; ADR-0040 §1): iade tarihi geçen teslim
+-- edilmiş ödünçte borç alana tek hatırlatma.
+-- name: MarkDueLibraryLoans :many
+UPDATE library_loans SET reminded_at = @now
+WHERE id IN (
+  SELECT x.id FROM library_loans x
+  WHERE x.state = 'handed_over' AND x.due_at IS NOT NULL AND x.due_at <= @now AND x.reminded_at IS NULL
+  ORDER BY x.due_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED)
+RETURNING id, tayfa_id, borrower_id;
+
+-- Taraflardan biri ayrıldıktan 30 gün sonra kapanmamış ödünç kapanır.
+-- name: CloseOrphanedLibraryLoans :many
+UPDATE library_loans SET state = 'closed', ended_at = @now
+WHERE id IN (
+  SELECT x.id FROM library_loans x
+  WHERE x.state = 'handed_over' AND x.orphaned_at IS NOT NULL AND x.orphaned_at <= @orphaned_before
+  ORDER BY x.orphaned_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED)
+RETURNING item_id;
+
+-- Ödünç geçmişi 1 yıl tutulur.
+-- name: PurgeLibraryLoans :execrows
+DELETE FROM library_loans WHERE id IN (
+  SELECT x.id FROM library_loans x WHERE x.ended_at <= @ended_before
+  ORDER BY x.ended_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);
+
+-- Geri çekilmiş kalem 30 gün sonra, ödünç kaydı kalmadıysa kalıcı silinir
+-- (sıra yerleri cascade ile; fotoğrafı geri çekilirken bırakılmıştır).
+-- name: PurgeLibraryItems :execrows
+DELETE FROM library_items WHERE id IN (
+  SELECT x.id FROM library_items x
+  WHERE x.status = 'withdrawn' AND x.withdrawn_at <= @withdrawn_before
+    AND NOT EXISTS (SELECT 1 FROM library_loans l WHERE l.item_id = x.id)
+  ORDER BY x.withdrawn_at, x.id LIMIT @n FOR UPDATE SKIP LOCKED);

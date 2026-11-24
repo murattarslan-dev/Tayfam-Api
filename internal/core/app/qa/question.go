@@ -11,6 +11,8 @@ import (
 
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/apperr"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/authz"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/catalog"
+	"github.com/murattarslan-dev/tayfam-api/internal/core/app/media"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/app/txn"
 	"github.com/murattarslan-dev/tayfam-api/internal/core/store"
 	"github.com/murattarslan-dev/tayfam-api/internal/platform/id"
@@ -18,26 +20,56 @@ import (
 
 // CreateQuestionInput is a new question.
 type CreateQuestionInput struct {
+	// Pool is PoolQA (also when empty) or PoolQuestionPool.
+	Pool  string
 	Title string
 	Body  string
 	// Tags are names; existing tags are matched with Turkish case folding,
 	// missing ones are created.
 	Tags []string
+	// SubjectKey (required) and TopicKey (optional) are the question
+	// pool's study tags.
+	SubjectKey string
+	TopicKey   string
+	// Photos are the question pool's upload IDs (0–MaxPhotos).
+	Photos []string
 	// ClientRequestID is required: a UUID the client reuses on retry.
 	ClientRequestID string
 }
 
 // CreateQuestion asks a question by user. A repeat with the same
 // ClientRequestID by the same user returns the first question and records
-// nothing.
+// nothing. In the question pool the subject must be selectable and the
+// text and/or a photo is required.
 func (s *Service) CreateQuestion(ctx context.Context, user, tayfa id.ID, in CreateQuestionInput) (Question, error) {
-	title, err := cleanTitle(in.Title)
+	pool, err := cleanPool(in.Pool)
 	if err != nil {
 		return Question{}, err
+	}
+	photos, err := cleanPhotos(in.Photos)
+	if err != nil {
+		return Question{}, err
+	}
+	if err := (poolFields{title: in.Title, hasTitle: true, tags: in.Tags, subject: in.SubjectKey, topic: in.TopicKey, photos: photos}).check(pool); err != nil {
+		return Question{}, err
+	}
+	var title string
+	if pool == PoolQA {
+		if title, err = cleanTitle(in.Title); err != nil {
+			return Question{}, err
+		}
 	}
 	body, err := cleanBody(in.Body, FieldBody, 0, BodyMax)
 	if err != nil {
 		return Question{}, err
+	}
+	if pool == PoolQuestionPool {
+		if body == "" && len(photos) == 0 {
+			return Question{}, apperr.Validation(FieldBody)
+		}
+		if err := checkTerms(body); err != nil {
+			return Question{}, err
+		}
 	}
 	tags, err := cleanTags(in.Tags)
 	if err != nil {
@@ -49,7 +81,7 @@ func (s *Service) CreateQuestion(ctx context.Context, user, tayfa id.ID, in Crea
 	}
 
 	var v Question
-	err = s.write(ctx, user, tayfa, authz.QuestionCreate, func(w writer) error {
+	err = s.write(ctx, user, tayfa, inPool(pool), authz.QuestionCreate, func(w writer) error {
 		q := w.q
 		prev, err := q.GetQuestionByClientRequest(ctx, store.GetQuestionByClientRequestParams{AuthorID: user.PG(), ClientRequestID: crid.PG()})
 		switch {
@@ -65,14 +97,27 @@ func (s *Service) CreateQuestion(ctx context.Context, user, tayfa id.ID, in Crea
 			return fmt.Errorf("tekrar gönderim: %w", err)
 		}
 
+		if pool == PoolQuestionPool {
+			if err := catalog.CheckStudySelection(ctx, q, in.SubjectKey, in.TopicKey); err != nil {
+				return err
+			}
+		}
 		tagIDs, err := ensureTags(ctx, q, tayfa, tags)
 		if err != nil {
 			return err
 		}
 		qid := id.New()
-		if err := q.CreateQuestion(ctx, store.CreateQuestionParams{
+		if err := attachPhotos(ctx, q, user, tayfa, media.Target{Type: media.TargetQuestion, ID: qid}, photos, pgtype.UUID{}, pgtype.UUID{}, w.now); err != nil {
+			return err
+		}
+		p := store.CreateQuestionParams{
 			ID: qid.PG(), TayfaID: tayfa.PG(), AuthorID: user.PG(), Title: title, Body: body, ClientRequestID: crid.PG(),
-		}); err != nil {
+		}
+		if pool == PoolQuestionPool {
+			p.Pool, p.SubjectKey, p.TopicKey = optText(pool), optText(in.SubjectKey), optText(in.TopicKey)
+			p.Photo1UploadID, p.Photo2UploadID = photoColumns(photos)
+		}
+		if err := q.CreateQuestion(ctx, p); err != nil {
 			return fmt.Errorf("soru: %w", err)
 		}
 		if err := setTags(ctx, q, tayfa, qid, tagIDs); err != nil {
@@ -93,21 +138,26 @@ func (s *Service) CreateQuestion(ctx context.Context, user, tayfa id.ID, in Crea
 	return v, nil
 }
 
-// GetQuestion returns one visible question.
+// GetQuestion returns one visible question of either pool.
 func (s *Service) GetQuestion(ctx context.Context, user, tayfa, question id.ID) (Question, error) {
-	if err := s.read(ctx, user, tayfa); err != nil {
+	if err := s.read(ctx, user, tayfa, questionPool(tayfa, question)); err != nil {
 		return Question{}, err
 	}
 	return getQuestion(ctx, s.q, tayfa, question)
 }
 
 // UpdateQuestionInput is an edit. Only the fields named in Fields change;
-// FieldTags replaces the tags.
+// FieldTags replaces the tags. FieldSubject (SubjectKey and TopicKey) and
+// FieldPhotos (Photos replaces the photos) are the question pool's;
+// FieldTitle and FieldTags are Soru-Cevap's.
 type UpdateQuestionInput struct {
-	Fields []string
-	Title  string
-	Body   string
-	Tags   []string
+	Fields     []string
+	Title      string
+	Body       string
+	Tags       []string
+	SubjectKey string
+	TopicKey   string
+	Photos     []string
 }
 
 // UpdateQuestion edits a question: the author, or a moderator or admin
@@ -119,7 +169,7 @@ func (s *Service) UpdateQuestion(ctx context.Context, user, tayfa, question id.I
 	}
 	set := map[string]bool{}
 	for _, f := range in.Fields {
-		if f != FieldTitle && f != FieldBody && f != FieldTags {
+		if !slices.Contains([]string{FieldTitle, FieldBody, FieldTags, FieldSubject, FieldPhotos}, f) {
 			return Question{}, apperr.Validation("update_mask")
 		}
 		set[f] = true
@@ -127,8 +177,19 @@ func (s *Service) UpdateQuestion(ctx context.Context, user, tayfa, question id.I
 	var (
 		title, body string
 		tags        []tagName
+		photos      []id.ID
 		err         error
 	)
+	if set[FieldPhotos] {
+		if photos, err = cleanPhotos(in.Photos); err != nil {
+			return Question{}, err
+		}
+	}
+	if set[FieldSubject] {
+		if in.SubjectKey == "" {
+			return Question{}, apperr.Validation(FieldSubjectKey)
+		}
+	}
 	if set[FieldTitle] {
 		if title, err = cleanTitle(in.Title); err != nil {
 			return Question{}, err
@@ -146,11 +207,16 @@ func (s *Service) UpdateQuestion(ctx context.Context, user, tayfa, question id.I
 	}
 
 	var v Question
-	err = s.write(ctx, user, tayfa, 0, func(w writer) error {
+	err = s.write(ctx, user, tayfa, questionPool(tayfa, question), 0, func(w writer) error {
 		q := w.q
 		row, err := lockQuestion(ctx, q, tayfa, question)
 		if err != nil {
 			return err
+		}
+		// The paths of the other pool.
+		if (row.Pool == PoolQA && (set[FieldSubject] || set[FieldPhotos])) ||
+			(row.Pool == PoolQuestionPool && (set[FieldTitle] || set[FieldTags])) {
+			return apperr.Validation("update_mask")
 		}
 		if err := w.authorizeOn(ctx, tayfa, user, row.AuthorID, authz.QuestionEditOwn, authz.QuestionEditAny); err != nil {
 			return err
@@ -161,6 +227,13 @@ func (s *Service) UpdateQuestion(ctx context.Context, user, tayfa, question id.I
 		if !set[FieldBody] {
 			body = row.Body
 		}
+		subject, topic := text(row.SubjectKey), text(row.TopicKey)
+		if set[FieldSubject] {
+			subject, topic = in.SubjectKey, in.TopicKey
+		}
+		if !set[FieldPhotos] {
+			photos = photosOf(row.Photo1UploadID, row.Photo2UploadID)
+		}
 		var changed []string
 		if title != row.Title {
 			changed = append(changed, FieldTitle)
@@ -168,8 +241,35 @@ func (s *Service) UpdateQuestion(ctx context.Context, user, tayfa, question id.I
 		if body != row.Body {
 			changed = append(changed, FieldBody)
 		}
+		if subject != text(row.SubjectKey) || topic != text(row.TopicKey) {
+			// Only a new choice must be selectable: a retired subject or
+			// topic the question already has stays.
+			if err := catalog.CheckStudySelection(ctx, q, subject, topic); err != nil {
+				return err
+			}
+			changed = append(changed, FieldSubject)
+		}
+		if !samePhotos(photos, row.Photo1UploadID, row.Photo2UploadID) {
+			if err := attachPhotos(ctx, q, user, tayfa, media.Target{Type: media.TargetQuestion, ID: question}, photos, row.Photo1UploadID, row.Photo2UploadID, w.now); err != nil {
+				return err
+			}
+			changed = append(changed, FieldPhotos)
+		}
+		if row.Pool == PoolQuestionPool {
+			if body == "" && len(photos) == 0 {
+				return apperr.Validation(FieldBody)
+			}
+			if err := checkTerms(body); err != nil {
+				return err
+			}
+		}
 		if len(changed) > 0 {
-			n, err := q.UpdateQuestionContent(ctx, store.UpdateQuestionContentParams{TayfaID: tayfa.PG(), ID: question.PG(), Title: title, Body: body})
+			p := store.UpdateQuestionContentParams{
+				TayfaID: tayfa.PG(), ID: question.PG(), Title: title, Body: body,
+				SubjectKey: optText(subject), TopicKey: optText(topic),
+			}
+			p.Photo1UploadID, p.Photo2UploadID = photoColumns(photos)
+			n, err := q.UpdateQuestionContent(ctx, p)
 			if err != nil {
 				return fmt.Errorf("soru güncelleme: %w", err)
 			}
@@ -210,7 +310,7 @@ func (s *Service) UpdateQuestion(ctx context.Context, user, tayfa, question id.I
 // above, hierarchy as in UpdateQuestion) hides it; an admin can restore it
 // within RestoreWindow.
 func (s *Service) DeleteQuestion(ctx context.Context, user, tayfa, question id.ID) error {
-	return s.write(ctx, user, tayfa, 0, func(w writer) error {
+	return s.write(ctx, user, tayfa, questionPool(tayfa, question), 0, func(w writer) error {
 		q := w.q
 		row, err := lockQuestion(ctx, q, tayfa, question)
 		if err != nil {
@@ -250,7 +350,7 @@ func (s *Service) DeleteQuestion(ctx context.Context, user, tayfa, question id.I
 // visible question changes nothing.
 func (s *Service) RestoreQuestion(ctx context.Context, user, tayfa, question id.ID) (Question, error) {
 	var v Question
-	err := s.write(ctx, user, tayfa, authz.QuestionRestore, func(w writer) error {
+	err := s.write(ctx, user, tayfa, questionPool(tayfa, question), authz.QuestionRestore, func(w writer) error {
 		q := w.q
 		row, err := q.GetQuestionForUpdate(ctx, store.GetQuestionForUpdateParams{TayfaID: tayfa.PG(), ID: question.PG()})
 		switch {
@@ -263,9 +363,14 @@ func (s *Service) RestoreQuestion(ctx context.Context, user, tayfa, question id.
 			v, err = getQuestion(ctx, q, tayfa, question)
 			return err
 		}
-		// Erased by its author, or past the window: the same answer as for
-		// an unknown question.
-		if row.Title == "" || w.now.Sub(row.DeletedAt.Time) > RestoreWindow {
+		// Erased by its author (no title in Soru-Cevap; neither text nor
+		// photo in the question pool), or past the window: the same answer
+		// as for an unknown question.
+		erased := row.Title == ""
+		if row.Pool == PoolQuestionPool {
+			erased = row.Body == "" && !row.Photo1UploadID.Valid && !row.Photo2UploadID.Valid
+		}
+		if erased || w.now.Sub(row.DeletedAt.Time) > RestoreWindow {
 			return apperr.ErrQuestionNotFound
 		}
 		if err := mayChange(ctx, q, tayfa, w.m, row.AuthorID); err != nil {
@@ -325,6 +430,8 @@ func questionView(r store.ListQuestionsPageRow) Question {
 		ID: id.ID(r.ID.Bytes), TayfaID: id.ID(r.TayfaID.Bytes), AuthorID: optional(r.AuthorID),
 		Title: r.Title, Body: r.Body, Tags: []Tag{}, AnswerCount: r.AnswerCount,
 		CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.UpdatedAt.Time.UTC(),
+		Pool: r.Pool, SubjectKey: text(r.SubjectKey), TopicKey: text(r.TopicKey),
+		Photos: photosOf(r.Photo1UploadID, r.Photo2UploadID),
 	}
 }
 

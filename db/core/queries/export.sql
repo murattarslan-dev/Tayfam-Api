@@ -50,7 +50,7 @@ LIMIT @n;
 SELECT v.id AS k, jsonb_build_object(
   'event_id', v.event_id, 'component_key', v.component_key, 'make', v.make, 'model', v.model,
   'model_year', v.model_year, 'color', v.color, 'plate', v.plate, 'seats', v.seats,
-  'created_at', v.created_at, 'updated_at', v.updated_at
+  'garage_vehicle_id', v.vehicle_id, 'created_at', v.created_at, 'updated_at', v.updated_at
 ) AS data
 FROM event_vehicles v
 WHERE v.user_id = @user_id AND v.id > @after
@@ -90,6 +90,8 @@ WHERE a.author_id = @user_id AND a.id > @after
 ORDER BY a.id
 LIMIT @n;
 
+-- Açtığınız etkinlikler; katalog türünün alan değerleri (`fields`, issue
+-- #237) ve "Şimdi başlat"ın açık uçlu işareti (issue #263) dahil (#275).
 -- name: ExportEvents :many
 SELECT e.id AS k, jsonb_build_object(
   'id', e.id, 'tayfa_id', e.tayfa_id, 'type', e.type, 'mode', e.mode, 'title', e.title,
@@ -97,6 +99,10 @@ SELECT e.id AS k, jsonb_build_object(
   'meeting_point_name', e.meeting_point_name, 'meeting_lat', e.meeting_lat, 'meeting_lng', e.meeting_lng,
   'city', e.city, 'district', e.district, 'online_url', e.online_url, 'capacity', e.capacity,
   'status', e.status, 'cancelled_at', e.cancelled_at, 'cancel_reason', e.cancel_reason,
+  'type_version', e.type_version, 'open_ended', e.open_ended,
+  'fields', COALESCE((
+    SELECT jsonb_object_agg(f.field_key, f.value ORDER BY f.field_key)
+    FROM event_field_values f WHERE f.event_id = e.id), '{}'::jsonb),
   'created_at', e.created_at, 'updated_at', e.updated_at, 'deleted_at', e.deleted_at
 ) AS data
 FROM events e
@@ -106,7 +112,8 @@ LIMIT @n;
 
 -- name: ExportQuestions :many
 SELECT q.id AS k, jsonb_build_object(
-  'id', q.id, 'tayfa_id', q.tayfa_id, 'title', q.title, 'body', q.body,
+  'id', q.id, 'tayfa_id', q.tayfa_id, 'pool', q.pool, 'subject_key', q.subject_key, 'topic_key', q.topic_key,
+  'title', q.title, 'body', q.body,
   'created_at', q.created_at, 'updated_at', q.updated_at, 'deleted_at', q.deleted_at
 ) AS data
 FROM questions q
@@ -116,7 +123,7 @@ LIMIT @n;
 
 -- name: ExportAnswers :many
 SELECT a.id AS k, jsonb_build_object(
-  'id', a.id, 'question_id', a.question_id, 'tayfa_id', a.tayfa_id, 'body', a.body, 'vote_count', a.vote_count,
+  'id', a.id, 'question_id', a.question_id, 'tayfa_id', a.tayfa_id, 'pool', a.pool, 'body', a.body, 'vote_count', a.vote_count,
   'created_at', a.created_at, 'updated_at', a.updated_at, 'deleted_at', a.deleted_at
 ) AS data
 FROM answers a
@@ -461,4 +468,136 @@ SELECT d.id AS k, jsonb_build_object(
 FROM tayfa_daily_items d
 WHERE d.created_by = @user_id AND d.id > @after
 ORDER BY d.id
+LIMIT @n;
+
+-- Ortak kütüphane (issue #270; ADR-0040 §1): sahibi olduğunuz kalemler
+-- (geri çekilenler dahil). Fotoğraf yer almaz.
+-- name: ExportLibraryItems :many
+SELECT i.id AS k, jsonb_build_object(
+  'id', i.id, 'tayfa_id', i.tayfa_id, 'kind', i.kind, 'name', i.name, 'note', i.note, 'status', i.status,
+  'created_at', i.created_at, 'updated_at', i.updated_at, 'withdrawn_at', i.withdrawn_at
+) AS data
+FROM library_items i
+WHERE i.owner_id = @user_id AND i.id > @after
+ORDER BY i.id
+LIMIT @n;
+
+-- Ödünçleriniz (borç alan ya da sahip olarak) ve beklediğiniz sıralar.
+-- Karşı taraf yer almaz.
+-- name: ExportLibraryLoans :many
+SELECT l.id AS k, jsonb_build_object(
+  'id', l.id, 'item_id', l.item_id, 'tayfa_id', l.tayfa_id, 'item_name', i.name,
+  'role', CASE WHEN l.borrower_id = @user_id THEN 'borrower' ELSE 'owner' END,
+  'state', l.state, 'requested_at', l.requested_at, 'approved_at', l.approved_at,
+  'handed_over_at', l.handed_over_at, 'due_at', l.due_at, 'ended_at', l.ended_at
+) AS data
+FROM library_loans l JOIN library_items i ON i.id = l.item_id
+WHERE (l.borrower_id = @user_id OR i.owner_id = @user_id) AND l.id > @after
+UNION ALL
+SELECT lq.id AS k, jsonb_build_object(
+  'id', lq.id, 'item_id', lq.item_id, 'tayfa_id', lq.tayfa_id, 'item_name', qi.name,
+  'role', 'borrower', 'state', 'queued', 'requested_at', lq.created_at
+) AS data
+FROM library_queue lq JOIN library_items qi ON qi.id = lq.item_id
+WHERE lq.user_id = @user_id AND lq.id > @after
+ORDER BY k
+LIMIT @n;
+
+-- Materyal kütüphanesi (issue #261; ADR-0040 §3): eklediğiniz materyaller
+-- (silinenler dahil). Fotoğraf ve silen yer almaz.
+-- name: ExportMaterials :many
+SELECT m.id AS k, jsonb_build_object(
+  'id', m.id, 'tayfa_id', m.tayfa_id, 'kind', m.kind, 'title', m.title, 'url', m.url, 'domain', m.domain,
+  'subject_key', m.subject_key, 'topic_key', m.topic_key,
+  'created_at', m.created_at, 'updated_at', m.updated_at, 'deleted_at', m.deleted_at
+) AS data
+FROM materials m
+WHERE m.author_id = @user_id AND m.id > @after
+ORDER BY m.id
+LIMIT @n;
+
+-- Üye garajı (issue #272; ADR-0040 §4): garajınızdaki araçlar (silinenler
+-- dahil) ve tayfa başına görünürlük seçimleriniz. Fotoğraf ve silen yer
+-- almaz.
+-- name: ExportGarageVehicles :many
+SELECT g.id AS k, jsonb_build_object(
+  'id', g.id, 'make', g.make, 'model', g.model, 'model_year', g.model_year, 'color', g.color, 'note', g.note,
+  'created_at', g.created_at, 'updated_at', g.updated_at, 'deleted_at', g.deleted_at
+) AS data
+FROM garage_vehicles g
+WHERE g.owner_id = @user_id AND g.id > @after
+ORDER BY g.id
+LIMIT @n;
+
+-- name: ExportGarageVisibility :many
+SELECT v.tayfa_id AS k, jsonb_build_object(
+  'tayfa_id', v.tayfa_id, 'visible', v.visible, 'updated_at', v.updated_at
+) AS data
+FROM garage_tayfa_visibility v
+WHERE v.user_id = @user_id AND v.tayfa_id > @after
+ORDER BY v.tayfa_id
+LIMIT @n;
+
+-- Hakem atamalarınız (issue #238; dışa aktarma #275): hangi etkinlikte,
+-- hangi bileşende ve kapsamda (masa, maç) hakemsiniz. Atayan ve diğer
+-- hakemler dışa aktarılmaz.
+-- name: ExportEventReferees :many
+SELECT r.id AS k, jsonb_build_object(
+  'event_id', r.event_id, 'tayfa_id', e.tayfa_id, 'component_key', r.component_key,
+  'scope_id', r.scope_id, 'created_at', r.created_at
+) AS data
+FROM event_referees r
+JOIN events e ON e.id = r.event_id
+WHERE r.user_id = @user_id AND r.id > @after
+ORDER BY r.id
+LIMIT @n;
+
+-- Liste maddeleri (`checklist` bileşeni, issue #241; dışa aktarma #275):
+-- eklediğiniz ya da üstlendiğiniz maddeler. Maddeyi kimin eklediği ya da
+-- üstlendiği yalnızca "ben mi" olarak yer alır.
+-- name: ExportChecklistItems :many
+SELECT c.id AS k, jsonb_build_object(
+  'id', c.id, 'event_id', c.event_id, 'component_key', c.component_key,
+  'name', c.name, 'quantity', c.quantity,
+  'assigned_to_me', COALESCE(c.assigned_user_id = @user_id, false),
+  'added_by_me', COALESCE(c.created_by = @user_id, false),
+  'created_at', c.created_at, 'updated_at', c.updated_at
+) AS data
+FROM event_checklist_items c
+WHERE (c.assigned_user_id = @user_id OR c.created_by = @user_id) AND c.id > @after
+ORDER BY c.id
+LIMIT @n;
+
+-- Tayfa sözlüğüne ilk eklediğiniz değerler (issue #244; dışa aktarma #275).
+-- Değer tayfanın ortak verisidir: hesap silinince kalır, ekleyen boşalır.
+-- Birleştirildiyse hedef değerin kimliği yer alır.
+-- name: ExportVocabulary :many
+SELECT v.id AS k, jsonb_build_object(
+  'id', v.id, 'tayfa_id', v.tayfa_id, 'namespace', v.namespace, 'value', v.value,
+  'merged_into', v.merged_into, 'created_at', v.created_at
+) AS data
+FROM tayfa_vocabulary v
+WHERE v.created_by = @user_id AND v.id > @after
+ORDER BY v.id
+LIMIT @n;
+
+-- Oylarınız (`vote` bileşeni, issue #254): etkinlik, bileşen, hedefin türü,
+-- serbest seçenekte seçeneğin etiketi ve zamanlar. Oy verdiğiniz kişinin,
+-- aracın ya da fotoğrafın kimliği (başkasının verisi), başkalarının oyları ve
+-- yazdığınız seçenekler (etkinliğin planı) dışa aktarılmaz.
+-- name: ExportEventVotes :many
+SELECT v.id AS k, jsonb_build_object(
+  'event_id', v.event_id, 'component_key', v.component_key,
+  'target', CASE
+    WHEN v.option_id IS NOT NULL THEN 'option'
+    WHEN v.candidate_user_id IS NOT NULL THEN 'participant'
+    WHEN v.event_vehicle_id IS NOT NULL THEN 'vehicle'
+    ELSE 'photo' END,
+  'option_label', o.label,
+  'created_at', v.created_at, 'updated_at', v.updated_at
+) AS data
+FROM event_votes AS v
+LEFT JOIN event_vote_options AS o ON o.id = v.option_id
+WHERE v.user_id = @user_id AND v.id > @after
+ORDER BY v.id
 LIMIT @n;

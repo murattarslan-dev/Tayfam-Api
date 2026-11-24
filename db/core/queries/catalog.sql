@@ -52,3 +52,15 @@ FROM catalog_study_tags t
 LEFT JOIN catalog_study_tags p ON p.key = t.parent_key
 LEFT JOIN catalog_study_tags g ON g.key = p.parent_key
 WHERE t.key = @key;
+
+-- Son yayınlanan catalog.changed olayının katalog sürümü; hiç yoksa 0
+-- (issue #280, ADR-0042; catalog-publish işi). domain_events_type_id_idx
+-- ile tek satır okunur.
+-- name: GetLastPublishedCatalogVersion :one
+SELECT COALESCE((
+  SELECT (e.payload ->> 'catalog_version')::bigint
+  FROM domain_events e
+  WHERE e.type = 'catalog.changed'
+  ORDER BY e.id DESC
+  LIMIT 1
+), 0)::bigint AS catalog_version;

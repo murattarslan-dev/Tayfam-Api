@@ -153,6 +153,26 @@ SELECT created_by, body, attribution, created_at, deleted_at
 FROM tayfa_daily_items
 WHERE id = @id AND tayfa_id = @tayfa_id;
 
+-- Ortak kütüphane (issue #270).
+-- name: AdminGetLibraryItem :one
+SELECT owner_id, kind, name, note, created_at, withdrawn_at
+FROM library_items
+WHERE id = @id AND tayfa_id = @tayfa_id;
+
+-- Materyal kütüphanesi (issue #261): panel bağlantıyı açmaz, adresi metin
+-- olarak gösterir.
+-- name: AdminGetMaterial :one
+SELECT author_id, title, COALESCE(url, '')::text AS link, created_at, deleted_at
+FROM materials
+WHERE id = @id AND tayfa_id = @tayfa_id;
+
+-- Üye garajı (issue #272): aracın sahibi o tayfanın üyesi olmalı.
+-- name: AdminGetGarageVehicle :one
+SELECT g.owner_id, g.make, COALESCE(g.model, '')::text AS model, COALESCE(g.note, '')::text AS note,
+       g.created_at, g.deleted_at
+FROM garage_vehicles g
+WHERE g.id = @id AND EXISTS (SELECT 1 FROM memberships m WHERE m.tayfa_id = @tayfa_id::uuid AND m.user_id = g.owner_id);
+
 -- name: AdminGetEventPhoto :one
 SELECT p.uploader_id, p.caption, p.created_at, p.deleted_at, p.upload_id
 FROM event_photos p JOIN events e ON e.id = p.event_id
@@ -191,6 +211,15 @@ WHERE q.id = @id AND e.id = q.event_id AND e.tayfa_id = @tayfa_id AND q.deleted_
 -- name: AdminDeleteDailyItem :execrows
 UPDATE tayfa_daily_items SET deleted_at = @at, deleted_by = @by
 WHERE id = @id AND tayfa_id = @tayfa_id AND deleted_at IS NULL;
+
+-- name: AdminDeleteMaterial :execrows
+UPDATE materials SET deleted_at = @at, deleted_by = @by
+WHERE id = @id AND tayfa_id = @tayfa_id AND deleted_at IS NULL;
+
+-- name: AdminDeleteGarageVehicle :execrows
+UPDATE garage_vehicles g SET deleted_at = @at::timestamptz, deleted_by = @by::uuid
+WHERE g.id = @id::uuid AND g.deleted_at IS NULL
+  AND EXISTS (SELECT 1 FROM memberships m WHERE m.tayfa_id = @tayfa_id::uuid AND m.user_id = g.owner_id);
 
 -- name: AdminDeleteEventPhoto :execrows
 UPDATE event_photos p SET deleted_at = @at, deleted_by = @by

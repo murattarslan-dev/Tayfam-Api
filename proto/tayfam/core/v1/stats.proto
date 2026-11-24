@@ -7,7 +7,9 @@ import "google/protobuf/timestamp.proto";
 // TayfaStatsService is a tayfa's statistics for its members (issue #266;
 // ADR-0026 §2–§3, ADR-0037 §7): the totals computed from its frozen
 // events (ended seven days ago, not cancelled, not deleted) and the
-// personal contributions of its active members.
+// caller's own contributions. Nobody else's contribution is ever returned
+// (platform owner, 2026-11-23; issue #322), not to an admin or a moderator
+// either.
 //
 // Only gateway calls it with the user's access token; the acting user is
 // always the token's. Anyone but an ACTIVE member of the tayfa gets
@@ -16,7 +18,7 @@ service TayfaStatsService {
   // GetTayfaStats returns the tayfa's statistics of a year (0: all time).
   // Open to every active member, muted ones included. Nothing sensitive is
   // in it: no sensitive measure, no person of an event whose attendance is
-  // sensitive.
+  // sensitive, no other member's contribution.
   //
   // Errors: ERROR_REASON_VALIDATION (tayfa_id, year).
   rpc GetTayfaStats(GetTayfaStatsRequest) returns (GetTayfaStatsResponse);
@@ -36,9 +38,12 @@ message TayfaStat {
   int32 event_count = 4;
 }
 
-// TayfaStatContribution is one active member's value of a measure or log
-// metric in the tayfa.
+// TayfaStatContribution was one active member's value of a measure or log
+// metric in the tayfa. Deprecated (issue #322): members' contributions are
+// no longer listed; it stays only for buf breaking (FILE).
 message TayfaStatContribution {
+  option deprecated = true;
+
   string user_id = 1;
   string metric_key = 2;
   double value = 3;
@@ -57,9 +62,15 @@ message GetTayfaStatsResponse {
   // The years with statistics, newest first.
   repeated int32 years = 2;
   repeated TayfaStat totals = 3;
-  repeated TayfaStatContribution contributions = 4;
+  // Deprecated (issue #322): never filled. It stays only because buf
+  // breaking (FILE) does not allow deleting a field, even a reserved one.
+  repeated TayfaStatContribution contributions = 4 [deprecated = true];
   // When the totals were computed; unset when nothing was computed yet.
   google.protobuf.Timestamp compute_time = 5;
+  // The caller's own contributions in the tayfa: their measure and log
+  // metrics (source "measure" or "log"; nothing sensitive), in metric_key
+  // order. Nobody else's contribution is ever in the response.
+  repeated TayfaStat own_contributions = 6;
 }
 
 // UserStat is one metric of a person's all-time totals over their tayfas

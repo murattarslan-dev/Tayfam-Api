@@ -67,6 +67,45 @@ func (q *Queries) FilterNotifyActive(ctx context.Context, arg FilterNotifyActive
 	return items, nil
 }
 
+const filterNotifyUnblocked = `-- name: FilterNotifyUnblocked :many
+SELECT m.user_id FROM memberships m
+WHERE m.tayfa_id = $1 AND m.status = 'active' AND m.user_id = ANY($2::uuid[])
+  AND m.user_id <> $3
+  AND NOT EXISTS (SELECT 1 FROM user_blocks ub
+                  WHERE (ub.blocker_id = $3 AND ub.blocked_id = m.user_id)
+                     OR (ub.blocker_id = m.user_id AND ub.blocked_id = $3))
+ORDER BY m.user_id
+`
+
+type FilterNotifyUnblockedParams struct {
+	TayfaID pgtype.UUID
+	UserIds []pgtype.UUID
+	ActorID pgtype.UUID
+}
+
+// Ortak kütüphane ödünç adımları (issue #321; ADR-0040 §1): verilen
+// kullanıcılardan etkin üye olanlar; işlemi yapan (actor_id) ve onunla
+// arasında iki yönden herhangi birinde engel olan hariç.
+func (q *Queries) FilterNotifyUnblocked(ctx context.Context, arg FilterNotifyUnblockedParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, filterNotifyUnblocked, arg.TayfaID, arg.UserIds, arg.ActorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const filterNowFriendRecipients = `-- name: FilterNowFriendRecipients :many
 SELECT p.user_id FROM user_profiles p
 JOIN friendships f

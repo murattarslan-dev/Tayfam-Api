@@ -207,8 +207,9 @@ func TestCreateAndGet(t *testing.T) {
 	_, err = e.svc.Create(ctx, admin, other, in)
 	wantField(t, "başka tayfada aynı istek kimliği", err, "client_request_id")
 
-	// Every Faz 1 type is created at the catalog's version; none has a
-	// detail table any more (issue #243).
+	// Every Faz 1 type is created at the catalog's version (the second for
+	// all but fishing since issue #260); none has a detail table any more
+	// (issue #243).
 	for _, typ := range Types {
 		in := input()
 		in.Type = typ
@@ -225,7 +226,11 @@ func TestCreateAndGet(t *testing.T) {
 		v := e.create(t, tf, admin, in)
 		got, err := e.svc.Get(ctx, admin, tf, v.ID)
 		must(t, err)
-		if got.Type != typ || got.TypeVersion != 1 || got.Fields == nil || len(got.Fields) != len(in.Fields) {
+		wantVersion := int32(2)
+		if typ == TypeFishing {
+			wantVersion = 1
+		}
+		if got.Type != typ || got.TypeVersion != wantVersion || got.Fields == nil || len(got.Fields) != len(in.Fields) {
 			t.Errorf("%s: tür %q sürüm %d alanlar %v", typ, got.Type, got.TypeVersion, got.Fields)
 		}
 	}
@@ -247,7 +252,7 @@ func TestCreateValidation(t *testing.T) {
 		edit  func(*Input)
 		field string
 	}{
-		{"bilinmeyen tür", func(i *Input) { i.Type = "cycling" }, "type"},
+		{"bilinmeyen tür", func(i *Input) { i.Type = "paragliding" }, "type"},
 		{"boş başlık", func(i *Input) { i.Title = "   " }, "title"},
 		{"uzun başlık", func(i *Input) { i.Title = strings.Repeat("ğ", 121) }, "title"},
 		{"kontrol karakteri", func(i *Input) { i.Title = "a\x00b" }, "title"},
@@ -278,7 +283,7 @@ func TestCreateValidation(t *testing.T) {
 		{"alansız oyun", func(i *Input) { i.Type = TypeGaming }, "fields.game"},
 		{"alansız spor", func(i *Input) { i.Type = TypeSports }, "fields.sport"},
 		{"bilinmeyen platform", func(i *Input) { i.Type = TypeGaming; i.Fields = values("game", `"x"`, "platform", `"amiga"`) }, "fields.platform"},
-		{"bilinmeyen spor", func(i *Input) { i.Type = TypeSports; i.Fields = values("sport", `"golf"`) }, "fields.sport"},
+		{"uzun spor dalı", func(i *Input) { i.Type = TypeSports; i.Fields = values("sport", `"`+strings.Repeat("g", 61)+`"`) }, "fields.sport"},
 		{"türde olmayan alan", func(i *Input) { i.Fields = values("stake", `100`) }, "fields"},
 		{"zorluk 6", func(i *Input) { i.Type = TypeHike; i.Fields = values("difficulty", `6`) }, "fields.difficulty"},
 		{"sıfır mesafe", func(i *Input) { i.Type = TypeHike; i.Fields = values("planned_distance", `0`) }, "fields.planned_distance"},

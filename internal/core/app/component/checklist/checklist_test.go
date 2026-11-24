@@ -644,7 +644,10 @@ func TestChecklistOnlyWhereTheTypeVersionHasIt(t *testing.T) {
 	}
 
 	// A type without the component.
-	plain := e.newEvent(t, tf, admin, event.TypeGeneral)
+	// "Genel" has an optional toolbox (issue #260): a type without any
+	// component stands in for it.
+	e.addType(t, "test_bare", `{}`)
+	plain := e.newEvent(t, tf, admin, "test_bare")
 	all("bileşensiz tür", ref(admin, tf, plain.ID, "checklist"), apperr.ErrComponentNotFound)
 	refused("bileşensiz tür", plain.ID, "checklist")
 

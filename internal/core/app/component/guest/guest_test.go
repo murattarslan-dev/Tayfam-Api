@@ -301,7 +301,10 @@ func TestGuestsOutsideComponent(t *testing.T) {
 	e := setup(t)
 	tf, admin := e.newTayfa(t)
 	plain := e.newEvent(t, tf, admin, plainType)
-	general := e.newEvent(t, tf, admin, event.TypeGeneral)
+	// "Genel" has an optional toolbox (issue #260): a type without any
+	// component stands in for it.
+	e.addType(t, "test_bare", `{}`)
+	general := e.newEvent(t, tf, admin, "test_bare")
 	game := e.newEvent(t, tf, admin, gameType)
 
 	_, err := e.guests.Get(ctx, ref(admin, tf, plain.ID))

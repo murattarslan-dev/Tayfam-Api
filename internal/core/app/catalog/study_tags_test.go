@@ -11,8 +11,9 @@ import (
 )
 
 // testStudyTags is the smallest list that exercises every rule. It is test
-// data only: the real list comes from the platform owner's approved draft
-// (issue #260).
+// data only: the real list is the seed's (issue #260; TestSeedCatalogData).
+// Its keys are not the seed's; a test that reads the whole list removes the
+// seed first (clearStudyTags).
 const testStudyTags = `INSERT INTO catalog_study_tags (key, parent_key, position, labels, status) VALUES
 	('level_a', NULL, 1, '{"tr": "Düzey A"}', 'active'),
 	('level_a_other', 'level_a', 99, '{"tr": "Diğer"}', 'active'),
@@ -26,10 +27,14 @@ const testStudyTags = `INSERT INTO catalog_study_tags (key, parent_key, position
 	('subject_c', 'level_b', 1, '{"tr": "Ders C"}', 'active'),
 	('subject_c_other', 'subject_c', 99, '{"tr": "Diğer"}', 'active')`
 
-// The migrations leave the list empty (its content is issue #260's); the
-// catalog serves it as an empty list.
-func TestSeedStudyTagsEmpty(t *testing.T) {
-	svc, _, _ := setup(t)
+// clearStudyTags removes the seed's list (00066), for a test that reads the
+// whole list.
+const clearStudyTags = `DELETE FROM catalog_study_tags`
+
+// An empty list is served as an empty list.
+func TestEmptyStudyTags(t *testing.T) {
+	svc, _, admin := setup(t)
+	exec(t, admin, clearStudyTags)
 	c, _, err := svc.Get(ctx, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -44,6 +49,7 @@ func TestSeedStudyTagsEmpty(t *testing.T) {
 
 func TestStudyTagsInCatalog(t *testing.T) {
 	svc, _, admin := setup(t)
+	exec(t, admin, clearStudyTags)
 	exec(t, admin, testStudyTags)
 	c, _, err := svc.Get(ctx, 0)
 	if err != nil {
@@ -170,15 +176,15 @@ func TestTamperedStudyTagsAreNotServed(t *testing.T) {
 	}
 }
 
-// The service's database user only reads the list (ADR-0015).
+// The service's database user never deletes a tag and never changes its
+// key or parent; the platform panel writes the rest (#262; ADR-0015).
 func TestAppRoleCannotChangeStudyTags(t *testing.T) {
 	_, pool, admin := setup(t)
 	exec(t, admin, testStudyTags)
 	for name, sql := range map[string]string{
-		"ekleme":          `INSERT INTO catalog_study_tags (key, position, labels) VALUES ('level_x', 1, '{"tr": "x"}')`,
-		"ad değiştirme":   `UPDATE catalog_study_tags SET labels = '{"tr": "x"}' WHERE key = 'subject_a'`,
-		"emekliye ayırma": `UPDATE catalog_study_tags SET status = 'retired' WHERE key = 'subject_a'`,
-		"silme":           `DELETE FROM catalog_study_tags WHERE key = 'topic_a'`,
+		"anahtar değiştirme": `UPDATE catalog_study_tags SET key = 'subject_x' WHERE key = 'subject_a'`,
+		"üst değiştirme":     `UPDATE catalog_study_tags SET parent_key = NULL WHERE key = 'subject_a'`,
+		"silme":              `DELETE FROM catalog_study_tags WHERE key = 'topic_a'`,
 	} {
 		t.Run(name, func(t *testing.T) { dbtest.WantDenied(t, pool, sql) })
 	}
