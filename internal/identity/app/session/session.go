@@ -162,6 +162,11 @@ func (s *Service) SignIn(ctx context.Context, in SignInInput) (Tokens, error) {
 	if !ok {
 		return Tokens{}, ErrUnsupportedProvider
 	}
+	// Apple sign-in is accepted from the iOS app only (ADR-0045 §1). The
+	// gateway refuses other platforms first; identity does not rely on it.
+	if in.Provider == "apple" && in.Platform != "ios" {
+		return Tokens{}, ErrUnsupportedProvider
+	}
 	if !platforms[in.Platform] {
 		return Tokens{}, fmt.Errorf("%w: platform", ErrInvalidCredentials)
 	}

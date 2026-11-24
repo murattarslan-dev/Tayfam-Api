@@ -1,8 +1,7 @@
 # ADR-0045: Apple ile giriş (yalnızca iOS) ve hesap silmede token iptali
 
-- **Durum:** Önerildi (iki ürün kararı platform sahibinin 2026-11-24
-  sohbetinden; doğrulama, sözleşme ve yapılandırma ayrıntıları bu ADR'de
-  seçildi ve PR'da onaya sunulur)
+- **Durum:** Kabul edildi (platform sahibi, 2026-11-24, sohbette; iki ürün
+  kararı ve PR #348'deki ayrıntılar. İzleme: #347)
 - **Tarih:** 2026-11-24
 - **Karar veren:** Murat Arslan (2026-11-24, sohbette: "Apple ile kayıt olan
   kullanıcı Android'de şimdilik giremesin"; "token hesap silme anında iptal

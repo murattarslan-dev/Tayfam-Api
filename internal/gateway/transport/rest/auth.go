@@ -97,7 +97,10 @@ type sessionBody struct {
 	IntegrityCheckAfter *time.Time `json:"integrity_check_after,omitempty"`
 }
 
-var providers = map[string]identityv1.Provider{"google": identityv1.Provider_PROVIDER_GOOGLE}
+var providers = map[string]identityv1.Provider{
+	"google": identityv1.Provider_PROVIDER_GOOGLE,
+	"apple":  identityv1.Provider_PROVIDER_APPLE,
+}
 
 var platforms = map[string]identityv1.Platform{
 	"android": identityv1.Platform_PLATFORM_ANDROID,
@@ -118,6 +121,10 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 	platform, okPl := platforms[b.Platform]
 	if b.Platform == "web" && !h.webClient {
 		okPl = false
+	}
+	// Apple sign-in comes from the iOS app only (ADR-0045 §1).
+	if b.Provider == "apple" && b.Platform != "ios" {
+		okP = false
 	}
 	if !okP || !okPl || b.IDToken == "" || len(b.IDToken) > 8192 || len(b.Nonce) < 16 || len(b.Nonce) > 256 ||
 		len(b.IntegrityToken) > maxIntegrityToken {

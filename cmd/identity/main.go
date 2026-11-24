@@ -9,6 +9,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -83,6 +84,9 @@ func setup(rt *service.Runtime) error {
 	audience := c.Required("AUTH_AUDIENCE")
 	// Google OAuth client ID'leri gizli değildir; virgülle ayrılmış liste.
 	googleClients := splitList(c.Required("GOOGLE_CLIENT_IDS"))
+	// Apple ile giriş (ADR-0045): iOS bundle kimlikleri, gizli değildir.
+	// Boşsa Apple girişi kapalıdır (unsupported-provider).
+	appleClients := splitList(c.String("APPLE_CLIENT_IDS", ""))
 	docs := registration.Documents{
 		PrivacyNotice: c.Required("CONSENT_PRIVACY_NOTICE_VERSION"),
 		Terms:         c.Required("CONSENT_TERMS_VERSION"),
@@ -112,6 +116,13 @@ func setup(rt *service.Runtime) error {
 	google, err := oidc.NewGoogle(googleClients, &http.Client{Timeout: 5 * time.Second})
 	if err != nil {
 		return err
+	}
+	// ADR-0045 §5: an Apple account is accepted only when its tokens can be
+	// revoked at account deletion. Revocation is not built yet (issue #347),
+	// so Apple sign-in cannot be switched on: a wrong value stops the
+	// service rather than opening accounts that cannot be deleted properly.
+	if len(appleClients) > 0 {
+		return errors.New("APPLE_CLIENT_IDS: Apple ile giriş, hesap silmede token iptali (ADR-0045 §4) gelmeden açılamaz")
 	}
 	signer := func(aud string) (*auth.Signer, error) {
 		return auth.NewSigner(auth.SignerConfig{Key: ring.Active(), Issuer: issuer, Audience: aud, TTL: accessTokenTTL})

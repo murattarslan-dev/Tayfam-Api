@@ -162,6 +162,29 @@ func TestSignInMobileReturnsTokensInBody(t *testing.T) {
 	}
 }
 
+// TestSignInAppleOnlyFromIOS: ADR-0045 §1. Apple sign-in is forwarded for
+// the iOS app and refused for every other platform before identity is asked.
+func TestSignInAppleOnlyFromIOS(t *testing.T) {
+	body := func(platform string) string {
+		return `{"provider":"apple","id_token":"tok","nonce":"0123456789abcdef","platform":"` + platform + `"}`
+	}
+	f := &fakeIdentity{}
+	w := do(newTestRouter(f), "POST", "/v1/auth/sign-in", body("ios"), map[string]string{clientHeader: "ios"})
+	if w.Code != 200 {
+		t.Fatalf("kod %d: %s", w.Code, w.Body)
+	}
+	if f.gotSignIn.GetProvider() != identityv1.Provider_PROVIDER_APPLE || f.gotSignIn.GetPlatform() != identityv1.Platform_PLATFORM_IOS {
+		t.Fatalf("identity'ye giden = %v", f.gotSignIn)
+	}
+	for _, platform := range []string{"android", "web"} {
+		f := &fakeIdentity{}
+		w := do(newTestRouter(f), "POST", "/v1/auth/sign-in", body(platform), map[string]string{clientHeader: platform})
+		if w.Code != 400 || problemType(t, w) != "invalid-request" || f.gotSignIn != nil {
+			t.Errorf("%s: %d %s", platform, w.Code, problemType(t, w))
+		}
+	}
+}
+
 // TestSignInWebDevReturnsTokensInBody: outside prod the local web build
 // signs in like the mobile apps: tokens in the body, no cookie (ADR-0017).
 func TestSignInWebDevReturnsTokensInBody(t *testing.T) {
