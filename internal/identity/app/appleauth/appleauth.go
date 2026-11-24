@@ -37,8 +37,8 @@ const (
 	MaxCode = 1024
 
 	appleAudience = "https://appleid.apple.com"
-	assertionTTL      = 5 * time.Minute
-	maxBody        = 64 << 10
+	assertionTTL  = 5 * time.Minute
+	maxBody       = 64 << 10
 )
 
 var (
@@ -71,9 +71,9 @@ type Config struct {
 
 // Client revokes Apple tokens.
 type Client struct {
-	cfg       Config
-	exchangeURL  string
-	revokeURL string
+	cfg         Config
+	exchangeURL string
+	revokeURL   string
 }
 
 // New returns a Client.
