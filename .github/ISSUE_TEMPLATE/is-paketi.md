@@ -20,7 +20,7 @@ labels: ["iş paketi"]
 
 ## İlgili kararlar
 
-<!-- ADR'ler, Notion veri modeli bölümleri, OpenAPI/proto dosyaları -->
+<!-- ADR'ler, proje dokümanları (tayfam/…), OpenAPI/proto dosyaları -->
 
 ## Hassas alan mı?
 

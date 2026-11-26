@@ -54,7 +54,8 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0044](0044-yazboz-esli-kip.md) | Yazbozda eşli kip (`side: pair`) | Kabul edildi |
 | [0045](0045-apple-ile-giris.md) | Apple ile giriş (yalnızca iOS) ve hesap silmede token iptali | Kabul edildi |
 
-Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
-yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu
-kararları mimariye taşır; bir ADR Notion'daki bir kararı değiştiriyorsa bunu
+Ürün kararları (kavram modeli, özellikler, KVKK metni, platform yönetim
+paneli) claude.ai "Tayfam" projesinin `tayfam/` dokümanlarındadır (2026-11-26'ya
+kadar Notion'daydı; ADR'lerdeki Notion atıfları tarihçedir). ADR'ler bu
+kararları mimariye taşır; bir ADR bir ürün kararını değiştiriyorsa bunu
 açıkça belirtir.
