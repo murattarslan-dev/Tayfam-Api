@@ -255,11 +255,11 @@ func TestEventChannelEvents(t *testing.T) {
 // A component change reaches chat with the event and the component key
 // only (issue #238, ADR-0025 §6).
 func TestComponentChangedEvent(t *testing.T) {
-	tf, actor, event := id.New(), id.New(), id.New()
+	tf, actor, event, other := id.New(), id.New(), id.New(), id.New()
 	r, err := Request(ev(t, TypeEventComponentChanged, actor, map[string]any{
 		"tayfa_id": tf.String(), "event_id": event.String(), "component_key": "scoreboard",
 		// Anything else a writer might add never leaves core.
-		"score": 21, "user_id": id.New().String(),
+		"score": 21, "user_id": other.String(),
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -268,7 +268,9 @@ func TestComponentChangedEvent(t *testing.T) {
 	if r.GetTayfaId() != tf.String() || r.GetActorId() != actor.String() || c.GetEventId() != event.String() || c.GetComponentKey() != "scoreboard" {
 		t.Fatalf("istek = %v", r)
 	}
-	if b, err := json.Marshal(c); err != nil || strings.Contains(string(b), "21") {
+	// The carried message holds the event and the key only. Looking for the
+	// score's digits would also match an id: UUIDv7 starts with the clock.
+	if b, err := json.Marshal(c); err != nil || strings.Contains(string(b), `"score"`) || strings.Contains(string(b), other.String()) {
 		t.Fatalf("içerik taşındı: %s %v", b, err)
 	}
 
