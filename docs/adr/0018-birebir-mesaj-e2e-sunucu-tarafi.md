@@ -1,6 +1,6 @@
 # ADR-0018: Birebir mesajda uçtan uca şifreleme: sunucu tarafı
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (uygulandı ve birleşti; durum satırı 2026-11-26'da düzeltildi)
 - **Tarih:** 2026-11-10
 - **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0004](0004-kimlik-dogrulama-ve-yetkilendirme.md), [ADR-0005](0005-gercek-zamanli-iletisim-ve-chat.md) (bu ADR "Direkt mesajlar" bölümünü uygular), [ADR-0009](0009-veri-modelinin-servislere-dagilimi.md) (chat tablolarının adları ve `devices` bölünmesi), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md), [ADR-0014](0014-websocket-erisim-tokeniyla.md), [ADR-0015](0015-veritabani-rolleri.md), [ADR-0017](0017-yalnizca-mobil-istemci.md) (yalnızca mobil); tayfam-app ADR-0010 (Signal kütüphanesi, AGPL kabul edildi 2026-11-10) ve ADR-0011 (yalnızca mobil); issue #127

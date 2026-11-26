@@ -102,8 +102,7 @@ Bunların ihlali PR'ın reddedilmesi için yeterlidir.
    `auth.ForwardToken` ile olduğu gibi iletilir.
 9. **Bağımlılıklar sabitlenir.** GitHub Actions commit SHA'sıyla, container
    image'ları sürüm etiketiyle (tercihen digest) sabitlenir; `latest`, `main`
-   gibi kayan referanslar kullanılmaz. Mevcut CI'daki etiketle sabitlenmiş
-   Actions, ADR-0011 sertleştirme listesindeki 3. maddeyle düzeltilir.
+   gibi kayan referanslar kullanılmaz.
 
 ## Klasör yapısı
 
