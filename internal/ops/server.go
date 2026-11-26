@@ -15,6 +15,7 @@ import (
 	"mime"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -95,10 +96,12 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /r2", s.auth(s.page("r2")))
 	mux.Handle("GET /fcm", s.auth(s.page("fcm")))
 	mux.Handle("GET /integrity", s.auth(s.page("integrity")))
+	mux.Handle("GET /apple", s.auth(s.page("apple")))
 	mux.Handle("GET /export", s.auth(s.page("export")))
 	mux.Handle("POST /r2", s.auth(s.post(http.HandlerFunc(s.postR2))))
 	mux.Handle("POST /fcm", s.auth(s.post(http.HandlerFunc(s.postFCM))))
 	mux.Handle("POST /integrity", s.auth(s.post(http.HandlerFunc(s.postIntegrity))))
+	mux.Handle("POST /apple", s.auth(s.post(http.HandlerFunc(s.postApple))))
 	mux.Handle("POST /export", s.auth(s.post(http.HandlerFunc(s.postExport))))
 	mux.Handle("POST /open", s.auth(s.post(http.HandlerFunc(s.postOpen))))
 	return s.headers(s.host(mux))
@@ -387,82 +390,147 @@ func (s *Server) postIntegrity(w http.ResponseWriter, r *http.Request) {
 	s.postKeyFile(w, r, "integrity", "scripts/new-integrity-secret.sh")
 }
 
-// postKeyFile reads an uploaded service account key into memory (never to a
-// temporary file: multipart.Reader is read part by part instead of
-// ParseMultipartForm) and runs script with "-" for operation op.
+// postApple runs scripts/new-apple-secret.sh with the uploaded Sign in with
+// Apple key and the three identifiers that go with it (ADR-0045). The
+// identifiers are not secret; they travel as arguments. The key goes over
+// stdin.
+func (s *Server) postApple(w http.ResponseWriter, r *http.Request) {
+	f, ok := s.readKeyForm(w, r, "team_id", "key_id", "bundle")
+	if !ok {
+		return
+	}
+	defer wipe(f.key)
+	team, keyID, bundle := f.text["team_id"], f.text["key_id"], f.text["bundle"]
+	switch {
+	case !s.valid.appleID.MatchString(team):
+		s.formError(w, "apple", f.env, "Team ID 10 karakter olmalı (büyük harf ve rakam).")
+		return
+	case !s.valid.appleID.MatchString(keyID):
+		s.formError(w, "apple", f.env, "Key ID 10 karakter olmalı (büyük harf ve rakam).")
+		return
+	case len(bundle) > 155 || !s.valid.bundle.MatchString(bundle):
+		s.formError(w, "apple", f.env, "Bundle kimliği beklenen biçimde değil (ör. com.ornek.uygulama).")
+		return
+	case len(bytes.TrimSpace(f.key)) == 0:
+		s.formError(w, "apple", f.env, "Sign in with Apple anahtarını (.p8) seçin.")
+		return
+	}
+	if !s.start(w, "apple", f.env) {
+		return
+	}
+	defer s.op.Unlock()
+	res := s.run(r.Context(), job{
+		op: "apple", env: f.env, script: "scripts/new-apple-secret.sh",
+		args:  []string{team, keyID, bundle, "-"},
+		stdin: bytes.Clone(f.key), secrets: [][]byte{f.key},
+	})
+	s.result(w, "apple", res)
+}
+
+// postKeyFile runs script with "-" and an uploaded service account key on
+// stdin, for operation op.
 func (s *Server) postKeyFile(w http.ResponseWriter, r *http.Request, op, script string) {
+	f, ok := s.readKeyForm(w, r)
+	if !ok {
+		return
+	}
+	defer wipe(f.key)
+	if len(bytes.TrimSpace(f.key)) == 0 {
+		s.formError(w, op, f.env, "Servis hesabı JSON dosyasını seçin.")
+		return
+	}
+	if !s.start(w, op, f.env) {
+		return
+	}
+	defer s.op.Unlock()
+	res := s.run(r.Context(), job{
+		op: op, env: f.env, script: script, args: []string{"-"},
+		stdin: bytes.Clone(f.key), secrets: [][]byte{f.key},
+	})
+	s.result(w, op, res)
+}
+
+// keyForm is an upload form: the environment, a key file and the text
+// fields the page allows.
+type keyForm struct {
+	env  string
+	key  []byte // wiped by the caller
+	text map[string]string
+}
+
+// maxTextField bounds a text field of an upload form; none is secret.
+const maxTextField = 256
+
+// readKeyForm reads an upload form into memory (never to a temporary file:
+// multipart.Reader is read part by part instead of ParseMultipartForm).
+// Besides csrf, env and key only the text fields named in allowed are
+// accepted, each at most once. On failure it has answered and wiped the key.
+func (s *Server) readKeyForm(w http.ResponseWriter, r *http.Request, allowed ...string) (keyForm, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxKeyFile+4<<10)
 	mr, err := r.MultipartReader()
 	if err != nil {
 		http.Error(w, "geçersiz form", http.StatusBadRequest)
-		return
+		return keyForm{}, false
 	}
 	// The CSRF token must come first so that nothing else is read for a
 	// forged request.
 	part, err := mr.NextPart()
 	if err != nil || part.FormName() != "csrf" {
 		s.render(w, http.StatusForbidden, "denied", nil)
-		return
+		return keyForm{}, false
 	}
 	tok, err := readBody(part, 128)
 	if err != nil || !s.csrfOK(tok) {
 		s.render(w, http.StatusForbidden, "denied", nil)
-		return
+		return keyForm{}, false
 	}
-	var env string
-	var key []byte
-	defer func() { wipe(key) }()
+	f := keyForm{text: map[string]string{}}
+	bad := func(msg string) (keyForm, bool) {
+		wipe(f.key)
+		http.Error(w, msg, http.StatusBadRequest)
+		return keyForm{}, false
+	}
+	seenEnv := false
 	for {
 		part, err := mr.NextPart()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			http.Error(w, "geçersiz form", http.StatusBadRequest)
-			return
+			return bad("geçersiz form")
 		}
-		switch part.FormName() {
-		case "env":
+		name := part.FormName()
+		switch {
+		case name == "env" && !seenEnv:
 			b, err := readBody(part, 16)
 			if err != nil {
-				http.Error(w, "geçersiz form", http.StatusBadRequest)
-				return
+				return bad("geçersiz form")
 			}
-			env = string(b)
-		case "key":
-			if key != nil {
-				http.Error(w, "geçersiz form", http.StatusBadRequest)
-				return
-			}
-			key, err = readBody(part, maxKeyFile)
+			f.env, seenEnv = string(b), true
+		case name == "key" && f.key == nil:
+			f.key, err = readBody(part, maxKeyFile)
 			if err != nil {
-				http.Error(w, "dosya çok büyük ya da okunamadı", http.StatusBadRequest)
-				return
+				return bad("dosya çok büyük ya da okunamadı")
 			}
+		case slices.Contains(allowed, name):
+			if _, dup := f.text[name]; dup {
+				return bad("geçersiz form")
+			}
+			b, err := readBody(part, maxTextField)
+			if err != nil {
+				return bad("geçersiz form")
+			}
+			f.text[name] = string(bytes.TrimSpace(b))
 		default:
-			http.Error(w, "geçersiz form", http.StatusBadRequest)
-			return
+			return bad("geçersiz form")
 		}
 	}
-	env, ok := envParam(env)
+	env, ok := envParam(f.env)
 	if !ok || env == "" {
-		http.Error(w, "geçersiz ortam", http.StatusBadRequest)
-		return
+		return bad("geçersiz ortam")
 	}
-	if len(bytes.TrimSpace(key)) == 0 {
-		s.formError(w, op, env, "Servis hesabı JSON dosyasını seçin.")
-		return
-	}
-	if !s.start(w, op, env) {
-		return
-	}
-	defer s.op.Unlock()
-	stdin := bytes.Clone(key)
-	res := s.run(r.Context(), job{
-		op: op, env: env, script: script, args: []string{"-"},
-		stdin: stdin, secrets: [][]byte{key},
-	})
-	s.result(w, op, res)
+	f.env = env
+	return f, true
 }
 
 // postExport runs scripts/new-export-key.sh; the key is generated by the

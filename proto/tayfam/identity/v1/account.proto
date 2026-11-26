@@ -83,7 +83,10 @@ service AccountService {
   // token and its session must be that recent, otherwise
   // ERROR_REASON_REAUTHENTICATION_REQUIRED. Personal data is cleared at once,
   // every session ends and core and chat are told (user.deleted). Signing in
-  // with the same provider account later opens a new account.
+  // with the same provider account later opens a new account. For an Apple
+  // account the request carries the authorization code of that sign-in; a
+  // missing or refused code is ERROR_REASON_REAUTHENTICATION_REQUIRED, and
+  // UNAVAILABLE when Apple cannot be reached (nothing is deleted; ADR-0045).
   rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
 }
 
@@ -243,6 +246,12 @@ message AcceptConsentsRequest {
 
 message AcceptConsentsResponse {}
 
-message DeleteAccountRequest {}
+message DeleteAccountRequest {
+  // The authorization code of the Apple re-authentication that precedes the
+  // deletion (ADR-0045). Required for an account with an Apple identity:
+  // identity exchanges it and revokes the user's Apple tokens before anything
+  // is deleted. Ignored for other accounts. At most 1024 bytes.
+  string apple_authorization_code = 1;
+}
 
 message DeleteAccountResponse {}

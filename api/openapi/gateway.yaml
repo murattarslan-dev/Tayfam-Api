@@ -114,8 +114,13 @@ paths:
   /v1/auth/sign-in:
     post:
       operationId: signIn
-      summary: Google (ileride Apple) ID token'ı ile giriş
+      summary: Google veya Apple ID token'ı ile giriş
       description: |
+        `provider: apple` yalnızca iOS uygulamasından (`platform: ios`) kabul
+        edilir; başka platformla `invalid-request` (400). Apple girişi
+        sunucuda açık değilse `unsupported-provider` (400) (ADR-0045).
+        Apple kimlik token'ında ad yoktur; istemci adı kayıtta
+        `display_name` ile gönderir.
         Kullanıcı yoksa oluşturulur ve kayıt bekler (`registration_pending`).
         Bu durumdaki erişim token'ı yalnızca `/v1/registration` uçlarına
         geçer (ADR-0012). Token'lar gövdede döner; çerez yazılmaz.
@@ -235,10 +240,25 @@ paths:
         Erişim token'ı iptal edilemez (ADR-0004): kalan ömrü boyunca (en
         fazla 15 dakika) hesap uçları onu reddeder, tayfa uçları üyelik
         kalmadığı için reddeder.
+
+        **Apple hesabı (ADR-0045):** yeniden girişte Apple'ın verdiği tek
+        kullanımlık yetkilendirme kodu gövdede `apple_authorization_code`
+        ile gönderilir. Sunucu, hiçbir şeyi silmeden önce kullanıcının Apple
+        token'larını iptal eder; kod ve token'lar saklanmaz. Kod yoksa,
+        geçersizse, kullanılmışsa ya da başka bir Apple hesabına aitse
+        `403 reauthentication-required` (kullanıcı Apple ile yeniden giriş
+        yapar); Apple'a ulaşılamıyorsa `503`. İki durumda da hesap silinmez.
+        Google hesabında gövde gerekmez; gönderilirse kod yok sayılır.
       parameters:
         - $ref: "#/components/parameters/ClientHeader"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteAccountRequest" }
       responses:
         "204": { description: Hesap silindi }
+        "400": { $ref: "#/components/responses/Problem" }
         "401": { $ref: "#/components/responses/Problem" }
         "403": { $ref: "#/components/responses/Problem" }
         "503": { $ref: "#/components/responses/Problem" }
@@ -9728,9 +9748,18 @@ components:
       required: [provider, id_token, nonce, platform]
       additionalProperties: false
       properties:
-        provider: { type: string, enum: [google] }
+        provider:
+          type: string
+          enum: [google, apple]
+          description: "`apple` yalnızca `platform: ios` ile (ADR-0045)."
         id_token: { type: string, maxLength: 8192 }
-        nonce: { type: string, minLength: 16, maxLength: 256 }
+        nonce:
+          type: string
+          minLength: 16
+          maxLength: 256
+          description: |
+            Sağlayıcıya verilen nonce'un aynısı; token'daki `nonce` ile
+            karşılaştırılır (Google ve Apple için aynı kural).
         platform:
           type: string
           enum: [android, ios, web]
@@ -9742,6 +9771,18 @@ components:
             İsteğe bağlı, Android: Play Integrity standard request token'ı
             (ADR-0022). `requestHash` = base64url(SHA-256("tayfam-integrity/v1/sign-in\n" + nonce)),
             dolgusuz.
+
+    DeleteAccountRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        apple_authorization_code:
+          type: string
+          maxLength: 1024
+          description: |
+            Yalnızca Apple hesabında: hesap silmeden önceki Apple girişinin
+            yetkilendirme kodu (tek kullanımlık, yaklaşık 5 dakika geçerli;
+            ADR-0045).
 
     RefreshRequest:
       type: object

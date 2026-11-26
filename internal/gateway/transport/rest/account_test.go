@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +75,41 @@ func TestAccountRoutesNeedToken(t *testing.T) {
 	w := do(h, "DELETE", "/v1/me", "", map[string]string{"Authorization": "Bearer USERTOKEN"})
 	if _, _, n := f.last(); w.Code != http.StatusBadRequest || problemType(t, w) != "missing-client-header" || n != 0 {
 		t.Fatalf("X-Tayfam-Client olmadan silme: %d", w.Code)
+	}
+}
+
+// TestDeleteAccountAppleCode: ADR-0045 §3. The optional body carries the
+// Apple authorization code to identity; a request without a body stays
+// valid (TestDeleteAccountRoute).
+func TestDeleteAccountAppleCode(t *testing.T) {
+	f := &fakeCore{}
+	h := coreRouter(f)
+	w := as(h, "DELETE", "/v1/me", `{"apple_authorization_code":"kod-1"}`)
+	got, _, n := f.last()
+	req, ok := got.(*identityv1.DeleteAccountRequest)
+	if w.Code != http.StatusNoContent || !ok || n != 1 || req.GetAppleAuthorizationCode() != "kod-1" {
+		t.Fatalf("silme: %d %T %q", w.Code, got, req.GetAppleAuthorizationCode())
+	}
+
+	// Whitespace is no body: released clients that send nothing keep working
+	// even behind a proxy that changes the framing.
+	f = &fakeCore{}
+	w = as(coreRouter(f), "DELETE", "/v1/me", " \n")
+	if _, _, n := f.last(); w.Code != http.StatusNoContent || n != 1 {
+		t.Fatalf("boş gövde: %d, identity çağrısı %d", w.Code, n)
+	}
+
+	for name, body := range map[string]string{
+		"uzun kod":        `{"apple_authorization_code":"` + strings.Repeat("k", 1025) + `"}`,
+		"iki değer":       `{"apple_authorization_code":"kod-1"}{}`,
+		"bilinmeyen alan": `{"apple_authorization_code":"kod-1","baska":1}`,
+		"JSON değil":      `kod-1`,
+	} {
+		f := &fakeCore{}
+		w := as(coreRouter(f), "DELETE", "/v1/me", body)
+		if _, _, n := f.last(); w.Code != http.StatusBadRequest || problemType(t, w) != "invalid-request" || n != 0 {
+			t.Errorf("%s: %d %s, identity çağrısı %d", name, w.Code, problemType(t, w), n)
+		}
 	}
 }
 

@@ -34,6 +34,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/appleauth"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/profilefields"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/userevents"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/store"
@@ -51,20 +52,35 @@ var (
 	// ErrUnknownUser: the account is already deleted, not registered, or
 	// the caller's session is ended.
 	ErrUnknownUser = errors.New("kullanıcı bulunamadı")
+	// ErrProviderUnavailable: the account's Apple tokens could not be
+	// revoked because Apple could not be asked. Nothing was deleted; the
+	// request can be retried (ADR-0045 §4).
+	ErrProviderUnavailable = errors.New("giriş sağlayıcısına ulaşılamıyor")
 )
+
+// AppleRevoker revokes a user's Apple tokens from the authorization code of
+// a fresh Apple sign-in (appleauth.Client). It returns an error wrapping
+// appleauth.ErrCodeRejected when the code is refused or belongs to another
+// Apple user; any other error means Apple could not be asked.
+type AppleRevoker interface {
+	RevokeByCode(ctx context.Context, code, subject string) error
+}
 
 // Config wires a Service.
 type Config struct {
 	Pool *pgxpool.Pool
 	Log  *slog.Logger
-	Now  func() time.Time // optional, for tests
+	// Apple is set when Apple sign-in is on (ADR-0045 §5).
+	Apple AppleRevoker
+	Now   func() time.Time // optional, for tests
 }
 
 // Service deletes accounts.
 type Service struct {
-	pool *pgxpool.Pool
-	log  *slog.Logger
-	now  func() time.Time
+	pool  *pgxpool.Pool
+	log   *slog.Logger
+	apple AppleRevoker
+	now   func() time.Time
 }
 
 // New returns a Service.
@@ -75,7 +91,7 @@ func New(cfg Config) (*Service, error) {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Service{pool: cfg.Pool, log: cfg.Log, now: func() time.Time { return cfg.Now().UTC() }}, nil
+	return &Service{pool: cfg.Pool, log: cfg.Log, apple: cfg.Apple, now: func() time.Time { return cfg.Now().UTC() }}, nil
 }
 
 // Caller is the verified access token of the request.
@@ -83,6 +99,10 @@ type Caller struct {
 	User     id.ID
 	Session  id.ID
 	IssuedAt time.Time // iat
+	// AppleCode is the authorization code of the Apple sign-in that opened
+	// this session, sent with the delete request (ADR-0045 §4). Empty for
+	// other providers.
+	AppleCode string
 }
 
 // Erase clears a live, registered account the caller has locked in tx
@@ -134,6 +154,9 @@ func (s *Service) Delete(ctx context.Context, c Caller) error {
 	if c.IssuedAt.Before(since) {
 		return ErrReauthenticationRequired
 	}
+	if err := s.revokeApple(ctx, c, now, since); err != nil {
+		return err
+	}
 	var devices int64
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)
@@ -170,4 +193,51 @@ func (s *Service) Delete(ctx context.Context, c Caller) error {
 		slog.String("user_id", c.User.String()),
 		slog.Int64("devices", devices))
 	return nil
+}
+
+// revokeApple revokes the Apple tokens of an account that has an Apple
+// identity, before anything is deleted (ADR-0045 §4). Apple is asked outside
+// the deletion transaction: no row is locked while waiting for it. If the
+// process stops after this step the tokens are revoked and the account is
+// intact; the person signs in again and repeats the request. The reverse
+// (account deleted, tokens alive) cannot happen.
+//
+// The code and the tokens Apple returns for it are not stored or logged.
+func (s *Service) revokeApple(ctx context.Context, c Caller, now, since time.Time) error {
+	q := store.New(s.pool)
+	subject, err := q.GetUserAppleSubject(ctx, c.User.PG())
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("apple kimliği: %w", err)
+	}
+	// The session check of the transaction below, made first: a stale or
+	// ended session never reaches Apple.
+	sess, err := q.GetCallerSession(ctx, store.GetCallerSessionParams{
+		ID: c.Session.PG(), UserID: c.User.PG(), Now: pgtype.Timestamptz{Time: now, Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrUnknownUser
+	}
+	if err != nil {
+		return fmt.Errorf("oturum: %w", err)
+	}
+	if sess.CreatedAt.Time.Before(since) || c.AppleCode == "" {
+		return ErrReauthenticationRequired
+	}
+	if s.apple == nil {
+		return fmt.Errorf("%w: apple token iptali yapılandırılmamış", ErrProviderUnavailable)
+	}
+	err = s.apple.RevokeByCode(ctx, c.AppleCode, subject)
+	switch {
+	case err == nil:
+		s.log.InfoContext(ctx, "apple token'ı iptal edildi", slog.String("user_id", c.User.String()))
+		return nil
+	case errors.Is(err, appleauth.ErrCodeRejected):
+		s.log.InfoContext(ctx, "apple kodu reddedildi", slog.String("user_id", c.User.String()), slog.String("reason", err.Error()))
+		return ErrReauthenticationRequired
+	default:
+		return fmt.Errorf("%w: %w", ErrProviderUnavailable, err)
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	identitydb "github.com/murattarslan-dev/tayfam-api/db/identity"
+	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/appleauth"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/consent"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/oidc"
 	"github.com/murattarslan-dev/tayfam-api/internal/identity/app/refcode"
@@ -34,6 +36,36 @@ func (fakeGoogle) Verify(_ context.Context, tok, nonce string) (oidc.Identity, e
 	return oidc.Identity{}, oidc.ErrInvalidToken
 }
 
+// fakeApple is fakeGoogle for Apple sign-in (no name, ADR-0045 §2).
+type fakeApple struct{}
+
+func (fakeApple) Verify(_ context.Context, tok, nonce string) (oidc.Identity, error) {
+	if len(tok) > 3 && tok[:3] == "ok:" && nonce == "n" {
+		return oidc.Identity{Provider: "apple", Subject: tok[3:]}, nil
+	}
+	return oidc.Identity{}, oidc.ErrInvalidToken
+}
+
+// fakeRevoker records what deletion asks Apple to revoke and answers err.
+type fakeRevoker struct {
+	mu    sync.Mutex
+	err   error
+	calls [][2]string // code, subject
+}
+
+func (f *fakeRevoker) RevokeByCode(_ context.Context, code, subject string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, [2]string{code, subject})
+	return f.err
+}
+
+func (f *fakeRevoker) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.calls)
+}
+
 var docs = consent.Documents{PrivacyNotice: "2026-11-08", Terms: "2026-11-08"}
 
 type env struct {
@@ -41,6 +73,8 @@ type env struct {
 	sessions *session.Service
 	svc      *Service
 	verifier *auth.Verifier
+	apple    *fakeRevoker
+	log      *slog.Logger
 }
 
 func setup(t *testing.T) *env {
@@ -62,14 +96,15 @@ func setup(t *testing.T) *env {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	sessions, err := session.New(session.Config{
 		Pool: pool, Log: log,
-		Verifiers: map[string]oidc.Verifier{"google": fakeGoogle{}},
+		Verifiers: map[string]oidc.Verifier{"google": fakeGoogle{}, "apple": fakeApple{}},
 		API:       signer(session.AudienceAPI), Registration: signer(session.AudienceRegistration),
 		Documents: docs,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc, err := New(Config{Pool: pool, Log: log})
+	apple := &fakeRevoker{}
+	svc, err := New(Config{Pool: pool, Log: log, Apple: apple})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,14 +112,26 @@ func setup(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &env{pool: pool, sessions: sessions, svc: svc, verifier: v}
+	return &env{pool: pool, sessions: sessions, svc: svc, verifier: v, apple: apple, log: log}
 }
 
-// signIn signs subject in and, the first time, registers the account.
+// signIn signs subject in with Google and, the first time, registers the
+// account.
 func (e *env) signIn(t *testing.T, subject string) session.Tokens {
 	t.Helper()
+	return e.signInWith(t, "google", "android", subject)
+}
+
+// signInApple is signIn with Apple, from the iOS app (ADR-0045 §1).
+func (e *env) signInApple(t *testing.T, subject string) session.Tokens {
+	t.Helper()
+	return e.signInWith(t, "apple", "ios", subject)
+}
+
+func (e *env) signInWith(t *testing.T, provider, platform, subject string) session.Tokens {
+	t.Helper()
 	ctx := context.Background()
-	in := session.SignInInput{Provider: "google", IDToken: "ok:" + subject, Nonce: "n", Platform: "android"}
+	in := session.SignInInput{Provider: provider, IDToken: "ok:" + subject, Nonce: "n", Platform: platform}
 	tok, err := e.sessions.SignIn(ctx, in)
 	if err != nil {
 		t.Fatal(err)
@@ -295,5 +342,130 @@ func TestConcurrentDeleteWritesOneEvent(t *testing.T) {
 	}
 	if n := e.count(t, `SELECT count(*) FROM domain_events WHERE type = 'user.deleted' AND subject_id = $1`, tok.UserID.PG()); n != 1 {
 		t.Fatalf("user.deleted = %d", n)
+	}
+}
+
+// appleCaller is caller with the authorization code of the Apple sign-in.
+func (e *env) appleCaller(t *testing.T, tok session.Tokens, code string) Caller {
+	t.Helper()
+	c := e.caller(t, tok)
+	c.AppleCode = code
+	return c
+}
+
+// TestDeleteAppleAccountRevokesFirst: ADR-0045 §4. An Apple account is
+// deleted only after its Apple tokens are revoked, with the code of the
+// re-authentication and for the account's own Apple user.
+func TestDeleteAppleAccountRevokesFirst(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tok := e.signInApple(t, "apple-sub-1")
+
+	if err := e.svc.Delete(ctx, e.appleCaller(t, tok, "kod-1")); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.apple.calls) != 1 || e.apple.calls[0] != [2]string{"kod-1", "apple-sub-1"} {
+		t.Fatalf("iptal çağrıları = %v", e.apple.calls)
+	}
+	if n := e.count(t, `SELECT count(*) FROM auth_identities WHERE user_id = $1`, tok.UserID.PG()); n != 0 {
+		t.Fatalf("giriş kimliği kaldı: %d", n)
+	}
+	if n := e.count(t, `SELECT count(*) FROM users WHERE id = $1 AND deleted_at IS NOT NULL`, tok.UserID.PG()); n != 1 {
+		t.Fatal("hesap silinmedi")
+	}
+}
+
+// TestDeleteAppleAccountNotDeletedWithoutRevocation: when the tokens cannot
+// be revoked nothing is deleted, whatever the reason.
+func TestDeleteAppleAccountNotDeletedWithoutRevocation(t *testing.T) {
+	for name, tc := range map[string]struct {
+		code      string
+		revokeErr error
+		want      error
+		wantCalls int
+	}{
+		"kod yok":              {"", nil, ErrReauthenticationRequired, 0},
+		"kod reddedildi":       {"kod-1", fmt.Errorf("%w: invalid_grant", appleauth.ErrCodeRejected), ErrReauthenticationRequired, 1},
+		"apple'a ulaşılamıyor": {"kod-1", fmt.Errorf("%w: token ucu HTTP 503", appleauth.ErrUnavailable), ErrProviderUnavailable, 1},
+		"beklenmeyen hata":     {"kod-1", errors.New("bilinmeyen"), ErrProviderUnavailable, 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t)
+			ctx := context.Background()
+			tok := e.signInApple(t, "apple-sub-1")
+			e.apple.err = tc.revokeErr
+
+			err := e.svc.Delete(ctx, e.appleCaller(t, tok, tc.code))
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, %v bekleniyordu", err, tc.want)
+			}
+			if e.apple.count() != tc.wantCalls {
+				t.Fatalf("iptal çağrıları = %d", e.apple.count())
+			}
+			if n := e.count(t, `SELECT count(*) FROM auth_identities WHERE user_id = $1`, tok.UserID.PG()); n != 1 {
+				t.Fatal("iptal olmadan giriş kimliği silindi")
+			}
+			if n := e.count(t, `SELECT count(*) FROM users WHERE id = $1 AND deleted_at IS NULL`, tok.UserID.PG()); n != 1 {
+				t.Fatal("iptal olmadan hesap silindi")
+			}
+			// The account is intact: with a good code the same request
+			// goes through.
+			e.apple.err = nil
+			if err := e.svc.Delete(ctx, e.appleCaller(t, tok, "kod-2")); err != nil {
+				t.Fatalf("yeniden deneme: %v", err)
+			}
+		})
+	}
+}
+
+// TestDeleteAppleAccountStaleSessionNeverReachesApple: the re-authentication
+// rule comes first; Apple is not asked for a session that could not delete
+// the account anyway.
+func TestDeleteAppleAccountStaleSessionNeverReachesApple(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tok := e.signInApple(t, "apple-sub-1")
+	if _, err := e.pool.Exec(ctx, `UPDATE sessions SET created_at = now() - interval '11 minutes' WHERE id = $1`, tok.SessionID.PG()); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.Delete(ctx, e.appleCaller(t, tok, "kod-1")); !errors.Is(err, ErrReauthenticationRequired) {
+		t.Fatalf("err = %v", err)
+	}
+	if e.apple.count() != 0 {
+		t.Fatal("eski oturumla Apple'a gidildi")
+	}
+}
+
+// TestDeleteGoogleAccountIgnoresAppleCode: a Google account needs no code
+// and a code sent with it goes nowhere.
+func TestDeleteGoogleAccountIgnoresAppleCode(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tok := e.signIn(t, "google-sub-1")
+	e.apple.err = errors.New("çağrılmamalı")
+	if err := e.svc.Delete(ctx, e.appleCaller(t, tok, "kod-1")); err != nil {
+		t.Fatal(err)
+	}
+	if e.apple.count() != 0 {
+		t.Fatal("Google hesabı için Apple'a gidildi")
+	}
+}
+
+// TestDeleteAppleAccountWithoutRevoker: Apple sign-in is never on without
+// revocation (cmd/identity), but if an Apple account exists while it is off
+// the account is not deleted behind Apple's back.
+func TestDeleteAppleAccountWithoutRevoker(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	tok := e.signInApple(t, "apple-sub-1")
+	svc, err := New(Config{Pool: e.pool, Log: e.log})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Delete(ctx, e.appleCaller(t, tok, "kod-1")); !errors.Is(err, ErrProviderUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+	if n := e.count(t, `SELECT count(*) FROM users WHERE id = $1 AND deleted_at IS NULL`, tok.UserID.PG()); n != 1 {
+		t.Fatal("hesap silindi")
 	}
 }

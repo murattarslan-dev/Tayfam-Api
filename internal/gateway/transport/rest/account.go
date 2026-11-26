@@ -1,7 +1,11 @@
 package rest
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"time"
 
@@ -57,8 +61,38 @@ type consentBody struct {
 	TermsVersion         string `json:"terms_version"`
 }
 
+// deleteAccountBody is the optional body of DELETE /v1/me (ADR-0045 §3).
+type deleteAccountBody struct {
+	AppleAuthorizationCode string `json:"apple_authorization_code"`
+}
+
+// maxAppleCode is the contract's limit for apple_authorization_code.
+const maxAppleCode = 1024
+
 func (h coreHandlers) deleteAccount(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	if _, err := h.d.Accounts.DeleteAccount(ctx, &identityv1.DeleteAccountRequest{}); err != nil {
+	// The body is optional: only an account with an Apple identity sends
+	// one. A request without a body stays valid whatever its headers say
+	// (released clients send none), so the body is read first and judged by
+	// its content, not by Content-Length or Content-Type.
+	var b deleteAccountBody
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxAuthBodyBytes))
+	if err != nil {
+		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
+		return
+	}
+	if len(bytes.TrimSpace(raw)) != 0 {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&b); err != nil {
+			httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
+			return
+		}
+		if _, err := dec.Token(); !errors.Is(err, io.EOF) || len(b.AppleAuthorizationCode) > maxAppleCode {
+			httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
+			return
+		}
+	}
+	if _, err := h.d.Accounts.DeleteAccount(ctx, &identityv1.DeleteAccountRequest{AppleAuthorizationCode: b.AppleAuthorizationCode}); err != nil {
 		h.identityFail(w, r, err)
 		return
 	}

@@ -115,6 +115,9 @@ type Querier interface {
 	// Profil ayrıntıları (issue #185): yalnızca kayıtlı, silinmemiş hesap.
 	GetProfileDetails(ctx context.Context, id pgtype.UUID) (GetProfileDetailsRow, error)
 	GetUser(ctx context.Context, id pgtype.UUID) (GetUserRow, error)
+	// Hesabın Apple kimliği (ADR-0045 §4): hesap silmeden önce token iptali için
+	// gereken Apple kullanıcı kimliği. Apple kimliği olmayan hesapta satır yoktur.
+	GetUserAppleSubject(ctx context.Context, userID pgtype.UUID) (string, error)
 	GetUserForAdmin(ctx context.Context, userID pgtype.UUID) (GetUserForAdminRow, error)
 	HasActiveConsent(ctx context.Context, arg HasActiveConsentParams) (bool, error)
 	// Etkin (bekleyen ya da hazırlanan) talep.

@@ -78,6 +78,23 @@ func (q *Queries) GetAuthIdentity(ctx context.Context, arg GetAuthIdentityParams
 	return i, err
 }
 
+const getUserAppleSubject = `-- name: GetUserAppleSubject :one
+SELECT subject
+FROM auth_identities
+WHERE user_id = $1 AND provider = 'apple'
+ORDER BY id
+LIMIT 1
+`
+
+// Hesabın Apple kimliği (ADR-0045 §4): hesap silmeden önce token iptali için
+// gereken Apple kullanıcı kimliği. Apple kimliği olmayan hesapta satır yoktur.
+func (q *Queries) GetUserAppleSubject(ctx context.Context, userID pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserAppleSubject, userID)
+	var subject string
+	err := row.Scan(&subject)
+	return subject, err
+}
+
 const touchAuthIdentity = `-- name: TouchAuthIdentity :exec
 UPDATE auth_identities
 SET last_used_at = now(), email = $1

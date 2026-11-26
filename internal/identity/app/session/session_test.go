@@ -34,6 +34,17 @@ func (fakeGoogle) Verify(_ context.Context, tok, nonce string) (oidc.Identity, e
 	return oidc.Identity{}, oidc.ErrInvalidToken
 }
 
+// fakeApple is fakeGoogle for Apple: no name, as in real Apple tokens
+// (ADR-0045 §2).
+type fakeApple struct{}
+
+func (fakeApple) Verify(_ context.Context, tok, nonce string) (oidc.Identity, error) {
+	if len(tok) > 3 && tok[:3] == "ok:" && nonce == "n" {
+		return oidc.Identity{Provider: "apple", Subject: tok[3:]}, nil
+	}
+	return oidc.Identity{}, oidc.ErrInvalidToken
+}
+
 type env struct {
 	svc  *Service
 	pool *pgxpool.Pool
@@ -169,6 +180,50 @@ func TestSignInRejects(t *testing.T) {
 		if _, err := e.svc.SignIn(ctx, tc.in); !errors.Is(err, tc.want) {
 			t.Errorf("%s: err = %v, %v bekleniyordu", name, err, tc.want)
 		}
+	}
+}
+
+// TestAppleSignInOnlyFromIOS: ADR-0045 §1. The check does not rely on the
+// gateway: identity itself refuses Apple sign-in from other platforms, before
+// the token is looked at.
+func TestAppleSignInOnlyFromIOS(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	cfg := e.cfg
+	cfg.Verifiers = map[string]oidc.Verifier{"google": fakeGoogle{}, "apple": fakeApple{}}
+	svc, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, platform := range []string{"android", "web"} {
+		_, err := svc.SignIn(ctx, SignInInput{Provider: "apple", IDToken: "ok:apple-sub", Nonce: "n", Platform: platform})
+		if !errors.Is(err, ErrUnsupportedProvider) {
+			t.Errorf("%s: err = %v, ErrUnsupportedProvider bekleniyordu", platform, err)
+		}
+	}
+	tok, err := svc.SignIn(ctx, SignInInput{Provider: "apple", IDToken: "ok:apple-sub", Nonce: "n", Platform: "ios"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tok.RegistrationPending {
+		t.Fatal("yeni Apple hesabı kayıt beklemiyor")
+	}
+	// The same subject under Google is another account: providers are never
+	// merged (ADR-0004).
+	g, err := svc.SignIn(ctx, SignInInput{Provider: "google", IDToken: "ok:apple-sub", Nonce: "n", Platform: "android"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.UserID == tok.UserID {
+		t.Fatal("Apple ve Google kimliği aynı hesaba bağlandı")
+	}
+	// Signing in again with Apple finds the Apple account.
+	again, err := svc.SignIn(ctx, SignInInput{Provider: "apple", IDToken: "ok:apple-sub", Nonce: "n", Platform: "ios"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.UserID != tok.UserID {
+		t.Fatal("ikinci Apple girişi başka hesap açtı")
 	}
 }
 
