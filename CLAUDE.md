@@ -17,34 +17,38 @@ backend'idir.
 
 - Mimari özet: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - Kararlar ve gerekçeleri: [`docs/adr/`](docs/adr/README.md)
-- Ürün kararları ve veri modeli (v15): Notion'daki "Tayfam — Proje Planı" ve
-  alt sayfası "Veri Modeli (v15)". Veri modelinin servislere dağılımı
-  ADR-0009'dadır; v14 Notion'da arşiv olarak durur.
+- Ürün kararları: claude.ai "Tayfam" projesinin `tayfam/` dokümanları
+  (aşağıda). Veri modelinin tek kaynağı `db/*/migrations/`'dır; servislere
+  dağılımı ADR-0009'da, okunabilir özeti `tayfam/08-veri-modeli.md`'de.
 
-## Kararlar ve Notion
+## Kararlar ve proje dokümanları
 
-Ürün kararlarının kaynağı Notion'daki **"Tayfam — Proje Planı"** sayfası ve alt
-sayfalarıdır (veri modeli, özellik haritası, KVKK aydınlatma metni, platform
-yönetim paneli, topluluk kuralları, kötüye kullanım ve genç kullanıcı
-güvenliği). Mimari kararların kaynağı `docs/adr/`'dir.
+Ürün kararlarının kaynağı claude.ai'deki **"Tayfam" projesinin `tayfam/`
+dokümanlarıdır** (2026-11-26'dan beri; Notion bırakıldı, son içeriği bu
+dokümanlara aktarıldı): genel bakış, ürün kavramları, özellik haritası,
+sohbet ve E2E, mimari, güvenlik, moderasyon, platform paneli, veri modeli
+özeti, Faz 2–3, marka ve tasarım, mağaza, yasal/KVKK. 
+Ortak görev listesi `tayfam/yapilacaklar.md`'dir; iş durumunun kaynağı
+GitHub'dır (PR'lar, CI çalışmaları).
 
-- **Karar almadan önce oku.** Bir özellik tasarlamadan, tablo veya alan
-  eklemeden, bir kuralı yorumlamadan ya da seçenek önermeden önce Notion'daki
-  ilgili sayfayı ve ilgili ADR'leri oku (Notion MCP bağlantısıyla). Notion'da
-  zaten verilmiş bir kararı yeniden tasarlama.
-- **Çelişkiyi sakla değil, söyle.** Notion ile ADR veya kod çelişiyorsa ya da
-  Notion'daki karardan sapmak gerekiyorsa bunu açıkça belirt ve platform
-  sahibine sor. Sapma kabul edilirse hem ADR'ye hem Notion'daki ilgili sayfaya
-  yazılır (örnek: ADR-0012'deki şifreli doğum tarihi v14'te not olarak
-  duruyordu, v15'te şemaya işlendi).
-- **Yeni kararı yaz.** Platform sahibiyle birlikte yeni bir karar alınırsa
-  aynı oturumda Notion'daki ilgili sayfaya işlenir (ürün kararı) ve gerekiyorsa
-  ADR eklenir veya güncellenir (mimari karar). Notion'daki proje planının yol
-  haritası tamamlanan işlerle güncel tutulur.
-- **Erişim yoksa varsayma.** Notion'a ulaşılamıyorsa bunu söyle; Notion'da ne
-  yazdığını tahmin ederek ilerleme.
-- Notion'a gerçek kullanıcı verisi, secret veya iç adres/parola yazılmaz;
-  repoyla aynı kural geçerlidir.
+- **Karar almadan önce oku.** Bir özellik tasarlamadan, kural yorumlamadan ya
+  da seçenek önermeden önce ilgili proje dokümanını ve ADR'leri oku. Zaten
+  verilmiş bir kararı yeniden tasarlama.
+- **Görevi listeden al.** Oturum işini `tayfam/yapilacaklar.md`'den seçer,
+  sahiplenir ve bitirince durumunu yazar (kurallar listenin başında). Bir
+  görevi açık saymadan önce PR ve CI durumunu GitHub'dan doğrula.
+- **Çelişkiyi sakla değil, söyle.** Proje dokümanı ile ADR, sözleşme veya kod
+  çelişiyorsa ya da bir karardan sapmak gerekiyorsa bunu açıkça belirt ve
+  platform sahibine sor. Sapma kabul edilirse hem ADR'ye hem ilgili proje
+  dokümanına yazılır.
+- **Yeni kararı yaz.** Platform sahibiyle birlikte alınan yeni bir ürün
+  kararı aynı oturumda ilgili proje dokümanına, mimari karar ADR'ye işlenir.
+- **Erişim yoksa varsayma.** Proje dokümanlarına ulaşılamıyorsa bunu söyle;
+  ne yazdığını tahmin ederek ilerleme.
+- Proje dokümanlarına gerçek kullanıcı verisi, secret veya iç adres/parola
+  yazılmaz; repoyla aynı kural geçerlidir.
+- ADR'lerdeki ve eski belgelerdeki "Notion" atıfları tarihçedir; o kararların
+  güncel hali proje dokümanlarındadır.
 
 ## Güvenlik ilkesi
 
@@ -142,7 +146,7 @@ docs/runbooks/              işletim adımları
 - **ID'ler** UUIDv7'dir ve sunucuda üretilir. İstemcinin ürettiği değer yalnızca
   `client_request_id` olarak tekrar gönderim korumasında kullanılır.
 - **Girdi doğrulama** hem Go'da hem veritabanında (`CHECK`) yapılır. Uzunluk
-  sınırları veri modeli v15'teki tablolardadır.
+  sınırları migration'lardaki `CHECK` kısıtlarındadır.
 - **Türkçe metin.** Tekillik gereken isimlerde `name_normalized` alanı
   `strings.ToLowerSpecial(unicode.TurkishCase, …)` ile üretilir.
 - **SQL** elle yazılır ve sqlc ile üretilir; string birleştirerek sorgu
