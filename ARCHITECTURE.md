@@ -58,8 +58,8 @@ protokolüyle uçtan uca şifrelidir; geçmiş, kullanıcının kendi anahtarıy
 
 ## Veri ve dosyalar
 
-- PostgreSQL (CloudNativePG), PostGIS, ICU `tr-TR`. Erişim pgx + sqlc,
-  migration goose ([ADR-0003](docs/adr/0003-kod-yapisi-ve-sozlesmeler.md)).
+- PostgreSQL (CloudNativePG), ICU `tr-TR`; PostGIS yok (konum enlem/boylam
+  sütunlarında, mesafe Go'da). Erişim pgx + sqlc, migration goose ([ADR-0003](docs/adr/0003-kod-yapisi-ve-sozlesmeler.md)).
 - Görüntüyü mobil istemci işler (metadata'sız iki varyant, JPEG/WebP) ve
   R2'ye doğrudan, imzalı linkle yükler; core pikselleri çözmeden
   başlıkları denetler ve görme yetkisi olana 1 saatlik imzalı linkle sunar ([ADR-0007](docs/adr/0007-dosyalar-ve-medya.md),
@@ -73,7 +73,7 @@ protokolüyle uçtan uca şifrelidir; geçmiş, kullanıcının kendi anahtarıy
 
 ## Dağıtım
 
-Önce evdeki VM, sonra prod için Türkiye'de bir VPS; ikisinde de tek node'lu
+dev ortamı evdeki bilgisayarda (WSL2), prod Türkiye'de bir VDS'te; ikisinde de tek node'lu
 k3s, Flux ile GitOps, Cloudflare Tunnel, SOPS ile şifreli secret'lar
 ([ADR-0006](docs/adr/0006-dagitim-ve-ortamlar.md)).
 
@@ -93,3 +93,5 @@ Tek Go modülü. Her servis `cmd/<servis>` ve `internal/<servis>` altında;
 
 Issue başına bir alt oturum, PR ile birleştirme, CI zorunlu, hassas alanlarda
 platform sahibinin onayı ([ADR-0010](docs/adr/0010-repo-kurallari-ve-is-akisi.md)).
+İş PR'ları `dev`'e girer; `main` prod'dur ve yalnızca sürüm PR'ıyla ilerler
+([ADR-0034](docs/adr/0034-dev-main-dal-modeli-ve-otomatik-surum.md)).
