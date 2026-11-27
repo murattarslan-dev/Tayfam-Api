@@ -42,7 +42,8 @@ info:
     (`+...`) karşılaştırmada sayılmaz.
 
     **Uygulama bütünlüğü (ADR-0022):** Oturum girişte ve 24 saatte bir
-    Play Integrity ile doğrulanır (`integrity_token`, `integrity_check_after`).
+    Android'de Play Integrity (`integrity_token`), iOS'ta App Attest
+    (`app_attest`) ile doğrulanır (`integrity_check_after`).
     Ortam `enforce` modundaysa doğrulamadan geçmemiş oturumun erişim
     token'ı `integrity-required` (403) alır; WebSocket el sıkışması da.
     Muaf uçlar: giriş, yenileme, çıkış, kayıt, onaylar, oturum listesi ve
@@ -9771,6 +9772,13 @@ components:
             İsteğe bağlı, Android: Play Integrity standard request token'ı
             (ADR-0022). `requestHash` = base64url(SHA-256("tayfam-integrity/v1/sign-in\n" + nonce)),
             dolgusuz.
+        app_attest:
+          allOf: [{ $ref: "#/components/schemas/AppAttestProof" }]
+          description: |
+            İsteğe bağlı, iOS: yeni bir App Attest anahtarının
+            `attestation`'ı (ADR-0022 §4). `clientDataHash` =
+            SHA-256(bağlama), bağlama `integrity_token`'daki `requestHash`
+            ile aynı 43 karakterlik metindir (UTF-8 baytları).
 
     DeleteAccountRequest:
       type: object
@@ -9799,6 +9807,39 @@ components:
             sayılır (ADR-0022). `requestHash` =
             base64url(SHA-256("tayfam-integrity/v1/refresh\n" + SHA-256(refresh_token))), dolgusuz;
             iç özet ham bayttır.
+        app_attest:
+          allOf: [{ $ref: "#/components/schemas/AppAttestProof" }]
+          description: |
+            İsteğe bağlı, iOS: girişte onaylanan anahtarın `assertion`'ı;
+            `integrity_token` ile aynı kural (yalnızca
+            `integrity_check_after` geçtiyse). `clientDataHash` =
+            SHA-256(yenileme bağlaması metni).
+
+    AppAttestProof:
+      type: object
+      required: [key_id]
+      additionalProperties: false
+      description: |
+        iOS App Attest kanıtı (ADR-0022 §4). `attestation` ve `assertion`'dan
+        tam olarak biri bulunur: girişte `attestation`, yenilemede
+        `assertion`. Bayt alanları standart base64'tür. Kanıt loglanmaz;
+        sunucu açık anahtarı ve sayacı cihaza yazar, Apple'ın nesnesini ve
+        receipt'i saklamaz.
+      properties:
+        key_id:
+          type: string
+          format: byte
+          description: |
+            `DCAppAttestService.generateKey`'in verdiği anahtar kimliği
+            (açık anahtarın SHA-256'sı, 32 bayt).
+        attestation:
+          type: string
+          format: byte
+          description: "`attestKey` çıktısı (CBOR), en fazla 16 KiB."
+        assertion:
+          type: string
+          format: byte
+          description: "`generateAssertion` çıktısı (CBOR), en fazla 1 KiB."
 
     Session:
       type: object
@@ -9821,8 +9862,8 @@ components:
           type: string
           format: date-time
           description: |
-            Bu zamandan sonraki ilk yenilemede `integrity_token` gönderilir
-            (ADR-0022). Bütünlük denetimi kapalıyken alan yoktur.
+            Bu zamandan sonraki ilk yenilemede `integrity_token` (Android)
+            ya da `app_attest` (iOS) gönderilir (ADR-0022). Bütünlük denetimi kapalıyken alan yoktur.
 
     RegistrationRequirements:
       type: object

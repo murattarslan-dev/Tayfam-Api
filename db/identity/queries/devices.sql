@@ -10,3 +10,19 @@ UPDATE devices SET last_seen_at = now() WHERE id = @id;
 -- Davranışı").
 -- name: DeleteUserDevices :execrows
 DELETE FROM devices WHERE user_id = @user_id;
+
+-- App Attest (ADR-0022 §4): girişte onaylanan anahtarı yeni cihaza bağlar.
+-- Anahtar başka bir cihazdaysa devices_app_attest_key_id_key kısıtı reddeder
+-- (23505): aynı anahtar ikinci bir cihaza bağlanmaz. Çağıran bu hatayı bir
+-- savepoint içinde, kısıt adıyla ayırır.
+-- name: BindDeviceAppAttestKey :execrows
+UPDATE devices
+SET app_attest_key_id = @key_id, app_attest_public_key = @public_key, app_attest_counter = 0
+WHERE id = @id AND platform = 'ios' AND app_attest_key_id IS NULL;
+
+-- Yenilemede doğrulanan imzanın sayacını saklar; sayaç yalnızca artar.
+-- Satır değişmezse (0) imza eski ya da başka bir yenilemede kullanılmıştır.
+-- name: AdvanceDeviceAppAttestCounter :execrows
+UPDATE devices
+SET app_attest_counter = @counter
+WHERE id = @id AND app_attest_key_id = @key_id AND app_attest_counter < @counter;

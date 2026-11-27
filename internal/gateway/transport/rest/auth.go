@@ -28,6 +28,14 @@ const (
 	// and refresh bodies that may carry one get maxAuthBodyBytes.
 	maxIntegrityToken = 16 << 10
 	maxAuthBodyBytes  = 32 << 10
+	// App Attest proof bounds (ADR-0022 §4): the key identifier is a
+	// SHA-256; identity bounds the objects again. A sign-in body with the
+	// largest attestation (base64: 4/3 of 16 KiB ≈ 21.4 KiB) and the
+	// largest ID token (8 KiB) and nonce stays under maxAuthBodyBytes
+	// (TestAuthBodyFitsLargestProof).
+	appAttestKeyIDSize    = 32
+	maxAppAttestation     = 16 << 10
+	maxAppAttestAssertion = 1 << 10
 )
 
 // AuthClient is the part of identity's AuthService the gateway uses.
@@ -79,6 +87,30 @@ type signInBody struct {
 	Platform string `json:"platform"`
 	// IntegrityToken is the optional Play Integrity proof (ADR-0022).
 	IntegrityToken string `json:"integrity_token"`
+	// AppAttest is the optional App Attest proof (iOS, ADR-0022 §4).
+	AppAttest *appAttestBody `json:"app_attest"`
+}
+
+// appAttestBody is the App Attest proof; the byte fields are standard
+// base64 in JSON.
+type appAttestBody struct {
+	KeyID       []byte `json:"key_id"`
+	Attestation []byte `json:"attestation"`
+	Assertion   []byte `json:"assertion"`
+}
+
+// appAttestProto checks the proof's shape: a 32-byte key identifier and
+// exactly one of attestation and assertion within its bound. Which one a
+// request needs is identity's decision (ADR-0022 §4).
+func appAttestProto(b *appAttestBody) (*identityv1.AppAttest, bool) {
+	if b == nil {
+		return nil, true
+	}
+	if len(b.KeyID) != appAttestKeyIDSize || (len(b.Attestation) == 0) == (len(b.Assertion) == 0) ||
+		len(b.Attestation) > maxAppAttestation || len(b.Assertion) > maxAppAttestAssertion {
+		return nil, false
+	}
+	return &identityv1.AppAttest{KeyId: b.KeyID, Attestation: b.Attestation, Assertion: b.Assertion}, true
 }
 
 // sessionBody is the response of sign-in and refresh. The tokens are
@@ -126,8 +158,9 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 	if b.Provider == "apple" && b.Platform != "ios" {
 		okP = false
 	}
+	attest, okA := appAttestProto(b.AppAttest)
 	if !okP || !okPl || b.IDToken == "" || len(b.IDToken) > 8192 || len(b.Nonce) < 16 || len(b.Nonce) > 256 ||
-		len(b.IntegrityToken) > maxIntegrityToken {
+		len(b.IntegrityToken) > maxIntegrityToken || !okA {
 		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 		return
 	}
@@ -135,6 +168,7 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	resp, err := h.d.Auth.SignIn(ctx, &identityv1.SignInRequest{
 		Provider: provider, IdToken: b.IDToken, Nonce: b.Nonce, Platform: platform, IntegrityToken: b.IntegrityToken,
+		AppAttest: attest,
 	})
 	if err != nil {
 		h.upstreamError(w, r, err)
@@ -144,8 +178,9 @@ func (h authHandlers) signIn(w http.ResponseWriter, r *http.Request) {
 }
 
 type refreshBody struct {
-	RefreshToken   string `json:"refresh_token"`
-	IntegrityToken string `json:"integrity_token"`
+	RefreshToken   string         `json:"refresh_token"`
+	IntegrityToken string         `json:"integrity_token"`
+	AppAttest      *appAttestBody `json:"app_attest"`
 }
 
 func (h authHandlers) refresh(w http.ResponseWriter, r *http.Request) {
@@ -158,7 +193,8 @@ func (h authHandlers) refresh(w http.ResponseWriter, r *http.Request) {
 	if !decodeLimit(w, r, &b, maxAuthBodyBytes) {
 		return
 	}
-	if len(b.IntegrityToken) > maxIntegrityToken {
+	attest, okA := appAttestProto(b.AppAttest)
+	if len(b.IntegrityToken) > maxIntegrityToken || !okA {
 		httpx.WriteProblem(w, r, http.StatusBadRequest, "invalid-request", "Bad Request", "")
 		return
 	}
@@ -169,7 +205,7 @@ func (h authHandlers) refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), upstreamWait)
 	defer cancel()
-	resp, err := h.d.Auth.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: token, IntegrityToken: b.IntegrityToken})
+	resp, err := h.d.Auth.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: token, IntegrityToken: b.IntegrityToken, AppAttest: attest})
 	if err != nil {
 		h.upstreamError(w, r, err)
 		return

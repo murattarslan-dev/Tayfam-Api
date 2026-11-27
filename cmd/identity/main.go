@@ -144,7 +144,7 @@ func setup(rt *service.Runtime) error {
 	if err != nil {
 		return err
 	}
-	checker, err := integrityChecker(rt)
+	checker, err := integrityChecker(rt, appAttestAppID(appleClients, appleTeam))
 	if err != nil {
 		return err
 	}
@@ -424,12 +424,28 @@ func appleSignIn(clients []string, team, keyID, privateKey string) (*oidc.Apple,
 	return apple, revoker, nil
 }
 
+// appAttestAppID is the iOS App ID (TEAMID.bundle) for App Attest
+// (ADR-0022 §4, issue #195). It reuses Apple sign-in's bundle ID and Team
+// ID (identity-apple, ADR-0045): the same app, one place to configure it.
+// Empty when Apple sign-in is not configured.
+func appAttestAppID(appleClients []string, team string) string {
+	if len(appleClients) != 1 || team == "" {
+		return ""
+	}
+	return team + "." + appleClients[0]
+}
+
 // integrityChecker builds the app integrity check (ADR-0022, issue #163).
 // INTEGRITY_MODE is off unless set; report and enforce need the Play
 // Integrity service account (secret, SOPS) and the app's package name and
 // signing certificate digests (not secret). A wrong value stops the service:
 // running unchecked by mistake would look like a working check.
-func integrityChecker(rt *service.Runtime) (*integrity.Checker, error) {
+//
+// iOS App Attest is checked when appID is set (Apple sign-in configured);
+// INTEGRITY_IOS_ENVIRONMENT says which keys count: production (default;
+// TestFlight and App Store builds) or development. Without appID iOS
+// sessions stay unverified (missing).
+func integrityChecker(rt *service.Runtime, appID string) (*integrity.Checker, error) {
 	c := rt.Config
 	mode := integrity.Mode(c.OneOf("INTEGRITY_MODE", "off", "off", "report", "enforce"))
 	if err := c.Err(); err != nil {
@@ -443,6 +459,7 @@ func integrityChecker(rt *service.Runtime) (*integrity.Checker, error) {
 	pkg := c.Required("INTEGRITY_ANDROID_PACKAGE")
 	certs := splitList(c.Required("INTEGRITY_ANDROID_CERT_SHA256"))
 	label := c.OneOf("INTEGRITY_ANDROID_DEVICE_LEVEL", integrity.LabelStrong, integrity.LabelBasic, integrity.LabelDevice, integrity.LabelStrong)
+	iosEnv := c.OneOf("INTEGRITY_IOS_ENVIRONMENT", "production", "production", "development")
 	if err := c.Err(); err != nil {
 		return nil, err
 	}
@@ -458,10 +475,17 @@ func integrityChecker(rt *service.Runtime) (*integrity.Checker, error) {
 	if err != nil {
 		return nil, err
 	}
+	var appAttest *integrity.AppAttest
+	if appID != "" {
+		if appAttest, err = integrity.NewAppAttest(integrity.AppAttestConfig{AppID: appID, Development: iosEnv == "development"}); err != nil {
+			return nil, err
+		}
+	}
 	rt.Log.Info("uygulama bütünlüğü açık",
 		slog.String("mode", string(mode)), slog.String("project_id", acct.ProjectID()),
-		slog.String("device_level", label))
-	return integrity.NewChecker(integrity.Config{Mode: mode, Play: play, Log: rt.Log})
+		slog.String("device_level", label),
+		slog.Bool("app_attest", appAttest != nil), slog.String("ios_environment", iosEnv))
+	return integrity.NewChecker(integrity.Config{Mode: mode, Play: play, AppAttest: appAttest, Log: rt.Log})
 }
 
 // unavailableRelations stands in for core when CORE_GRPC_ADDR is not set

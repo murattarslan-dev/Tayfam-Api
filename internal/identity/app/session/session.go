@@ -263,7 +263,11 @@ func (s *Service) signInTx(ctx context.Context, ident oidc.Identity, platform st
 		if err := q.CreateRefreshToken(ctx, store.CreateRefreshTokenParams{ID: id.New().PG(), SessionID: sessionID.PG(), TokenHash: hash}); err != nil {
 			return fmt.Errorf("refresh token: %w", err)
 		}
-		integ, err := s.applyIntegrity(ctx, q, sessionID, integrity.State{Status: integrity.StatusUnverified}, check)
+		bound, err := s.bindAppAttestKey(ctx, tx, deviceID, check)
+		if err != nil {
+			return err
+		}
+		integ, err := s.applyIntegrity(ctx, q, sessionID, integrity.State{Status: integrity.StatusUnverified}, bound)
 		if err != nil {
 			return err
 		}
@@ -271,6 +275,73 @@ func (s *Service) signInTx(ctx context.Context, ident oidc.Identity, platform st
 		return err
 	})
 	return t, err
+}
+
+// bindAppAttestKey binds the key of a passed App Attest sign-in to the new
+// device (ADR-0022 §4). A key already bound to a device, this account's or
+// another's, is not bound twice: the check counts as failed (binding).
+// check itself is not changed; a retried transaction gets it again.
+//
+// The key's uniqueness is the database's (devices_app_attest_key_id_key).
+// The update runs in a savepoint so that its unique violation is told apart
+// by constraint name and answered here: it must not end the transaction
+// and reach SignIn's retry, which is for two first sign-ins racing to
+// create the same account.
+func (s *Service) bindAppAttestKey(ctx context.Context, tx pgx.Tx, device id.ID, check *integrity.Result) (*integrity.Result, error) {
+	if check == nil || check.Key == nil {
+		return check, nil
+	}
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("app attest savepoint: %w", err)
+	}
+	n, err := s.q.WithTx(sp).BindDeviceAppAttestKey(ctx, store.BindDeviceAppAttestKeyParams{
+		KeyID: check.Key.KeyID, PublicKey: check.Key.PublicKey, ID: device.PG(),
+	})
+	var pgErr *pgconn.PgError
+	switch {
+	case errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == appAttestKeyConstraint:
+		if rbErr := sp.Rollback(ctx); rbErr != nil {
+			return nil, fmt.Errorf("app attest savepoint: %w", rbErr)
+		}
+		n = 0
+	case err != nil:
+		_ = sp.Rollback(ctx)
+		return nil, fmt.Errorf("app attest anahtarı: %w", err)
+	default:
+		if err := sp.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("app attest savepoint: %w", err)
+		}
+	}
+	if n == 1 {
+		return check, nil
+	}
+	s.cfg.Log.InfoContext(ctx, "app attest anahtarı zaten bağlı; denetim geçmedi")
+	return &integrity.Result{Status: integrity.StatusFailed, Reason: integrity.ReasonBinding}, nil
+}
+
+// appAttestKeyConstraint is the unique key on devices.app_attest_key_id
+// (db/identity/migrations/00017).
+const appAttestKeyConstraint = "devices_app_attest_key_id_key"
+
+// advanceAppAttestCounter stores the counter of a passed App Attest
+// refresh. If another refresh stored a counter at least as high meanwhile,
+// the assertion is a replay: the check counts as failed (binding).
+func (s *Service) advanceAppAttestCounter(ctx context.Context, q *store.Queries, device pgtype.UUID, check *integrity.Result) (*integrity.Result, error) {
+	if check == nil || check.Key == nil {
+		return check, nil
+	}
+	n, err := q.AdvanceDeviceAppAttestCounter(ctx, store.AdvanceDeviceAppAttestCounterParams{
+		Counter: pgtype.Int8{Int64: check.Key.Counter, Valid: true}, ID: device, KeyID: check.Key.KeyID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("app attest sayacı: %w", err)
+	}
+	if n == 1 {
+		return check, nil
+	}
+	s.cfg.Log.InfoContext(ctx, "app attest sayacı ilerlemedi; denetim geçmedi")
+	return &integrity.Result{Status: integrity.StatusFailed, Reason: integrity.ReasonBinding}, nil
 }
 
 // Refresh exchanges a refresh token for a new access and refresh token.
@@ -358,6 +429,10 @@ func (s *Service) RefreshWithProof(ctx context.Context, refreshToken string, pro
 		if check != nil && !prev.Due(now) {
 			// Another refresh checked the session in the meantime.
 			check = nil
+		}
+		check, err = s.advanceAppAttestCounter(ctx, q, row.DeviceID, check)
+		if err != nil {
+			return err
 		}
 		integ, err := s.applyIntegrity(ctx, q, sessionID, prev, check)
 		if err != nil {
@@ -594,7 +669,11 @@ func (s *Service) refreshCheck(ctx context.Context, hash []byte, refreshToken st
 	if !prev.Due(s.cfg.Now()) {
 		return nil
 	}
-	return s.cfg.Integrity.Check(ctx, row.Platform, proof, integrity.RefreshBinding(refreshToken))
+	var key *integrity.AttestedKey
+	if row.AppAttestKeyID != nil && row.AppAttestCounter.Valid {
+		key = &integrity.AttestedKey{KeyID: row.AppAttestKeyID, PublicKey: row.AppAttestPublicKey, Counter: row.AppAttestCounter.Int64}
+	}
+	return s.cfg.Integrity.CheckRefresh(ctx, row.Platform, proof, integrity.RefreshBinding(refreshToken), key)
 }
 
 // integrityInfo is what a session's integrity puts on its tokens.

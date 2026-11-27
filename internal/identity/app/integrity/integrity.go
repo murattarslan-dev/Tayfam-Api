@@ -1,6 +1,6 @@
 // Package integrity checks that a session belongs to the official app
 // (ADR-0022, issue #163): Play Integrity on Android, App Attest on iOS
-// (later). A check runs at sign-in and, once the last pass is older than
+// (issue #195). A check runs at sign-in and, once the last pass is older than
 // Recheck, at token refresh; its outcome is kept on the session.
 //
 // A proof is bound to a value the server already treats as single use and
@@ -95,16 +95,24 @@ const (
 type Proof struct {
 	// Android is a Play Integrity standard request token.
 	Android string
+	// AppAttest is the iOS proof.
+	AppAttest *AppAttestProof
 }
 
 // Empty reports whether no proof came.
-func (p Proof) Empty() bool { return p.Android == "" }
+func (p Proof) Empty() bool { return p.Android == "" && p.AppAttest == nil }
 
 // Result is one check's outcome. Status is empty for ReasonUnavailable:
 // whether the session stays passed depends on its history (Next).
 type Result struct {
 	Status Status
 	Reason Reason
+	// Key is set by a passed App Attest check: at sign-in the new key to
+	// bind to the device, at refresh the device's key with the assertion's
+	// counter. The caller stores it or, if it cannot (the key is another
+	// account's, the counter moved meanwhile), records the check as failed
+	// with ReasonBinding instead.
+	Key *AttestedKey
 }
 
 // State is a session's integrity as stored.
