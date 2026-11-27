@@ -32,7 +32,7 @@ identity_db=${IDENTITY_DB_NAME:-identity}
 core_db=${CORE_DB_NAME:-core}
 chat_db=${CHAT_DB_NAME:-chat}
 export GOOGLE_CLIENT_IDS=${GOOGLE_CLIENT_IDS:-yerel-gelistirme.apps.googleusercontent.com}
-export CONSENT_PRIVACY_NOTICE_VERSION=2026-11-08 CONSENT_TERMS_VERSION=2026-11-08
+export CONSENT_PRIVACY_NOTICE_VERSION=2026-11-27 CONSENT_TERMS_VERSION=2026-11-27
 birthdate_key="1:$(head -c 32 /dev/urandom | base64 -w0)"
 # Kanal mesajı anahtarı da her çalıştırmada yenidir: önceki çalıştırmanın
 # kanal mesajları okunamaz (yerel, atılabilir veri).

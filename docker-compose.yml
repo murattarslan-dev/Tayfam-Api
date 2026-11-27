@@ -44,8 +44,8 @@ services:
       DB_PASSWORD: yerel
       DB_SSLMODE: disable
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-yerel-gelistirme.apps.googleusercontent.com}
-      CONSENT_PRIVACY_NOTICE_VERSION: "2026-11-23"
-      CONSENT_TERMS_VERSION: "2026-11-08"
+      CONSENT_PRIVACY_NOTICE_VERSION: "2026-11-27"
+      CONSENT_TERMS_VERSION: "2026-11-27"
     depends_on:
       identity-migrate: { condition: service_completed_successfully }
 
