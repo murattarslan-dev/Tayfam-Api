@@ -17,8 +17,8 @@ DELETE FROM devices WHERE user_id = @user_id;
 -- name: BindDeviceAppAttestKey :execrows
 UPDATE devices
 SET app_attest_key_id = @key_id, app_attest_public_key = @public_key, app_attest_counter = 0
-WHERE id = @id AND platform = 'ios' AND app_attest_key_id IS NULL
-  AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.app_attest_key_id = @key_id);
+WHERE devices.id = @id AND devices.platform = 'ios' AND devices.app_attest_key_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM devices other WHERE other.app_attest_key_id = @key_id);
 
 -- Yenilemede doğrulanan imzanın sayacını saklar; sayaç yalnızca artar.
 -- Satır değişmezse (0) imza eski ya da başka bir yenilemede kullanılmıştır.

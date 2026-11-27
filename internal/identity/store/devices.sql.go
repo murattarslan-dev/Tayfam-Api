@@ -36,8 +36,8 @@ func (q *Queries) AdvanceDeviceAppAttestCounter(ctx context.Context, arg Advance
 const bindDeviceAppAttestKey = `-- name: BindDeviceAppAttestKey :execrows
 UPDATE devices
 SET app_attest_key_id = $1, app_attest_public_key = $2, app_attest_counter = 0
-WHERE id = $3 AND platform = 'ios' AND app_attest_key_id IS NULL
-  AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.app_attest_key_id = $1)
+WHERE devices.id = $3 AND devices.platform = 'ios' AND devices.app_attest_key_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM devices other WHERE other.app_attest_key_id = $1)
 `
 
 type BindDeviceAppAttestKeyParams struct {
