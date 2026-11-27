@@ -21,6 +21,13 @@ type Querier interface {
 	// Kopyanın sürümünü yalnızca daha yeni bir sürüme taşır; eşit ya da eski
 	// sürümde satır dönmez (olay zaten uygulanmış ya da geç gelmiş).
 	AdvanceCatalogCopyVersion(ctx context.Context, catalogVersion int64) (int64, error)
+	// Yenilemede doğrulanan imzanın sayacını saklar; sayaç yalnızca artar.
+	// Satır değişmezse (0) imza eski ya da başka bir yenilemede kullanılmıştır.
+	AdvanceDeviceAppAttestCounter(ctx context.Context, arg AdvanceDeviceAppAttestCounterParams) (int64, error)
+	// App Attest (ADR-0022 §4): girişte onaylanan anahtarı yeni cihaza bağlar.
+	// Anahtar başka bir cihazdaysa satır değişmez (0): aynı anahtar ikinci bir
+	// cihaza bağlanmaz.
+	BindDeviceAppAttestKey(ctx context.Context, arg BindDeviceAppAttestKeyParams) (int64, error)
 	BlockRegistrationForAge(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Veri modeli v14: domain_events.actor_id hesap silinince NULL olur.
 	ClearEventActor(ctx context.Context, userID pgtype.UUID) error
@@ -175,7 +182,9 @@ type Querier interface {
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Yenilemeden önce, kilitsiz: oturumun bütünlük denetimi gerekiyor mu ve
 	// cihaz hangi platformda (ADR-0022). Google'a transaction dışında gidilir;
-	// karar transaction'da kilitli satırla yeniden verilir.
+	// karar transaction'da kilitli satırla yeniden verilir. iOS'ta cihazın App
+	// Attest anahtarı da okunur; imza transaction dışında doğrulanır, sayaç
+	// transaction'da koşullu güncellenir.
 	PeekRefreshIntegrity(ctx context.Context, tokenHash []byte) (PeekRefreshIntegrityRow, error)
 	// Satır 30 gün tutulur ("30 günde bir" sınırı); anahtarsız ve dosyasızdır.
 	PurgeDataExports(ctx context.Context, arg PurgeDataExportsParams) (int64, error)

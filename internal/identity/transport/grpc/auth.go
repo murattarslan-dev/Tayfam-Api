@@ -64,12 +64,13 @@ func (s *AuthServer) SignIn(ctx context.Context, req *identityv1.SignInRequest) 
 		return nil, fail(codes.InvalidArgument, identityv1.ErrorReason_ERROR_REASON_UNSUPPORTED_PROVIDER)
 	}
 	platform := platforms[req.GetPlatform()]
-	if platform == "" || len(req.GetIdToken()) > maxIDToken || len(req.GetNonce()) > maxNonce || len(req.GetIntegrityToken()) > integrity.MaxPlayToken {
+	attest, ok := appAttestProof(req.GetAppAttest())
+	if platform == "" || len(req.GetIdToken()) > maxIDToken || len(req.GetNonce()) > maxNonce || len(req.GetIntegrityToken()) > integrity.MaxPlayToken || !ok {
 		return nil, fail(codes.Unauthenticated, identityv1.ErrorReason_ERROR_REASON_INVALID_CREDENTIALS)
 	}
 	t, err := s.sessions.SignIn(ctx, session.SignInInput{
 		Provider: provider, IDToken: req.GetIdToken(), Nonce: req.GetNonce(), Platform: platform,
-		Integrity: integrity.Proof{Android: req.GetIntegrityToken()},
+		Integrity: integrity.Proof{Android: req.GetIntegrityToken(), AppAttest: attest},
 	})
 	if err != nil {
 		return nil, s.mapError(ctx, err)
@@ -82,10 +83,11 @@ func (s *AuthServer) Refresh(ctx context.Context, req *identityv1.RefreshRequest
 	if len(req.GetRefreshToken()) > maxRefresh {
 		return nil, fail(codes.Unauthenticated, identityv1.ErrorReason_ERROR_REASON_INVALID_REFRESH)
 	}
-	if len(req.GetIntegrityToken()) > integrity.MaxPlayToken {
-		return nil, status.Error(codes.InvalidArgument, "bütünlük token'ı çok uzun")
+	attest, ok := appAttestProof(req.GetAppAttest())
+	if len(req.GetIntegrityToken()) > integrity.MaxPlayToken || !ok {
+		return nil, status.Error(codes.InvalidArgument, "bütünlük kanıtı çok uzun")
 	}
-	t, err := s.sessions.RefreshWithProof(ctx, req.GetRefreshToken(), integrity.Proof{Android: req.GetIntegrityToken()})
+	t, err := s.sessions.RefreshWithProof(ctx, req.GetRefreshToken(), integrity.Proof{Android: req.GetIntegrityToken(), AppAttest: attest})
 	if err != nil {
 		return nil, s.mapError(ctx, err)
 	}
@@ -161,4 +163,29 @@ func tokens(t session.Tokens) *identityv1.Tokens {
 		out.IntegrityCheckAfter = timestamppb.New(t.IntegrityCheckAfter)
 	}
 	return out
+}
+
+// appAttestProof reads the optional App Attest proof; ok is false when a
+// part is over its bound (ADR-0022 §4). Which part a request needs is the
+// checker's decision.
+func appAttestProof(p *identityv1.AppAttest) (*integrity.AppAttestProof, bool) {
+	if p == nil {
+		return nil, true
+	}
+	if len(p.GetKeyId()) > integrity.AppAttestKeyIDSize || len(p.GetAttestation()) > integrity.MaxAppAttestation ||
+		len(p.GetAssertion()) > integrity.MaxAppAssertion {
+		return nil, false
+	}
+	return &integrity.AppAttestProof{
+		KeyID: p.GetKeyId(), Attestation: nonEmpty(p.GetAttestation()), Assertion: nonEmpty(p.GetAssertion()),
+	}, true
+}
+
+// nonEmpty is nil for an empty byte string: proto3 does not tell an absent
+// bytes field from an empty one.
+func nonEmpty(b []byte) []byte {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
 }

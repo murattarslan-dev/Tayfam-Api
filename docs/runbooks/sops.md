@@ -444,6 +444,17 @@ Birleştikten sonra identity'yi yeniden başlatın; log'da
 ve eşik ayrıca kararlaştırılır (ADR-0022 §6). `enforce` gateway'de de aynı
 `INTEGRITY_MODE` değişkenini okur.
 
+**iOS (App Attest, issue #195).** Ayrı bir secret yoktur: identity App ID'yi
+Apple ile girişin `identity-apple` secret'ındaki bundle kimliği ve Team
+ID'den kurar (`TEAMID.bundle`). O secret varken ve `INTEGRITY_MODE` açıkken
+log satırında `app_attest=true` görünür; yoksa iOS oturumları `missing`
+sayılır. Platform sahibinin tek adımı, Apple Developer → *Identifiers* →
+uygulama kimliğinde **App Attest** yeteneğini açmaktır (imzalı
+TestFlight/App Store derlemesinin entitlement'ı bunu ister). Kabul edilen
+anahtar ortamı `INTEGRITY_IOS_ENVIRONMENT`'tır (`production` varsayılan;
+yalnızca Xcode'dan development entitlement'ıyla kurulan derlemeler için
+`development`).
+
 Rotasyon: Google Cloud'da yeni JSON anahtarı üretin,
 `deploy/apps/<ortam>/secrets/identity-integrity.sops.yaml`'ı silip
 betiği yeniden çalıştırın; birleşip identity yeniden başlayınca eski

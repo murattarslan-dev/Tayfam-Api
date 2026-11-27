@@ -143,6 +143,32 @@ func TestIntegrityFieldsPassThrough(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("uzun token: %d", w.Code)
 	}
+	// App Attest: base64 parts reach identity as bytes; a wrong shape is
+	// refused before.
+	key := strings.Repeat("A", 43) + "=" // 32 zero bytes
+	ios := map[string]string{clientHeader: "ios"}
+	body = strings.Replace(signInBodyFor("ios"), `{`, `{"app_attest":{"key_id":"`+key+`","attestation":"YXR0"},`, 1)
+	w = do(h, "POST", "/v1/auth/sign-in", body, ios)
+	if a := f.gotSignIn.GetAppAttest(); w.Code != 200 || len(a.GetKeyId()) != 32 || string(a.GetAttestation()) != "att" || a.GetAssertion() != nil {
+		t.Fatalf("app attest girişi: %d %s", w.Code, w.Body)
+	}
+	w = do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"R","app_attest":{"key_id":"`+key+`","assertion":"YXM="}}`, ios)
+	if a := f.gotRefreshReq.GetAppAttest(); w.Code != 200 || string(a.GetAssertion()) != "as" {
+		t.Fatalf("app attest yenilemesi: %d %s", w.Code, w.Body)
+	}
+	for name, a := range map[string]string{
+		"kısa anahtar":   `{"key_id":"AAAA","assertion":"YXM="}`,
+		"ikisi birden":   `{"key_id":"` + key + `","attestation":"YXR0","assertion":"YXM="}`,
+		"hiçbiri":        `{"key_id":"` + key + `"}`,
+		"base64 değil":   `{"key_id":"` + key + `","assertion":"%%%"}`,
+		"uzun assertion": `{"key_id":"` + key + `","assertion":"` + strings.Repeat("A", 4*(maxAppAttestAssertion/3+1)) + `"}`,
+	} {
+		w = do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"R","app_attest":`+a+`}`, ios)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", name, w.Code)
+		}
+	}
+
 	// Checks off: the field is absent.
 	f.checkAfter = nil
 	w = do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"R"}`, map[string]string{clientHeader: "android"})

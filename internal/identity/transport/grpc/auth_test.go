@@ -146,6 +146,34 @@ func TestIntegrityPassesThrough(t *testing.T) {
 	if _, err := srv.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: "x", IntegrityToken: long}); status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("uzun token: %v", err)
 	}
+	// App Attest: the parts reach the session layer, empty ones as absent;
+	// an oversized part is refused before.
+	key := make([]byte, integrity.AppAttestKeyIDSize)
+	if _, err := srv.SignIn(ctx, &identityv1.SignInRequest{
+		Provider: identityv1.Provider_PROVIDER_GOOGLE, IdToken: "tok", Nonce: "n", Platform: identityv1.Platform_PLATFORM_IOS,
+		AppAttest: &identityv1.AppAttest{KeyId: key, Attestation: []byte("att")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if a := f.gotIn.Integrity.AppAttest; a == nil || len(a.KeyID) != len(key) || string(a.Attestation) != "att" || a.Assertion != nil {
+		t.Fatalf("app attest girişi: %+v", a)
+	}
+	if _, err := srv.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: "x", AppAttest: &identityv1.AppAttest{KeyId: key, Assertion: []byte("as")}}); err != nil {
+		t.Fatal(err)
+	}
+	if a := f.gotProof.AppAttest; a == nil || string(a.Assertion) != "as" || a.Attestation != nil {
+		t.Fatalf("app attest yenilemesi: %+v", a)
+	}
+	for name, a := range map[string]*identityv1.AppAttest{
+		"uzun anahtar":     {KeyId: make([]byte, integrity.AppAttestKeyIDSize+1)},
+		"uzun attestation": {KeyId: key, Attestation: make([]byte, integrity.MaxAppAttestation+1)},
+		"uzun assertion":   {KeyId: key, Assertion: make([]byte, integrity.MaxAppAssertion+1)},
+	} {
+		if _, err := srv.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: "x", AppAttest: a}); status.Code(err) != codes.InvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+
 	// With checks off there is no next check time.
 	f.checkAt = time.Time{}
 	r, _ = srv.Refresh(ctx, &identityv1.RefreshRequest{RefreshToken: "x"})

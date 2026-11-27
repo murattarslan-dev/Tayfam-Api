@@ -11,6 +11,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const advanceDeviceAppAttestCounter = `-- name: AdvanceDeviceAppAttestCounter :execrows
+UPDATE devices
+SET app_attest_counter = $1
+WHERE id = $2 AND app_attest_key_id = $3 AND app_attest_counter < $1
+`
+
+type AdvanceDeviceAppAttestCounterParams struct {
+	Counter pgtype.Int8
+	ID      pgtype.UUID
+	KeyID   []byte
+}
+
+// Yenilemede doğrulanan imzanın sayacını saklar; sayaç yalnızca artar.
+// Satır değişmezse (0) imza eski ya da başka bir yenilemede kullanılmıştır.
+func (q *Queries) AdvanceDeviceAppAttestCounter(ctx context.Context, arg AdvanceDeviceAppAttestCounterParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceDeviceAppAttestCounter, arg.Counter, arg.ID, arg.KeyID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const bindDeviceAppAttestKey = `-- name: BindDeviceAppAttestKey :execrows
+UPDATE devices
+SET app_attest_key_id = $1, app_attest_public_key = $2, app_attest_counter = 0
+WHERE id = $3 AND platform = 'ios' AND app_attest_key_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM devices d WHERE d.app_attest_key_id = $1)
+`
+
+type BindDeviceAppAttestKeyParams struct {
+	KeyID     []byte
+	PublicKey []byte
+	ID        pgtype.UUID
+}
+
+// App Attest (ADR-0022 §4): girişte onaylanan anahtarı yeni cihaza bağlar.
+// Anahtar başka bir cihazdaysa satır değişmez (0): aynı anahtar ikinci bir
+// cihaza bağlanmaz.
+func (q *Queries) BindDeviceAppAttestKey(ctx context.Context, arg BindDeviceAppAttestKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, bindDeviceAppAttestKey, arg.KeyID, arg.PublicKey, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createDevice = `-- name: CreateDevice :exec
 INSERT INTO devices (id, user_id, platform)
 VALUES ($1, $2, $3)

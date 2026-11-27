@@ -161,3 +161,127 @@ func TestIntegrityOffTouchesNothing(t *testing.T) {
 		t.Fatalf("kapalıyken kayıt = %+v", s)
 	}
 }
+
+// setupAppAttest is setupIntegrity with App Attest against a fake Apple.
+func setupAppAttest(t *testing.T) (*env, *integritytest.Apple) {
+	t.Helper()
+	e := setup(t)
+	clock := func() time.Time { return *e.clock }
+	_, p := integritytest.New(t, clock)
+	apple, aa := integritytest.NewApple(t, clock)
+	c, err := integrity.NewChecker(integrity.Config{Mode: integrity.ModeReport, Play: p, AppAttest: aa, Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := e.cfg
+	cfg.Integrity = c
+	if e.svc, err = New(cfg); err != nil {
+		t.Fatal(err)
+	}
+	return e, apple
+}
+
+func (e *env) signInIOS(t *testing.T, subject string, proof integrity.Proof) Tokens {
+	t.Helper()
+	tok, err := e.svc.SignIn(context.Background(), SignInInput{Provider: "google", IDToken: "ok:" + subject, Nonce: "n", Platform: "ios", Integrity: proof})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tok
+}
+
+// deviceKey is the App Attest key of a session's device; counter is -1
+// without one.
+func (e *env) deviceKey(t *testing.T, session id.ID) ([]byte, int64) {
+	t.Helper()
+	var (
+		key     []byte
+		counter pgtype.Int8
+	)
+	if err := e.pool.QueryRow(context.Background(),
+		`SELECT d.app_attest_key_id, d.app_attest_counter FROM sessions s JOIN devices d ON d.id = s.device_id WHERE s.id = $1`,
+		session.PG()).Scan(&key, &counter); err != nil {
+		t.Fatal(err)
+	}
+	if !counter.Valid {
+		return key, -1
+	}
+	return key, counter.Int64
+}
+
+// TestIntegrityAppAttest walks an iOS session through ADR-0022 §4: the key
+// attested at sign-in is bound to the device, a refresh proves itself with
+// an assertion and its counter is kept; a replay and a key bound before do
+// not pass. Report mode refuses nothing.
+func TestIntegrityAppAttest(t *testing.T) {
+	e, apple := setupAppAttest(t)
+	ctx := context.Background()
+	dev := apple.NewDevice()
+	attest := func(d *integritytest.Device, b string) integrity.Proof {
+		return integrity.Proof{AppAttest: &integrity.AppAttestProof{KeyID: d.KeyID, Attestation: d.Attest(b)}}
+	}
+	assertion := func(as []byte) integrity.Proof {
+		return integrity.Proof{AppAttest: &integrity.AppAttestProof{KeyID: dev.KeyID, Assertion: as}}
+	}
+
+	tok := e.signInIOS(t, "sub-ios", attest(dev, integrity.SignInBinding("n")))
+	if !tok.IntegrityPassed {
+		t.Fatalf("giriş: %+v", tok)
+	}
+	if key, counter := e.deviceKey(t, tok.SessionID); string(key) != string(dev.KeyID) || counter != 0 {
+		t.Fatalf("cihaz anahtarı: %x %d", key, counter)
+	}
+
+	// The same key on another sign-in, even of the same account, is not
+	// bound twice.
+	again := e.signInIOS(t, "sub-ios", attest(dev, integrity.SignInBinding("n")))
+	if again.IntegrityPassed {
+		t.Fatal("aynı anahtar ikinci kez geçti")
+	}
+	if s := e.integrityOf(t, again.SessionID); s.status != "failed" || s.reason.String != "binding" {
+		t.Fatalf("ikinci bağlama kaydı = %+v", s)
+	}
+	if key, _ := e.deviceKey(t, again.SessionID); key != nil {
+		t.Fatal("anahtar ikinci cihaza bağlandı")
+	}
+
+	// After 24 hours a refresh carries an assertion bound to it.
+	e.now = e.now.Add(25 * time.Hour)
+	tok, err := e.svc.RefreshWithProof(ctx, tok.RefreshToken, assertion(dev.Assert(integrity.RefreshBinding(tok.RefreshToken))))
+	if err != nil || !tok.IntegrityPassed {
+		t.Fatalf("assertion: %v %v", tok.IntegrityPassed, err)
+	}
+	if _, counter := e.deviceKey(t, tok.SessionID); counter != 1 {
+		t.Fatalf("sayaç = %d", counter)
+	}
+
+	// A day later an assertion with an old counter is a replay: failed,
+	// but the refresh goes through.
+	e.now = e.now.Add(25 * time.Hour)
+	tok, err = e.svc.RefreshWithProof(ctx, tok.RefreshToken, assertion(dev.AssertWith(integrity.RefreshBinding(tok.RefreshToken), 1)))
+	if err != nil || tok.AccessToken == "" || tok.IntegrityPassed {
+		t.Fatalf("tekrar: %v %v", tok.IntegrityPassed, err)
+	}
+	if s := e.integrityOf(t, tok.SessionID); s.status != "failed" || s.reason.String != "binding" {
+		t.Fatalf("tekrar kaydı = %+v", s)
+	}
+	if _, counter := e.deviceKey(t, tok.SessionID); counter != 1 {
+		t.Fatalf("tekrar sayacı değiştirdi: %d", counter)
+	}
+
+	// An hour later the next assertion passes again.
+	e.now = e.now.Add(2 * time.Hour)
+	tok, err = e.svc.RefreshWithProof(ctx, tok.RefreshToken, assertion(dev.Assert(integrity.RefreshBinding(tok.RefreshToken))))
+	if err != nil || !tok.IntegrityPassed {
+		t.Fatalf("sonraki assertion: %v %v", tok.IntegrityPassed, err)
+	}
+	if _, counter := e.deviceKey(t, tok.SessionID); counter != 2 {
+		t.Fatalf("sayaç = %d", counter)
+	}
+
+	// A sign-in without a proof binds nothing.
+	plain := e.signInIOS(t, "sub-ios-2", integrity.Proof{})
+	if key, counter := e.deviceKey(t, plain.SessionID); key != nil || counter != -1 {
+		t.Fatalf("kanıtsız girişte anahtar: %x %d", key, counter)
+	}
+}
