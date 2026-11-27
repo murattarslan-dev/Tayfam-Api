@@ -29,7 +29,10 @@ const (
 	maxIntegrityToken = 16 << 10
 	maxAuthBodyBytes  = 32 << 10
 	// App Attest proof bounds (ADR-0022 §4): the key identifier is a
-	// SHA-256; identity bounds the objects again.
+	// SHA-256; identity bounds the objects again. A sign-in body with the
+	// largest attestation (base64: 4/3 of 16 KiB ≈ 21.4 KiB) and the
+	// largest ID token (8 KiB) and nonce stays under maxAuthBodyBytes
+	// (TestAuthBodyFitsLargestProof).
 	appAttestKeyIDSize    = 32
 	maxAppAttestation     = 16 << 10
 	maxAppAttestAssertion = 1 << 10

@@ -176,3 +176,28 @@ func TestIntegrityFieldsPassThrough(t *testing.T) {
 		t.Fatalf("kapalıyken alan var: %s", w.Body)
 	}
 }
+
+// TestAuthBodyFitsLargestProof: the auth body limit leaves room for the
+// largest App Attest attestation together with the largest ID token and
+// nonce the sign-in accepts.
+func TestAuthBodyFitsLargestProof(t *testing.T) {
+	body, err := json.Marshal(map[string]any{
+		"provider": "google", "platform": "ios",
+		"id_token": strings.Repeat("x", 8192), "nonce": strings.Repeat("n", 256),
+		"app_attest": map[string]any{
+			"key_id":      make([]byte, appAttestKeyIDSize),
+			"attestation": make([]byte, maxAppAttestation),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) > maxAuthBodyBytes {
+		t.Fatalf("gövde %d bayt, sınır %d", len(body), maxAuthBodyBytes)
+	}
+	f := &fakeIdentity{}
+	w := do(newTestRouter(f), "POST", "/v1/auth/sign-in", string(body), map[string]string{clientHeader: "ios"})
+	if w.Code != http.StatusOK || len(f.gotSignIn.GetAppAttest().GetAttestation()) != maxAppAttestation {
+		t.Fatalf("en büyük kanıt: %d %s", w.Code, w.Body)
+	}
+}

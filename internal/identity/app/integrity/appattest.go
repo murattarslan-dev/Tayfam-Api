@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"testing"
 	"time"
 )
 
@@ -100,7 +101,8 @@ type AppAttestConfig struct {
 	Development bool
 	Now         func() time.Time
 	// TestRoots replaces Apple's root, for tests that make their own
-	// attestations (integritytest). cmd/identity never sets it.
+	// attestations (integritytest). NewAppAttest refuses it outside a test
+	// binary (testing.Testing), so a service can never trust another root.
 	TestRoots *x509.CertPool
 }
 
@@ -128,6 +130,9 @@ func NewAppAttest(cfg AppAttestConfig) (*AppAttest, error) {
 	roots := x509.NewCertPool()
 	roots.AddCert(root)
 	if cfg.TestRoots != nil {
+		if !testing.Testing() {
+			return nil, errors.New("integrity: TestRoots yalnızca testlerde")
+		}
 		roots = cfg.TestRoots
 	}
 	a := &AppAttest{rpIDHash: sha256.Sum256([]byte(cfg.AppID)), aaguid: aaguidProduction, roots: roots, now: cfg.Now}

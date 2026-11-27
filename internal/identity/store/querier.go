@@ -25,8 +25,9 @@ type Querier interface {
 	// Satır değişmezse (0) imza eski ya da başka bir yenilemede kullanılmıştır.
 	AdvanceDeviceAppAttestCounter(ctx context.Context, arg AdvanceDeviceAppAttestCounterParams) (int64, error)
 	// App Attest (ADR-0022 §4): girişte onaylanan anahtarı yeni cihaza bağlar.
-	// Anahtar başka bir cihazdaysa satır değişmez (0): aynı anahtar ikinci bir
-	// cihaza bağlanmaz.
+	// Anahtar başka bir cihazdaysa devices_app_attest_key_id_key kısıtı reddeder
+	// (23505): aynı anahtar ikinci bir cihaza bağlanmaz. Çağıran bu hatayı bir
+	// savepoint içinde, kısıt adıyla ayırır.
 	BindDeviceAppAttestKey(ctx context.Context, arg BindDeviceAppAttestKeyParams) (int64, error)
 	BlockRegistrationForAge(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Veri modeli v14: domain_events.actor_id hesap silinince NULL olur.

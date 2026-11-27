@@ -103,15 +103,42 @@ func (a *Apple) NewDevice() *Device {
 
 // Attest returns the key's attestation for binding (clientDataHash =
 // SHA-256(binding)), as DCAppAttestService.attestKey would.
-func (d *Device) Attest(binding string) []byte {
+func (d *Device) Attest(binding string) []byte { return d.AttestWith(binding, AttestOptions{}) }
+
+// AttestOptions bend an attestation for negative tests. The zero value is a
+// well-formed attestation.
+type AttestOptions struct {
+	OnlyLeaf     bool   // x5c without the intermediate
+	NoNonce      bool   // leaf without the nonce extension
+	NoAttested   bool   // AT flag cleared
+	Counter      uint32 // authenticator data counter
+	AAGUID       string // default production ("appattest" + 7 NULs)
+	CredentialID []byte // default the key ID
+}
+
+// AttestWith is Attest bent by o.
+func (d *Device) AttestWith(binding string, o AttestOptions) []byte {
 	a := d.apple
 	a.t.Helper()
+	aaguid := o.AAGUID
+	if aaguid == "" {
+		aaguid = "appattest\x00\x00\x00\x00\x00\x00\x00"
+	}
+	cred := o.CredentialID
+	if cred == nil {
+		cred = d.KeyID
+	}
+	flags := byte(0x40)
+	if o.NoAttested {
+		flags = 0
+	}
 	rp := sha256.Sum256([]byte(AppID))
 	authData := append([]byte{}, rp[:]...)
-	authData = append(authData, 0x40, 0, 0, 0, 0)
-	authData = append(authData, "appattest\x00\x00\x00\x00\x00\x00\x00"...)
-	authData = binary.BigEndian.AppendUint16(authData, uint16(len(d.KeyID))) //nolint:gosec // 32
-	authData = append(authData, d.KeyID...)
+	authData = append(authData, flags)
+	authData = binary.BigEndian.AppendUint32(authData, o.Counter)
+	authData = append(authData, aaguid...)
+	authData = binary.BigEndian.AppendUint16(authData, uint16(len(cred))) //nolint:gosec // test IDs are short
+	authData = append(authData, cred...)
 	cdh := sha256.Sum256([]byte(binding))
 	nonce := sha256.Sum256(append(append([]byte{}, authData...), cdh[:]...))
 	ext, err := asn1.Marshal(struct {
@@ -120,12 +147,18 @@ func (d *Device) Attest(binding string) []byte {
 	if err != nil {
 		a.t.Fatal(err)
 	}
-	leaf := a.cert(&x509.Certificate{Subject: pkix.Name{CommonName: "fake device key"}, KeyUsage: x509.KeyUsageDigitalSignature,
-		ExtraExtensions: []pkix.Extension{{Id: asn1.ObjectIdentifier{1, 2, 840, 113635, 100, 8, 2}, Value: ext}}},
-		a.inter, a.interKey, &d.key.PublicKey)
+	tmpl := &x509.Certificate{Subject: pkix.Name{CommonName: "fake device key"}, KeyUsage: x509.KeyUsageDigitalSignature}
+	if !o.NoNonce {
+		tmpl.ExtraExtensions = []pkix.Extension{{Id: asn1.ObjectIdentifier{1, 2, 840, 113635, 100, 8, 2}, Value: ext}}
+	}
+	leaf := a.cert(tmpl, a.inter, a.interKey, &d.key.PublicKey)
+	x5c := []any{leaf.Raw, a.inter.Raw}
+	if o.OnlyLeaf {
+		x5c = x5c[:1]
+	}
 	return cborMap(map[string]any{
 		"fmt":      "apple-appattest",
-		"attStmt":  map[string]any{"x5c": []any{leaf.Raw, a.inter.Raw}, "receipt": []byte("fake receipt")},
+		"attStmt":  map[string]any{"x5c": x5c, "receipt": []byte("fake receipt")},
 		"authData": authData,
 	})
 }

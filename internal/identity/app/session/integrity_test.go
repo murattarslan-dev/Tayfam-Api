@@ -233,7 +233,8 @@ func TestIntegrityAppAttest(t *testing.T) {
 	}
 
 	// The same key on another sign-in, even of the same account, is not
-	// bound twice.
+	// bound twice. The unique violation is answered inside the sign-in's
+	// transaction (savepoint): the session is still opened.
 	again := e.signInIOS(t, "sub-ios", attest(dev, integrity.SignInBinding("n")))
 	if again.IntegrityPassed {
 		t.Fatal("aynı anahtar ikinci kez geçti")

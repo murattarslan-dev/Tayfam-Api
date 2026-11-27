@@ -11,8 +11,13 @@
 -- bağlanamaz. Cihaz satırı silinince (hesap silme, 90 gün saklama) anahtar
 -- da gider.
 --
--- Geri alma planı: Down kolonları kaldırır; iOS oturumları bir sonraki
--- girişe kadar App Attest'siz (missing) sayılır.
+-- Geri alma planı: Down kolonları kaldırır. Anahtarı silinen cihazın
+-- yenilemedeki assertion'ı karşılaştırılacak anahtar olmadığı için `binding`
+-- sayılır (kanıtsız yenileme `missing`); cihaz bir sonraki girişte yeni
+-- anahtar bağlar.
+--
+-- Kilit: UNIQUE kısıtının indeksi `devices` üzerinde ACCESS EXCLUSIVE kilit
+-- alır. Pilot öncesi tablo küçüktür, kilit kısa sürer; kabul edildi.
 
 -- +goose Up
 ALTER TABLE devices

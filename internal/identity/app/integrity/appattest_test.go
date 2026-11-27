@@ -207,3 +207,71 @@ func TestDecodeCBOR(t *testing.T) {
 		}
 	}
 }
+
+// FuzzDecodeCBOR: no input panics the reader.
+func FuzzDecodeCBOR(f *testing.F) {
+	for _, s := range []string{appleSampleAttestation, termakanAttestation, termakanAssertion1, termakanAssertion2} {
+		b, err := base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(b)
+	}
+	f.Add([]byte{0xa1, 0x61, 'a', 0x9f})
+	f.Fuzz(func(_ *testing.T, data []byte) {
+		_, _ = decodeCBOR(data)
+	})
+}
+
+// FuzzVerifyAttestation: any attestation object for a request it was not
+// made for fails, without a panic or a key.
+func FuzzVerifyAttestation(f *testing.F) {
+	for _, s := range []string{appleSampleAttestation, termakanAttestation} {
+		b, err := base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(b)
+	}
+	tm, _ := time.Parse(time.RFC3339, termakanTime)
+	a, err := NewAppAttest(AppAttestConfig{AppID: termakanAppID, Now: func() time.Time { return tm }})
+	if err != nil {
+		f.Fatal(err)
+	}
+	keyID, _ := base64.StdEncoding.DecodeString(termakanKeyID)
+	f.Fuzz(func(t *testing.T, obj []byte) {
+		r, k := a.VerifyAttestation(keyID, obj, "başka istek")
+		if r.Status != StatusFailed || k != nil {
+			t.Fatalf("geçti: %+v", r)
+		}
+	})
+}
+
+// FuzzVerifyAssertion: any assertion object for a request it was not made
+// for fails, without a panic or a key.
+func FuzzVerifyAssertion(f *testing.F) {
+	for _, s := range []string{termakanAssertion1, termakanAssertion2} {
+		b, err := base64.StdEncoding.DecodeString(s)
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(b)
+	}
+	tm, _ := time.Parse(time.RFC3339, termakanTime)
+	a, err := NewAppAttest(AppAttestConfig{AppID: termakanAppID, Now: func() time.Time { return tm }})
+	if err != nil {
+		f.Fatal(err)
+	}
+	keyID, _ := base64.StdEncoding.DecodeString(termakanKeyID)
+	att, _ := base64.StdEncoding.DecodeString(termakanAttestation)
+	_, key := a.verifyAttestation(keyID, att, sum(termakanChallenge))
+	if key == nil {
+		f.Fatal("attestation geçmedi")
+	}
+	f.Fuzz(func(t *testing.T, obj []byte) {
+		r, k := a.VerifyAssertion(*key, keyID, obj, "başka istek")
+		if r.Status != StatusFailed || k != nil {
+			t.Fatalf("geçti: %+v", r)
+		}
+	})
+}

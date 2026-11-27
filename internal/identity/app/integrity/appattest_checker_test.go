@@ -91,3 +91,43 @@ func TestCheckerAppAttest(t *testing.T) {
 		t.Fatalf("doğrulayıcısız: %+v", r)
 	}
 }
+
+// TestAppAttestFakeChains: an attestation the fake CA made is refused by a
+// verifier that trusts only Apple's root, and each bent part of an
+// otherwise valid attestation is refused for its own reason.
+func TestAppAttestFakeChains(t *testing.T) {
+	now := time.Date(2026, 11, 27, 9, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return now }
+	apple, fake := integritytest.NewApple(t, clock)
+	dev := apple.NewDevice()
+	b := integrity.SignInBinding("nonce-1")
+
+	real, err := integrity.NewAppAttest(integrity.AppAttestConfig{AppID: integritytest.AppID, Now: clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, k := real.VerifyAttestation(dev.KeyID, dev.Attest(b), b); r.Reason != integrity.ReasonAppUnrecognized || k != nil {
+		t.Fatalf("sahte zincir Apple köküyle: %+v", r)
+	}
+	if r, _ := fake.VerifyAttestation(dev.KeyID, dev.Attest(b), b); r.Status != integrity.StatusPassed {
+		t.Fatalf("sağlam attestation: %+v", r)
+	}
+
+	other := apple.NewDevice()
+	for name, tc := range map[string]struct {
+		o    integritytest.AttestOptions
+		want integrity.Reason
+	}{
+		"tek sertifikalı x5c":      {integritytest.AttestOptions{OnlyLeaf: true}, integrity.ReasonMalformed},
+		"nonce uzantısız yaprak":   {integritytest.AttestOptions{NoNonce: true}, integrity.ReasonMalformed},
+		"AT bayrağı 0":             {integritytest.AttestOptions{NoAttested: true}, integrity.ReasonMalformed},
+		"sayaç 0 değil":            {integritytest.AttestOptions{Counter: 1}, integrity.ReasonMalformed},
+		"credentialId ≠ keyID":     {integritytest.AttestOptions{CredentialID: other.KeyID}, integrity.ReasonBinding},
+		"geliştirme ortamı aaguid": {integritytest.AttestOptions{AAGUID: "appattestdevelop"}, integrity.ReasonAppUnrecognized},
+	} {
+		r, k := fake.VerifyAttestation(dev.KeyID, dev.AttestWith(b, tc.o), b)
+		if r.Status != integrity.StatusFailed || r.Reason != tc.want || k != nil {
+			t.Errorf("%s: %+v; beklenen %s", name, r, tc.want)
+		}
+	}
+}
