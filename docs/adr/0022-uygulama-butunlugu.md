@@ -123,6 +123,44 @@ dayanmaz ve gereksiz veri toplanmaz.
 Apple Developer üyeliği olmadığı için iOS kodu bu ADR kabul edildiğinde
 yazılmaz; şema ve sözleşme iOS'a yer açar (aşağıda).
 
+**Uygulama notu (2026-11-27, issue #195).** §4 bu kararın içinde, şu
+ayrıntılarla uygulandı:
+
+- `clientDataHash` = SHA-256(bağlama metni): §2'deki 43 karakterlik
+  base64url metnin UTF-8 baytları. Uygulama her girişte **yeni bir
+  anahtar** üretir ve onu onaylatır; anahtar kimliği iOS Keychain'dedir,
+  giriş başarıyla dönünce yazılır ve oturum kapanınca silinir (istemci
+  ADR-0023). **PS onayladı, 2026-11-27.**
+- Anahtar `devices`'a bağlanır (`app_attest_key_id` tekil,
+  `app_attest_public_key`, `app_attest_counter`; migration 00017). Bir
+  anahtar **ikinci kez bağlanmaz** (aynı hesabın başka bir girişinde de):
+  her giriş yeni anahtar ürettiği için ikinci bağlama yalnızca kopyalanmış
+  ya da başka hesapta kullanılan bir anahtarda olur; denetim `binding`
+  nedeniyle geçmez. Bu, §4'teki "başka kullanıcıya bağlıysa" kuralından
+  biraz sıkıdır. **PS onayladı, 2026-11-27.**
+- Yenilemede yalnızca assertion kabul edilir; anahtarsız cihazın (girişte
+  attestation gelmemiş ya da geçmemiş) assertion'ı `binding`'dir, cihaz
+  bir sonraki girişe kadar App Attest'le geçemez. Yenilemede attestation
+  `malformed`'dır. **PS onayladı, 2026-11-27;** `enforce`'a geçmeden önce
+  yeniden bakılacak.
+- Sayaç transaction'da koşullu (`app_attest_counter < yeni`) güncellenir;
+  araya giren bir yenileme sayacı ilerlettiyse denetim `binding` olur.
+- İmza ECDSA P-256/SHA-256'dır: cihaz `nonce`'u imzalar, doğrulanan özet
+  SHA-256(nonce)'tır (Apple'ın belgesindeki "nonce için geçerli imza").
+- App ID, Apple ile girişin bundle kimliği ve Team ID'sinden kurulur
+  (`APPLE_CLIENT_IDS`, `APPLE_TEAM_ID`; ADR-0045): ikisi yoksa iOS kanıtı
+  denetlenmez ve oturum `missing` sayılır. Hangi ortamın anahtarı
+  geçerli olduğu `INTEGRITY_IOS_ENVIRONMENT` ile seçilir (`production`
+  varsayılan: TestFlight ve App Store derlemeleri production anahtarı
+  üretir; `development` yalnızca Xcode'dan development entitlement'ıyla
+  kurulan derleme içindir).
+- CBOR için bağımlılık eklenmedi: iki nesneyi okuyan küçük, katı bir okuyucu
+  (`internal/identity/app/integrity/cbor.go`; belirsiz uzunluk, etiket,
+  float, yinelenen anahtar reddedilir). Kriptografi tamamen standart
+  kütüphanededir (`crypto/x509`, `crypto/ecdsa`).
+- Testler Apple'ın "Attestation Object Validation Guide" örneği ve gerçek bir
+  iOS 27 cihazından alınmış attestation + iki assertion ile yazıldı.
+
 ### 5. Sonuç oturumda tutulur, erişim token'ı taşır
 
 - `sessions` tablosuna: `integrity_status` (`unverified`, `passed`,

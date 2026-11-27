@@ -56,11 +56,14 @@ type DataExportRequest struct {
 }
 
 type Device struct {
-	ID         pgtype.UUID
-	UserID     pgtype.UUID
-	Platform   string
-	CreatedAt  pgtype.Timestamptz
-	LastSeenAt pgtype.Timestamptz
+	ID                 pgtype.UUID
+	UserID             pgtype.UUID
+	Platform           string
+	CreatedAt          pgtype.Timestamptz
+	LastSeenAt         pgtype.Timestamptz
+	AppAttestKeyID     []byte
+	AppAttestPublicKey []byte
+	AppAttestCounter   pgtype.Int8
 }
 
 type DisplayNameChange struct {

@@ -34,3 +34,9 @@ go.work.sum
 
 # Derlenen servisler
 bin/
+
+# Kökte `go build ./cmd/<servis>` ile oluşan ikili dosyalar
+/gateway
+/identity
+/core
+/chat

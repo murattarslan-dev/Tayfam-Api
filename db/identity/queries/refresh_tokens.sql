@@ -15,9 +15,12 @@ FOR UPDATE OF rt, s;
 
 -- Yenilemeden önce, kilitsiz: oturumun bütünlük denetimi gerekiyor mu ve
 -- cihaz hangi platformda (ADR-0022). Google'a transaction dışında gidilir;
--- karar transaction'da kilitli satırla yeniden verilir.
+-- karar transaction'da kilitli satırla yeniden verilir. iOS'ta cihazın App
+-- Attest anahtarı da okunur; imza transaction dışında doğrulanır, sayaç
+-- transaction'da koşullu güncellenir.
 -- name: PeekRefreshIntegrity :one
-SELECT s.integrity_status, s.integrity_reason, s.integrity_checked_at, s.integrity_passed_at, d.platform
+SELECT s.integrity_status, s.integrity_reason, s.integrity_checked_at, s.integrity_passed_at, d.platform,
+       d.app_attest_key_id, d.app_attest_public_key, d.app_attest_counter
 FROM refresh_tokens rt
 JOIN sessions s ON s.id = rt.session_id
 JOIN devices d ON d.id = s.device_id

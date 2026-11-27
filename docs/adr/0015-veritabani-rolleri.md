@@ -1,6 +1,6 @@
 # ADR-0015: Veritabanında sahip ve çalışma zamanı kullanıcısının ayrılması
 
-- **Durum:** Önerildi
+- **Durum:** Kabul edildi (uygulandı ve birleşti; durum satırı 2026-11-26'da düzeltildi)
 - **Tarih:** 2026-11-09
 - **Karar veren:** Murat Arslan
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md), [ADR-0006](0006-dagitim-ve-ortamlar.md), [ADR-0011](0011-guvenlik-ilkesi-ihlal-varsayimi.md)

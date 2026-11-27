@@ -110,6 +110,22 @@ message SignInRequest {
   // Optional Play Integrity standard request token (Android), its
   // requestHash bound to nonce (ADR-0022 §2). At most 16 KiB. Never logged.
   string integrity_token = 5;
+  // Optional App Attest proof (iOS): an attestation of a new key, its
+  // clientDataHash SHA-256 of the sign-in binding (ADR-0022 §4).
+  AppAttest app_attest = 6;
+}
+
+// App Attest proof of the iOS app (ADR-0022 §4). Exactly one of attestation
+// (sign-in) and assertion (refresh) is set. Never logged.
+message AppAttest {
+  // Key identifier: SHA-256 of the key's public key, 32 bytes.
+  bytes key_id = 1;
+  // CBOR attestation object from DCAppAttestService.attestKey; at most
+  // 16 KiB.
+  bytes attestation = 2;
+  // CBOR assertion object from DCAppAttestService.generateAssertion; at
+  // most 1 KiB.
+  bytes assertion = 3;
 }
 
 message SignInResponse {
@@ -123,6 +139,10 @@ message RefreshRequest {
   // (ADR-0022 §2). Sent once Tokens.integrity_check_after has passed;
   // otherwise ignored. At most 16 KiB. Never logged.
   string integrity_token = 2;
+  // Optional App Attest proof (iOS): an assertion by the key attested at
+  // sign-in, its clientDataHash SHA-256 of the refresh binding. Same rule
+  // as integrity_token.
+  AppAttest app_attest = 3;
 }
 
 message RefreshResponse {

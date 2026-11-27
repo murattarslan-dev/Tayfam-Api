@@ -143,10 +143,61 @@ func TestIntegrityFieldsPassThrough(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("uzun token: %d", w.Code)
 	}
+	// App Attest: base64 parts reach identity as bytes; a wrong shape is
+	// refused before.
+	key := strings.Repeat("A", 43) + "=" // 32 zero bytes
+	ios := map[string]string{clientHeader: "ios"}
+	body = strings.Replace(signInBodyFor("ios"), `{`, `{"app_attest":{"key_id":"`+key+`","attestation":"YXR0"},`, 1)
+	w = do(h, "POST", "/v1/auth/sign-in", body, ios)
+	if a := f.gotSignIn.GetAppAttest(); w.Code != 200 || len(a.GetKeyId()) != 32 || string(a.GetAttestation()) != "att" || a.GetAssertion() != nil {
+		t.Fatalf("app attest girişi: %d %s", w.Code, w.Body)
+	}
+	w = do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"R","app_attest":{"key_id":"`+key+`","assertion":"YXM="}}`, ios)
+	if a := f.gotRefreshReq.GetAppAttest(); w.Code != 200 || string(a.GetAssertion()) != "as" {
+		t.Fatalf("app attest yenilemesi: %d %s", w.Code, w.Body)
+	}
+	for name, a := range map[string]string{
+		"kısa anahtar":   `{"key_id":"AAAA","assertion":"YXM="}`,
+		"ikisi birden":   `{"key_id":"` + key + `","attestation":"YXR0","assertion":"YXM="}`,
+		"hiçbiri":        `{"key_id":"` + key + `"}`,
+		"base64 değil":   `{"key_id":"` + key + `","assertion":"%%%"}`,
+		"uzun assertion": `{"key_id":"` + key + `","assertion":"` + strings.Repeat("A", 4*(maxAppAttestAssertion/3+1)) + `"}`,
+	} {
+		w = do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"R","app_attest":`+a+`}`, ios)
+		if w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d", name, w.Code)
+		}
+	}
+
 	// Checks off: the field is absent.
 	f.checkAfter = nil
 	w = do(h, "POST", "/v1/auth/refresh", `{"refresh_token":"R"}`, map[string]string{clientHeader: "android"})
 	if strings.Contains(w.Body.String(), "integrity_check_after") {
 		t.Fatalf("kapalıyken alan var: %s", w.Body)
+	}
+}
+
+// TestAuthBodyFitsLargestProof: the auth body limit leaves room for the
+// largest App Attest attestation together with the largest ID token and
+// nonce the sign-in accepts.
+func TestAuthBodyFitsLargestProof(t *testing.T) {
+	body, err := json.Marshal(map[string]any{
+		"provider": "google", "platform": "ios",
+		"id_token": strings.Repeat("x", 8192), "nonce": strings.Repeat("n", 256),
+		"app_attest": map[string]any{
+			"key_id":      make([]byte, appAttestKeyIDSize),
+			"attestation": make([]byte, maxAppAttestation),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) > maxAuthBodyBytes {
+		t.Fatalf("gövde %d bayt, sınır %d", len(body), maxAuthBodyBytes)
+	}
+	f := &fakeIdentity{}
+	w := do(newTestRouter(f), "POST", "/v1/auth/sign-in", string(body), map[string]string{clientHeader: "ios"})
+	if w.Code != http.StatusOK || len(f.gotSignIn.GetAppAttest().GetAttestation()) != maxAppAttestation {
+		t.Fatalf("en büyük kanıt: %d %s", w.Code, w.Body)
 	}
 }

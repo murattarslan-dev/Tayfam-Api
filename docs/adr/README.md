@@ -22,10 +22,10 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0012](0012-dogum-tarihi-ve-kotuye-kullanim.md) | Doğum tarihi, genç kullanıcı güvenliği ve kötüye kullanım tespiti | Kabul edildi |
 | [0013](0013-servis-kimligi.md) | Kullanıcısız servisler arası çağrılarda servis kimliği | Kabul edildi |
 | [0014](0014-websocket-erisim-tokeniyla.md) | WebSocket bağlantısı kullanıcının erişim token'ıyla | Kabul edildi |
-| [0015](0015-veritabani-rolleri.md) | Veritabanında sahip ve çalışma zamanı kullanıcısının ayrılması | Önerildi |
+| [0015](0015-veritabani-rolleri.md) | Veritabanında sahip ve çalışma zamanı kullanıcısının ayrılması | Kabul edildi |
 | [0016](0016-desteklenen-istemci-surumu.md) | Desteklenen en düşük istemci sürümü | Kabul edildi |
 | [0017](0017-yalnizca-mobil-istemci.md) | Yalnızca mobil istemci; web derlemesi yalnızca prod dışında | Kabul edildi |
-| [0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) | Birebir mesajda uçtan uca şifreleme: sunucu tarafı | Önerildi |
+| [0018](0018-birebir-mesaj-e2e-sunucu-tarafi.md) | Birebir mesajda uçtan uca şifreleme: sunucu tarafı | Kabul edildi |
 | [0019](0019-push-bildirimleri.md) | Push bildirimleri (FCM) | Kabul edildi; kısmen 0036 |
 | [0020](0020-goruntu-isleme-ve-medya-sunumu.md) | Görüntü işleme istemcide, sunucuda başlık denetimi; medya bağlama ve sunumu | Kabul edildi |
 | [0021](0021-kvkk-veri-disa-aktarma.md) | KVKK veri dışa aktarma: toplama, şifreleme ve depolama | Kabul edildi |
@@ -41,7 +41,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0031](0031-sohbet-ekleri-fotograf-ve-yer.md) | Sohbet ekleri: fotoğraf ve yer (kanal ve uçtan uca birebir) | Kabul edildi |
 | [0032](0032-anlik-etkinlik.md) | Anlık (bireysel) etkinlik: gizli, tek etkinlikli tayfa (v2) | Kabul edildi; kısmen 0038 |
 | [0033](0033-kesfet-ilk-asama.md) | Keşfet ilk aşama: arkadaş ağı ve güvenlik ağı (v2) | Kabul edildi; kısmen 0035 |
-| [0034](0034-dev-main-dal-modeli-ve-otomatik-surum.md) | dev/main dal modeli ve otomatik sürüm | Önerildi |
+| [0034](0034-dev-main-dal-modeli-ve-otomatik-surum.md) | dev/main dal modeli ve otomatik sürüm | Kabul edildi |
 | [0035](0035-kesfet-herkese-acik-ve-demo-temizligi.md) | Keşfet herkese açık, Keşfet demo verisi ve demo temizleme komutu | Kabul edildi |
 | [0036](0036-push-firebase-installation-id.md) | Push hedefi olarak Firebase Installation ID (FID) | Kabul edildi |
 | [0037](0037-katalog-ayrintilari-ve-sema-ekleri.md) | Katalog ayrıntıları ve şema ekleri (v3) | Kabul edildi; kısmen 0044 |
@@ -54,7 +54,8 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0044](0044-yazboz-esli-kip.md) | Yazbozda eşli kip (`side: pair`) | Kabul edildi |
 | [0045](0045-apple-ile-giris.md) | Apple ile giriş (yalnızca iOS) ve hesap silmede token iptali | Kabul edildi |
 
-Ürün kararları (kavram modeli, özellikler, veri modeli, KVKK metni, platform
-yönetim paneli) Notion'daki "Tayfam — Proje Planı" sayfasındadır. ADR'ler bu
-kararları mimariye taşır; bir ADR Notion'daki bir kararı değiştiriyorsa bunu
+Ürün kararları (kavram modeli, özellikler, KVKK metni, platform yönetim
+paneli) claude.ai "Tayfam" projesinin `tayfam/` dokümanlarındadır (2026-11-26'ya
+kadar Notion'daydı; ADR'lerdeki Notion atıfları tarihçedir). ADR'ler bu
+kararları mimariye taşır; bir ADR bir ürün kararını değiştiriyorsa bunu
 açıkça belirtir.

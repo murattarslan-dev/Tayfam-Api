@@ -1,6 +1,6 @@
 # ADR-0034: dev/main dal modeli ve otomatik sürüm
 
-- **Durum:** Önerildi (platform sahibinin birleştirmesiyle kabul edilir)
+- **Durum:** Kabul edildi (uygulandı ve birleşti; durum satırı 2026-11-26'da düzeltildi)
 - **Tarih:** 2026-11-16
 - **Karar veren:** Murat Arslan (2026-11-16 sohbet kararları, mimari
   oturumunun aktarımıyla). Bu ADR onların uygulanmasıdır; açık bırakılan
