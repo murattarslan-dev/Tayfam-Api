@@ -295,8 +295,11 @@ type SignInRequest struct {
 	// Optional Play Integrity standard request token (Android), its
 	// requestHash bound to nonce (ADR-0022 §2). At most 16 KiB. Never logged.
 	IntegrityToken string `protobuf:"bytes,5,opt,name=integrity_token,json=integrityToken,proto3" json:"integrity_token,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Optional App Attest proof (iOS): an attestation of a new key, its
+	// clientDataHash SHA-256 of the sign-in binding (ADR-0022 §4).
+	AppAttest     *AppAttest `protobuf:"bytes,6,opt,name=app_attest,json=appAttest,proto3" json:"app_attest,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SignInRequest) Reset() {
@@ -364,6 +367,80 @@ func (x *SignInRequest) GetIntegrityToken() string {
 	return ""
 }
 
+func (x *SignInRequest) GetAppAttest() *AppAttest {
+	if x != nil {
+		return x.AppAttest
+	}
+	return nil
+}
+
+// App Attest proof of the iOS app (ADR-0022 §4). Exactly one of attestation
+// (sign-in) and assertion (refresh) is set. Never logged.
+type AppAttest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Key identifier: SHA-256 of the key's public key, 32 bytes.
+	KeyId []byte `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	// CBOR attestation object from DCAppAttestService.attestKey; at most
+	// 16 KiB.
+	Attestation []byte `protobuf:"bytes,2,opt,name=attestation,proto3" json:"attestation,omitempty"`
+	// CBOR assertion object from DCAppAttestService.generateAssertion; at
+	// most 1 KiB.
+	Assertion     []byte `protobuf:"bytes,3,opt,name=assertion,proto3" json:"assertion,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppAttest) Reset() {
+	*x = AppAttest{}
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppAttest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppAttest) ProtoMessage() {}
+
+func (x *AppAttest) ProtoReflect() protoreflect.Message {
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppAttest.ProtoReflect.Descriptor instead.
+func (*AppAttest) Descriptor() ([]byte, []int) {
+	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AppAttest) GetKeyId() []byte {
+	if x != nil {
+		return x.KeyId
+	}
+	return nil
+}
+
+func (x *AppAttest) GetAttestation() []byte {
+	if x != nil {
+		return x.Attestation
+	}
+	return nil
+}
+
+func (x *AppAttest) GetAssertion() []byte {
+	if x != nil {
+		return x.Assertion
+	}
+	return nil
+}
+
 type SignInResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tokens        *Tokens                `protobuf:"bytes,1,opt,name=tokens,proto3" json:"tokens,omitempty"`
@@ -373,7 +450,7 @@ type SignInResponse struct {
 
 func (x *SignInResponse) Reset() {
 	*x = SignInResponse{}
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[1]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -385,7 +462,7 @@ func (x *SignInResponse) String() string {
 func (*SignInResponse) ProtoMessage() {}
 
 func (x *SignInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[1]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -398,7 +475,7 @@ func (x *SignInResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignInResponse.ProtoReflect.Descriptor instead.
 func (*SignInResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{1}
+	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SignInResponse) GetTokens() *Tokens {
@@ -416,13 +493,17 @@ type RefreshRequest struct {
 	// (ADR-0022 §2). Sent once Tokens.integrity_check_after has passed;
 	// otherwise ignored. At most 16 KiB. Never logged.
 	IntegrityToken string `protobuf:"bytes,2,opt,name=integrity_token,json=integrityToken,proto3" json:"integrity_token,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Optional App Attest proof (iOS): an assertion by the key attested at
+	// sign-in, its clientDataHash SHA-256 of the refresh binding. Same rule
+	// as integrity_token.
+	AppAttest     *AppAttest `protobuf:"bytes,3,opt,name=app_attest,json=appAttest,proto3" json:"app_attest,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RefreshRequest) Reset() {
 	*x = RefreshRequest{}
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[2]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -434,7 +515,7 @@ func (x *RefreshRequest) String() string {
 func (*RefreshRequest) ProtoMessage() {}
 
 func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[2]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -447,7 +528,7 @@ func (x *RefreshRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshRequest.ProtoReflect.Descriptor instead.
 func (*RefreshRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{2}
+	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RefreshRequest) GetRefreshToken() string {
@@ -464,6 +545,13 @@ func (x *RefreshRequest) GetIntegrityToken() string {
 	return ""
 }
 
+func (x *RefreshRequest) GetAppAttest() *AppAttest {
+	if x != nil {
+		return x.AppAttest
+	}
+	return nil
+}
+
 type RefreshResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tokens        *Tokens                `protobuf:"bytes,1,opt,name=tokens,proto3" json:"tokens,omitempty"`
@@ -473,7 +561,7 @@ type RefreshResponse struct {
 
 func (x *RefreshResponse) Reset() {
 	*x = RefreshResponse{}
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[3]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +573,7 @@ func (x *RefreshResponse) String() string {
 func (*RefreshResponse) ProtoMessage() {}
 
 func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[3]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,7 +586,7 @@ func (x *RefreshResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshResponse.ProtoReflect.Descriptor instead.
 func (*RefreshResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{3}
+	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RefreshResponse) GetTokens() *Tokens {
@@ -516,7 +604,7 @@ type SignOutRequest struct {
 
 func (x *SignOutRequest) Reset() {
 	*x = SignOutRequest{}
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[4]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -528,7 +616,7 @@ func (x *SignOutRequest) String() string {
 func (*SignOutRequest) ProtoMessage() {}
 
 func (x *SignOutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[4]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,7 +629,7 @@ func (x *SignOutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignOutRequest.ProtoReflect.Descriptor instead.
 func (*SignOutRequest) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{4}
+	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{5}
 }
 
 type SignOutResponse struct {
@@ -552,7 +640,7 @@ type SignOutResponse struct {
 
 func (x *SignOutResponse) Reset() {
 	*x = SignOutResponse{}
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[5]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -564,7 +652,7 @@ func (x *SignOutResponse) String() string {
 func (*SignOutResponse) ProtoMessage() {}
 
 func (x *SignOutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[5]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -577,7 +665,7 @@ func (x *SignOutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignOutResponse.ProtoReflect.Descriptor instead.
 func (*SignOutResponse) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{5}
+	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{6}
 }
 
 type Tokens struct {
@@ -604,7 +692,7 @@ type Tokens struct {
 
 func (x *Tokens) Reset() {
 	*x = Tokens{}
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[6]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -616,7 +704,7 @@ func (x *Tokens) String() string {
 func (*Tokens) ProtoMessage() {}
 
 func (x *Tokens) ProtoReflect() protoreflect.Message {
-	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[6]
+	mi := &file_tayfam_identity_v1_auth_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -629,7 +717,7 @@ func (x *Tokens) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Tokens.ProtoReflect.Descriptor instead.
 func (*Tokens) Descriptor() ([]byte, []int) {
-	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{6}
+	return file_tayfam_identity_v1_auth_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Tokens) GetUserId() string {
@@ -699,18 +787,26 @@ var File_tayfam_identity_v1_auth_proto protoreflect.FileDescriptor
 
 const file_tayfam_identity_v1_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x1dtayfam/identity/v1/auth.proto\x12\x12tayfam.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xdd\x01\n" +
+	"\x1dtayfam/identity/v1/auth.proto\x12\x12tayfam.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9b\x02\n" +
 	"\rSignInRequest\x128\n" +
 	"\bprovider\x18\x01 \x01(\x0e2\x1c.tayfam.identity.v1.ProviderR\bprovider\x12\x19\n" +
 	"\bid_token\x18\x02 \x01(\tR\aidToken\x12\x14\n" +
 	"\x05nonce\x18\x03 \x01(\tR\x05nonce\x128\n" +
 	"\bplatform\x18\x04 \x01(\x0e2\x1c.tayfam.identity.v1.PlatformR\bplatform\x12'\n" +
-	"\x0fintegrity_token\x18\x05 \x01(\tR\x0eintegrityToken\"D\n" +
+	"\x0fintegrity_token\x18\x05 \x01(\tR\x0eintegrityToken\x12<\n" +
+	"\n" +
+	"app_attest\x18\x06 \x01(\v2\x1d.tayfam.identity.v1.AppAttestR\tappAttest\"b\n" +
+	"\tAppAttest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\fR\x05keyId\x12 \n" +
+	"\vattestation\x18\x02 \x01(\fR\vattestation\x12\x1c\n" +
+	"\tassertion\x18\x03 \x01(\fR\tassertion\"D\n" +
 	"\x0eSignInResponse\x122\n" +
-	"\x06tokens\x18\x01 \x01(\v2\x1a.tayfam.identity.v1.TokensR\x06tokens\"^\n" +
+	"\x06tokens\x18\x01 \x01(\v2\x1a.tayfam.identity.v1.TokensR\x06tokens\"\x9c\x01\n" +
 	"\x0eRefreshRequest\x12#\n" +
 	"\rrefresh_token\x18\x01 \x01(\tR\frefreshToken\x12'\n" +
-	"\x0fintegrity_token\x18\x02 \x01(\tR\x0eintegrityToken\"E\n" +
+	"\x0fintegrity_token\x18\x02 \x01(\tR\x0eintegrityToken\x12<\n" +
+	"\n" +
+	"app_attest\x18\x03 \x01(\v2\x1d.tayfam.identity.v1.AppAttestR\tappAttest\"E\n" +
 	"\x0fRefreshResponse\x122\n" +
 	"\x06tokens\x18\x01 \x01(\v2\x1a.tayfam.identity.v1.TokensR\x06tokens\"\x10\n" +
 	"\x0eSignOutRequest\"\x11\n" +
@@ -783,39 +879,42 @@ func file_tayfam_identity_v1_auth_proto_rawDescGZIP() []byte {
 }
 
 var file_tayfam_identity_v1_auth_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_tayfam_identity_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_tayfam_identity_v1_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_tayfam_identity_v1_auth_proto_goTypes = []any{
 	(Provider)(0),                 // 0: tayfam.identity.v1.Provider
 	(Platform)(0),                 // 1: tayfam.identity.v1.Platform
 	(ErrorReason)(0),              // 2: tayfam.identity.v1.ErrorReason
 	(*SignInRequest)(nil),         // 3: tayfam.identity.v1.SignInRequest
-	(*SignInResponse)(nil),        // 4: tayfam.identity.v1.SignInResponse
-	(*RefreshRequest)(nil),        // 5: tayfam.identity.v1.RefreshRequest
-	(*RefreshResponse)(nil),       // 6: tayfam.identity.v1.RefreshResponse
-	(*SignOutRequest)(nil),        // 7: tayfam.identity.v1.SignOutRequest
-	(*SignOutResponse)(nil),       // 8: tayfam.identity.v1.SignOutResponse
-	(*Tokens)(nil),                // 9: tayfam.identity.v1.Tokens
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*AppAttest)(nil),             // 4: tayfam.identity.v1.AppAttest
+	(*SignInResponse)(nil),        // 5: tayfam.identity.v1.SignInResponse
+	(*RefreshRequest)(nil),        // 6: tayfam.identity.v1.RefreshRequest
+	(*RefreshResponse)(nil),       // 7: tayfam.identity.v1.RefreshResponse
+	(*SignOutRequest)(nil),        // 8: tayfam.identity.v1.SignOutRequest
+	(*SignOutResponse)(nil),       // 9: tayfam.identity.v1.SignOutResponse
+	(*Tokens)(nil),                // 10: tayfam.identity.v1.Tokens
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_tayfam_identity_v1_auth_proto_depIdxs = []int32{
 	0,  // 0: tayfam.identity.v1.SignInRequest.provider:type_name -> tayfam.identity.v1.Provider
 	1,  // 1: tayfam.identity.v1.SignInRequest.platform:type_name -> tayfam.identity.v1.Platform
-	9,  // 2: tayfam.identity.v1.SignInResponse.tokens:type_name -> tayfam.identity.v1.Tokens
-	9,  // 3: tayfam.identity.v1.RefreshResponse.tokens:type_name -> tayfam.identity.v1.Tokens
-	10, // 4: tayfam.identity.v1.Tokens.access_expire_time:type_name -> google.protobuf.Timestamp
-	10, // 5: tayfam.identity.v1.Tokens.refresh_expire_time:type_name -> google.protobuf.Timestamp
-	10, // 6: tayfam.identity.v1.Tokens.integrity_check_after:type_name -> google.protobuf.Timestamp
-	3,  // 7: tayfam.identity.v1.AuthService.SignIn:input_type -> tayfam.identity.v1.SignInRequest
-	5,  // 8: tayfam.identity.v1.AuthService.Refresh:input_type -> tayfam.identity.v1.RefreshRequest
-	7,  // 9: tayfam.identity.v1.AuthService.SignOut:input_type -> tayfam.identity.v1.SignOutRequest
-	4,  // 10: tayfam.identity.v1.AuthService.SignIn:output_type -> tayfam.identity.v1.SignInResponse
-	6,  // 11: tayfam.identity.v1.AuthService.Refresh:output_type -> tayfam.identity.v1.RefreshResponse
-	8,  // 12: tayfam.identity.v1.AuthService.SignOut:output_type -> tayfam.identity.v1.SignOutResponse
-	10, // [10:13] is the sub-list for method output_type
-	7,  // [7:10] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	4,  // 2: tayfam.identity.v1.SignInRequest.app_attest:type_name -> tayfam.identity.v1.AppAttest
+	10, // 3: tayfam.identity.v1.SignInResponse.tokens:type_name -> tayfam.identity.v1.Tokens
+	4,  // 4: tayfam.identity.v1.RefreshRequest.app_attest:type_name -> tayfam.identity.v1.AppAttest
+	10, // 5: tayfam.identity.v1.RefreshResponse.tokens:type_name -> tayfam.identity.v1.Tokens
+	11, // 6: tayfam.identity.v1.Tokens.access_expire_time:type_name -> google.protobuf.Timestamp
+	11, // 7: tayfam.identity.v1.Tokens.refresh_expire_time:type_name -> google.protobuf.Timestamp
+	11, // 8: tayfam.identity.v1.Tokens.integrity_check_after:type_name -> google.protobuf.Timestamp
+	3,  // 9: tayfam.identity.v1.AuthService.SignIn:input_type -> tayfam.identity.v1.SignInRequest
+	6,  // 10: tayfam.identity.v1.AuthService.Refresh:input_type -> tayfam.identity.v1.RefreshRequest
+	8,  // 11: tayfam.identity.v1.AuthService.SignOut:input_type -> tayfam.identity.v1.SignOutRequest
+	5,  // 12: tayfam.identity.v1.AuthService.SignIn:output_type -> tayfam.identity.v1.SignInResponse
+	7,  // 13: tayfam.identity.v1.AuthService.Refresh:output_type -> tayfam.identity.v1.RefreshResponse
+	9,  // 14: tayfam.identity.v1.AuthService.SignOut:output_type -> tayfam.identity.v1.SignOutResponse
+	12, // [12:15] is the sub-list for method output_type
+	9,  // [9:12] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_tayfam_identity_v1_auth_proto_init() }
@@ -829,7 +928,7 @@ func file_tayfam_identity_v1_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_tayfam_identity_v1_auth_proto_rawDesc), len(file_tayfam_identity_v1_auth_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
