@@ -53,6 +53,7 @@ yerine yenisi yazılır ve eskisinin durumu "Yerine geçildi: ADR-XXXX" olur.
 | [0043](0043-ders-konu-alan-turu.md) | Ders/konu listesine bağlı tür alanı (`study_tags`) | Kabul edildi |
 | [0044](0044-yazboz-esli-kip.md) | Yazbozda eşli kip (`side: pair`) | Kabul edildi |
 | [0045](0045-apple-ile-giris.md) | Apple ile giriş (yalnızca iOS) ve hesap silmede token iptali | Kabul edildi |
+| [0046](0046-pilot-oncesi-sifirlama.md) | Pilot öncesi prod sıfırlama (bir kerelik, servis başına SQL betiği) | Önerildi |
 
 Ürün kararları (kavram modeli, özellikler, KVKK metni, platform yönetim
 paneli) claude.ai "Tayfam" projesinin `tayfam/` dokümanlarındadır (2026-11-26'ya
