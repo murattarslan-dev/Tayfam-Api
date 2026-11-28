@@ -1,9 +1,12 @@
 # ADR-0046: Pilot öncesi prod sıfırlama (bir kerelik, servis başına SQL betiği)
 
-- **Durum:** Önerildi (mimari oturumu, 2026-11-28; issue #369). Sıfırlama
-  kararı platform sahibinindir (2026-11-27/28, sohbette: "Önce prod'u
-  sıfırla", ardından demo-seed ve mağaza inceleme hesabı); aracın biçimi,
-  eşik ve korunan tablolar bu ADR'nin önerisidir ve PR'da onaya sunulur.
+- **Durum:** Kabul edildi (2026-11-28; issue #369). Sıfırlama kararı
+  platform sahibinindir (2026-11-27/28, sohbette: "Önce prod'u sıfırla",
+  ardından demo-seed ve mağaza inceleme hesabı). Aracın biçimi (servis
+  başına SQL betiği), eşikler (identity 5, core ve chat 6), korunan tablolar,
+  `platform_admins` ve `platform_audit_logs`'un silinmesi ve PS'nin kendini
+  yeniden yönetici olarak eklemesi platform sahibince sohbette onaylandı
+  (2026-11-28).
 - **Tarih:** 2026-11-28
 - **İlgili:** [ADR-0002](0002-servis-sinirlari-ve-veri-sahipligi.md),
   [ADR-0007](0007-dosyalar-ve-medya.md),
